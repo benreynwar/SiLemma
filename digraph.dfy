@@ -134,7 +134,8 @@ module Digraph {
             var a := p.v[0];
             var b := p.v[|p.v|-1];
             var q := PathRemoveLoops(p);
-            ShortPathFromTo(g, q, a, b)
+            ShortPathFromTo(g, q, a, b) &&
+            PathNoRepeats(q)
     {
         RemoveLoopsFromToSameInternal(g, p, |p.v|-1);
     }
@@ -148,7 +149,8 @@ module Digraph {
             var a := p.v[0];
             var b := p.v[index];
             var q := PathRemoveLoopsInternal(p, index);
-            ShortPathFromTo(g, q, a, b)
+            ShortPathFromTo(g, q, a, b) &&
+            PathNoRepeats(q)
     {
         var a := p.v[0];
         var b := p.v[index];
@@ -175,11 +177,12 @@ module Digraph {
     }
 
     lemma RemoveLoopsNoRepeats(p: Path)
+        requires |p.v| > 1
         ensures
-            var q := PathRemoveLoopsInternal(p, index);
+            var q := PathRemoveLoopsInternal(p, |p.v|-1);
             PathNoRepeats(q)
     {
-        RemoveLoopsNoRepeatsInternal(p, 0);
+        RemoveLoopsNoRepeatsInternal(p, |p.v|-1);
     }
 
     lemma RemoveLoopsNoRepeatsInternal(p: Path, index: nat)
@@ -210,6 +213,12 @@ module Digraph {
     ghost predicate PathExists(g: Digraph, a: Node, b: Node)
     {
         exists p: Path :: PathFromTo(g, p, a, b)
+    }
+
+    lemma PathExistsByExample(g: Digraph, p: Path, a: Node, b: Node)
+        requires PathFromTo(g, p, a, b)
+        ensures PathExists(g, a, b)
+    {
     }
 
     predicate PathFromTo(g: Digraph, p: Path, a: Node, b: Node)
@@ -251,6 +260,13 @@ module Digraph {
         exists n: Node :: PathExists(g, n, n)
     }
 
+    lemma PathExistsToDigraphLoop2(g: Digraph, n: Node)
+        requires PathExists(g, n, n);
+        ensures DigraphLoop2(g);
+    {
+        reveal DigraphLoop2();
+    }
+
     lemma DigraphLoopEquiv(g: Digraph)
         ensures DigraphLoop(g) == DigraphLoop2(g)
     {
@@ -260,6 +276,9 @@ module Digraph {
             var p :| PathValid(g, p) && PathLoop(p);
             assert PathFromTo(g, p, p.v[0], p.v[0]);
             assert PathExists(g, p.v[0], p.v[0]);
+            PathExistsToDigraphLoop2(g, p.v[0]);
+            assert DigraphLoop2(g);
+        } else {
         }
     }
 
@@ -297,6 +316,14 @@ module Digraph {
     {
         reveal DigraphValid();
     }
+
+    lemma AddNodePathValidHelper(r: Digraph, n: Node, x: Node)
+        requires (forall m: Node :: !r.IsConnected(n, m))
+        requires (forall m: Node :: !r.IsConnected(m, n))
+        ensures !r.IsConnected(n, x);
+        ensures !r.IsConnected(x, n);
+    {
+    }
     
     // There is only one path that becomes valid when we add a node.
     // It is the path containing just that node.
@@ -313,16 +340,21 @@ module Digraph {
         reveal PathValid();
         reveal DigraphValid();
         assert forall m: Node :: !g.IsConnected(m, n);
+        assert forall m: Node :: !g.IsConnected(n, m);
+        assert forall m: Node :: !r.IsConnected(m, n);
+        assert forall m: Node :: !r.IsConnected(n, m);
         if n in p.v {
             assert !PathValid(g, p);
             if |p.v| == 1 {
                 assert PathValid(r, p);
             } else {
                 if p.v[0] == n {
+                    AddNodePathValidHelper(r, n, p.v[1]);
                     assert !r.IsConnected(p.v[0], p.v[1]);
                     assert !PathValid(r, p);
                 } else {
                     var index := PathIndex(p, n);
+                    AddNodePathValidHelper(r, n, p.v[index-1]);
                     assert !r.IsConnected(p.v[index-1], p.v[index]);
                     assert !PathValid(r, p);
                 }
@@ -420,6 +452,8 @@ module Digraph {
         assert r.IsConnected(n, m);
         reveal PathValid();
         assert PathFromTo(r, p, n, m);
+        PathExistsByExample(r, p, n, m);
+        assert PathExists(r, n, m);
     }
 
     lemma PathExistsAdd(g: Digraph, a: Node, b: Node, c: Node)
@@ -478,9 +512,9 @@ module Digraph {
     // create a loop.
     lemma ConnectNodesDigraphLoop(g: Digraph, n: Node, m: Node)
         requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
-        //ensures
-        //    var r := ConnectNodes(g, n, m);
-        //    DigraphLoop(r) == DigraphLoop(g) || PathExists(g, m, n)
+        ensures
+            var r := ConnectNodes(g, n, m);
+            DigraphLoop(r) == DigraphLoop(g) || PathExists(g, m, n)
     {
         var r := ConnectNodes(g, n, m);
         if DigraphLoop(g) {
@@ -527,6 +561,7 @@ module Digraph {
                 assert PathStart(p) == PathEnd(p);
                 var q_1 := PathSegment(p, index+1, |p.v|);
                 assert |q_1.v| > 0;
+                assert PathEnd(q_1) == p.v[|p.v|-1];
                 assert PathEnd(q_1) == PathEnd(p);
                 PathSegmentValid(r, p, index+1, |p.v|);
                 assert PathValid(r, q_1);
@@ -538,6 +573,7 @@ module Digraph {
                 AddPathsValid(r, q_1, q_2);
                 assert PathValid(r, q);
                 AddPathsFromTo(r, q_1, q_2);
+                assert q_1.v[0] == m;
                 assert PathFromTo(r, q, m, n);
                 // We want to now show that [n, m] does not appear in q.
                 // We actually need to find another path that removes any repeats and then
@@ -548,18 +584,10 @@ module Digraph {
                 assert PathFromTo(r, s, m, n);
                 assert PathValid(r, s);
                 assert PathNoRepeats(s);
-                forall index: nat | index < |s.v|-1 {
-                    var n1 := s.v[index];
-                    var n2 := s.v[index+1];
-                    //assert if index == 0 then n1 == m else n1 != m;
-                    assert r.IsConnected(s.v[index], s.v[index+1]);
-                    assert !((n1 == n) && (n2 == m));
-                    assert g.IsConnected(s.v[index], s.v[index+1]);
-                }
                 assert PathValid(g, s);
                 assert PathFromTo(g, s, m, n);
             }
-            //assert DigraphLoop(g) || PathExists(g, m, n);
+            assert DigraphLoop(g) || PathExists(g, m, n);
         }
     }
 }
