@@ -1,4 +1,8 @@
-module Digraph {
+include "utils.dfy"
+
+module DG {
+
+    import Utils
 
     newtype Node = nat
 
@@ -12,9 +16,30 @@ module Digraph {
         NodeBound: Node
     )
 
+    predicate NodeValid(g: Digraph, n: Node)
+    {
+        n < g.NodeBound
+    }
+
+    function NodeValidSetSize(g: Digraph): nat
+    {
+        g.NodeBound as nat
+    }
+
+    function EmptyDigraph(): (r: Digraph)
+        ensures DigraphValid(r)
+    {
+        reveal DigraphValid();
+        Digraph(
+            _ => false,
+            (_, _) => false,
+            0
+        )
+    }
+
     ghost predicate {:opaque} DigraphValid(g: Digraph)
     {
-        (forall n: Node :: n > g.NodeBound ==> !g.IsNode(n)) &&
+        (forall n: Node :: n >= g.NodeBound ==> !g.IsNode(n)) &&
         (forall n: Node :: !g.IsConnected(n, n)) && // No self-connections
         (forall n: Node, m: Node :: g.IsConnected(n, m) ==> g.IsNode(n) && g.IsNode(m))
     }
@@ -221,6 +246,54 @@ module Digraph {
     {
     }
 
+    lemma NodeSetSize(g: Digraph, nodes: set<Node>)
+        requires DigraphValid(g)
+        requires forall n: Node :: n in nodes ==> g.IsNode(n)
+        ensures |nodes| <= NodeValidSetSize(g)
+    {
+        reveal DigraphValid();
+        assert forall n: Node :: n in nodes ==> n < g.NodeBound;
+        var f := (n: Node) => n as nat;
+        var nodes_as_nats := set n | n in nodes :: f(n);
+        Utils.MappedSetSize(nodes, f, nodes_as_nats);
+        assert |nodes_as_nats| == |nodes|;
+        Utils.BoundedSetSize(g.NodeBound as nat, nodes_as_nats);
+    }
+
+    function NumberOfRemainingNodes(g: Digraph, visited_nodes: set<Node>): nat
+        requires DigraphValid(g)
+        requires forall n :: n in visited_nodes ==> g.IsNode(n)
+    {
+        NodeSetSize(g, visited_nodes);
+        NodeValidSetSize(g) - |visited_nodes|
+    }
+
+    predicate PathDoesNotExistRecursiveInternal(g: Digraph, a: Node, b: Node, visited_nodes: set<Node>)
+        requires DigraphValid(g)
+        requires a !in visited_nodes
+        requires b !in visited_nodes
+        requires forall n :: n in visited_nodes ==> g.IsNode(n)
+        requires g.IsNode(a)
+        requires g.IsNode(b)
+        decreases NumberOfRemainingNodes(g, visited_nodes)
+    {
+        var new_visited_nodes := visited_nodes + {a};
+        assert |new_visited_nodes| == |visited_nodes| + 1;
+        if (a == b) then
+            false
+        else
+            forall n: Node :: g.IsNode(n) && g.IsConnected(a, n) && n < g.NodeBound && n !in new_visited_nodes==>
+                PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes)
+    }
+
+    predicate PathExistsR(g: Digraph, a: Node, b: Node)
+        requires DigraphValid(g)
+        requires g.IsNode(a)
+        requires g.IsNode(b)
+    {
+        !PathDoesNotExistRecursiveInternal(g, a, b, {})
+    }
+
     predicate PathFromTo(g: Digraph, p: Path, a: Node, b: Node)
     {
         PathValid(g, p) && |p.v| > 1 && (p.v[0] == a) && (p.v[|p.v|-1] == b)
@@ -303,7 +376,7 @@ module Digraph {
         Digraph(
             m=>(m==n) || g.IsNode(m),
             g.IsConnected,
-            if n >= g.NodeBound then n else g.NodeBound
+            if n >= g.NodeBound then n+1 else g.NodeBound
         )
     }
 
@@ -315,6 +388,16 @@ module Digraph {
             DigraphValid(r)
     {
         reveal DigraphValid();
+    }
+
+    function AddNodeV(g: Digraph, n: Node): (r: Digraph)
+        requires DigraphValid(g)
+        requires !g.IsNode(n)
+        ensures
+            DigraphValid(r)
+    {
+        AddNodeDigraphValid(g, n);
+        AddNode(g, n)
     }
 
     lemma AddNodePathValidHelper(r: Digraph, n: Node, x: Node)
@@ -429,6 +512,18 @@ module Digraph {
             DigraphValid(r)
     {
         reveal DigraphValid();
+    }
+
+    function ConnectNodesV(g: Digraph, n: Node, m: Node): (r: Digraph)
+        requires g.IsNode(n)
+        requires g.IsNode(m)
+        requires n != m
+        requires !g.IsConnected(n, m)
+        requires DigraphValid(g)
+        ensures DigraphValid(r)
+    {
+        ConnectNodesDigraphValid(g, n, m);
+        ConnectNodes(g, n, m)
     }
 
     lemma ConnectNodesPathStillValid(g: Digraph, n: Node, m: Node, p: Path)
@@ -573,6 +668,7 @@ module Digraph {
                 AddPathsValid(r, q_1, q_2);
                 assert PathValid(r, q);
                 AddPathsFromTo(r, q_1, q_2);
+                assert p.v[index+1] == m;
                 assert q_1.v[0] == m;
                 assert PathFromTo(r, q, m, n);
                 // We want to now show that [n, m] does not appear in q.
