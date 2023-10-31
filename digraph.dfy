@@ -1,8 +1,12 @@
 include "utils.dfy"
+include "SeqExt.dfy"
+include "../libraries/src/Collections/Sequences/Seq.dfy"
 
 module DG {
 
     import Utils
+    import SeqExt
+    import Seq
 
     newtype Node = nat
 
@@ -43,8 +47,19 @@ module DG {
         (forall n: Node :: !g.IsConnected(n, n)) && // No self-connections
         (forall n: Node, m: Node :: g.IsConnected(n, m) ==> g.IsNode(n) && g.IsNode(m))
     }
+
+    lemma ValidNodeBound(g: Digraph, n: Node)
+        requires DigraphValid(g)
+        requires g.IsNode(n)
+        ensures n < g.NodeBound
+    {
+        reveal DigraphValid();
+    }
+
     
     lemma NotNodeNotConnected(g: Digraph, n: Node)
+        // If a node is not in the graph
+        // then it's not connected to any nodes
         requires DigraphValid(g)
         requires !g.IsNode(n)
         ensures
@@ -60,17 +75,113 @@ module DG {
         (forall i: nat :: i < |p.v|-1 ==> g.IsConnected(p.v[i], p.v[i+1]))
     }
 
+    predicate {:opaque} PathExcludes(p: Path, exclusion: set<Node>)
+    {
+        forall i: nat :: i < |p.v| ==> p.v[i] !in exclusion
+    }
+
+    lemma NodeInExclusionNotInPath(p: Path, exclusion: set<Node>, n: Node)
+        requires PathExcludes(p, exclusion)
+        requires n in exclusion
+        ensures n !in p.v
+    {
+        reveal PathExcludes();
+    }
+
+    predicate NextNode(g: Digraph, n: Node, m: Node)
+        requires DigraphValid(g)
+        requires g.IsNode(n)
+    {
+        g.IsNode(m) && g.IsConnected(n, m)
+    }
+
+    function PathAppend(g: Digraph, p: Path, n: Node): (r: Path)
+        // Add a node onto a path.
+        requires g.IsNode(n)
+        requires |p.v| > 0
+        requires g.IsConnected(p.v[|p.v|-1], n)
+        requires PathValid(g, p)
+        ensures PathValid(g, r)
+    {
+        reveal PathValid();
+        Path(p.v + [n])
+    }
+
+    function PathPrepend(g: Digraph, p: Path, n: Node): (r: Path)
+        // Add a node onto a path.
+        requires g.IsNode(n)
+        requires |p.v| > 0
+        requires g.IsConnected(n, p.v[0])
+        requires PathValid(g, p)
+        ensures PathValid(g, r)
+    {
+        reveal PathValid();
+        Path([n] + p.v)
+    }
+
+    lemma PathPrependNoRepeats(g: Digraph, p: Path, n: Node)
+        requires g.IsNode(n)
+        requires |p.v| > 0
+        requires g.IsConnected(n, p.v[0])
+        requires PathValid(g, p)
+        requires PathNoRepeats(p)
+        requires n !in p.v
+        ensures
+            var r := PathPrepend(g, p, n);
+            PathNoRepeats(r)
+    {
+    }
+
+    lemma PathPrependExcludes(
+            g: Digraph, p: Path, n: Node, exclusion: set<Node>)
+        requires g.IsNode(n)
+        requires |p.v| > 0
+        requires g.IsConnected(n, p.v[0])
+        requires PathValid(g, p)
+        requires PathExcludes(p, exclusion)
+        requires n !in exclusion
+        ensures
+            var r := PathPrepend(g, p, n);
+            PathExcludes(r, exclusion)
+    {
+        reveal PathExcludes();
+    }
+
+    lemma PathAppendOneBigger(g: Digraph, p: Path, n: Node)
+        // If we add a node to a path that wasn't already in it
+        // then that path contains one more node.
+        requires g.IsNode(n)
+        requires |p.v| > 0
+        requires g.IsConnected(PathEnd(p), n)
+        requires PathValid(g, p)
+        requires n !in p.v
+        ensures
+            var q := PathAppend(g, p, n);
+            |PathSet(p)| + 1 == |PathSet(q)|
+    {
+        reveal Seq.ToSet();
+        var q := PathAppend(g, p, n);
+        assert q.v == p.v + [n];
+        SeqExt.LemmaToSetAdds(p.v, [n]);
+        assert Seq.ToSet(p.v) + Seq.ToSet([n]) == Seq.ToSet(q.v);
+        assert PathSet(p) + {n} == PathSet(q);
+    }
+
     predicate PathLoop(p: Path)
+        // The path starts and stop at the same place.
     {
         |p.v| > 1 && p.v[0] == p.v[|p.v|-1]
     }
 
     predicate PathNoRepeats(p: Path)
+        // This path does not contain any repeated nodes.
     {
         forall i: nat, j: nat :: i < |p.v| && j < |p.v| && i != j ==> p.v[i] != p.v[j]
     }
 
     predicate PathSimpleLoop(p: Path)
+        // A simple loop is a loop which doesn't have any repeats
+        // (apart from the start and stop)
     {
         PathLoop(p) && PathNoRepeats(Path(p.v[1..|p.v|]))
     }
@@ -87,13 +198,29 @@ module DG {
         p.v[|p.v|-1]
     }
 
+    function RemovePathEnd(p: Path): Path
+        requires |p.v| > 0
+    {
+        Path(p.v[..|p.v|-1])
+    }
+
+    lemma IfNoRepeatsEndNotinRemovePathEnd(p: Path)
+        requires PathNoRepeats(p)
+        requires |p.v| > 0
+        ensures PathEnd(p) !in RemovePathEnd(p).v
+    {
+    }
+
     function PathRemoveLoops(p: Path): (r: Path)
+        // Creates a new path by snipping off any loops that
+        // exist in the path.
         requires |p.v| > 0
     {
         PathRemoveLoopsInternal(p, |p.v|-1)
     }
 
     function PathFindIndex(p: Path, n: Node): (r: nat)
+        // Find the position of a node in a path. 
         requires n in p.v
         ensures r < |p.v|
         ensures p.v[r] == n
@@ -115,6 +242,7 @@ module DG {
     }
 
     function PathSegment(p: Path, start: nat, stop: nat): (r: Path)
+        // Create a new path by taking a segment of an existing one.
         requires start < |p.v|
         requires stop <= |p.v|
         requires start < stop
@@ -124,6 +252,7 @@ module DG {
     }
 
     lemma PathSegmentValid(g: Digraph, p: Path, start: nat, stop: nat)
+        // A segment of a valid path is a valid path.
         requires start < |p.v|
         requires stop <= |p.v|
         requires start < stop
@@ -152,6 +281,9 @@ module DG {
     }
 
     lemma RemoveLoopsFromToSame(g: Digraph, p: Path)
+        // When we remove loops we get a path with the same
+        // start and end.  Possibly of length 1 node.
+        // It won't have repeats.
         requires |p.v| > 1
         requires p.v[0] != p.v[|p.v|-1]
         requires PathValid(g, p)
@@ -240,6 +372,24 @@ module DG {
         exists p: Path :: PathFromTo(g, p, a, b)
     }
 
+    ghost predicate SimplePathExists(g: Digraph, a: Node, b: Node)
+    {
+        exists p: Path :: SimplePathFromTo(g, p, a, b)
+    }
+
+    ghost predicate SimpleShortExcludedPathExists(
+        g: Digraph, a: Node, b: Node, exclusion: set<Node>)
+    {
+        exists p: Path :: SimpleShortExcludedPathFromTo(g, p, a, b, exclusion)
+    }
+
+    lemma SimpleShortExcludedPathExistsByExample(
+        g: Digraph, p: Path, a: Node, b: Node, exclusion: set<Node>)
+        requires SimpleShortExcludedPathFromTo(g, p, a, b, exclusion)
+        ensures SimpleShortExcludedPathExists(g, a, b, exclusion)
+    {
+    }
+
     lemma PathExistsByExample(g: Digraph, p: Path, a: Node, b: Node)
         requires PathFromTo(g, p, a, b)
         ensures PathExists(g, a, b)
@@ -247,6 +397,7 @@ module DG {
     }
 
     lemma NodeSetSize(g: Digraph, nodes: set<Node>)
+        // Lets us set an upper bound on the number of nodes in a graph.
         requires DigraphValid(g)
         requires forall n: Node :: n in nodes ==> g.IsNode(n)
         ensures |nodes| <= NodeValidSetSize(g)
@@ -261,6 +412,8 @@ module DG {
     }
 
     function NumberOfRemainingNodes(g: Digraph, visited_nodes: set<Node>): nat
+        // This is useful when we want to show that something that walks the
+        // graph will terminate.
         requires DigraphValid(g)
         requires forall n :: n in visited_nodes ==> g.IsNode(n)
     {
@@ -268,7 +421,63 @@ module DG {
         NodeValidSetSize(g) - |visited_nodes|
     }
 
-    predicate PathDoesNotExistRecursiveInternal(g: Digraph, a: Node, b: Node, visited_nodes: set<Node>)
+    lemma NumberOfRemainingNodesDecreases(
+        g: Digraph, visited_nodes: set<Node>, n: Node, new_visited_nodes: set<Node>)
+        requires DigraphValid(g)
+        requires forall m :: m in visited_nodes ==> g.IsNode(m)
+        requires g.IsNode(n)
+        requires n !in visited_nodes
+        requires new_visited_nodes == visited_nodes + {n}
+        ensures
+            NumberOfRemainingNodes(g, new_visited_nodes) <
+            NumberOfRemainingNodes(g, visited_nodes)
+    {
+    }
+
+    function PathSet(p: Path): (r: set<Node>)
+    {
+        Seq.ToSet(p.v)
+    }
+
+    lemma PathSetValid(g: Digraph, p: Path)
+        // If a path is valid, the nodes in it are valid.
+        requires DigraphValid(g)
+        requires PathValid(g, p)
+        ensures
+            var r := PathSet(p);
+            (forall n: Node :: n in r ==> NodeValid(g, n)) &&
+            (forall n: Node :: n in r ==> g.IsNode(n))
+    {
+        reveal Seq.ToSet();
+        reveal PathValid();
+        reveal DigraphValid();
+    }
+
+    function PathSetV(g: Digraph, p: Path): (r: set<Node>)
+        // A helper that combines the PathSet function and PathSetValid lemma.
+        // (I'm not sure if this is a sensible way of doing things, but it
+        //  feels like it helps us choose how many constraints we're instroducing).
+        requires DigraphValid(g)
+        requires PathValid(g, p)
+        ensures forall n: Node :: n in r ==> NodeValid(g, n)
+        ensures forall n: Node :: n in r ==> g.IsNode(n)
+    {
+        PathSetValid(g, p);
+        PathSet(p)
+    }
+
+    predicate PathExistsR(g: Digraph, a: Node, b: Node)
+        // A Path Exists from a to b.
+        // A non-ghost version of SimplePathExists.
+        requires DigraphValid(g)
+        requires g.IsNode(a)
+        requires g.IsNode(b)
+    {
+        !PathDoesNotExistRecursiveInternal(g, a, b, {})
+    }
+
+    predicate PathDoesNotExistRecursiveInternal(
+            g: Digraph, a: Node, b: Node, visited_nodes: set<Node>)
         requires DigraphValid(g)
         requires a !in visited_nodes
         requires b !in visited_nodes
@@ -282,53 +491,152 @@ module DG {
         if (a == b) then
             false
         else
-            forall n: Node :: g.IsNode(n) && g.IsConnected(a, n) && n < g.NodeBound && n !in new_visited_nodes==>
+            forall n: Node :: NextNode(g, a, n) && n < g.NodeBound &&
+                    n !in new_visited_nodes ==>
                 PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes)
     }
 
-    predicate PathExistsR(g: Digraph, a: Node, b: Node)
+    lemma {:vcs_split_on_every_assert} NotPathExistsIsPathDoesNotExistRecursive(
+            g: Digraph, b: Node, p: Path)
         requires DigraphValid(g)
-        requires g.IsNode(a)
+        requires |p.v| > 0
+        requires b !in PathSet(RemovePathEnd(p))
+        requires PathValid(g, p)
+        requires PathNoRepeats(p)
         requires g.IsNode(b)
+        decreases
+            reveal Seq.ToSet();
+            reveal PathValid();
+            NumberOfRemainingNodes(g, PathSet(p))
+        ensures
+            var visited_nodes := PathSet(RemovePathEnd(p));
+            var end := PathEnd(p);
+            reveal Seq.ToSet();
+            !SimpleShortExcludedPathExists(g, end, b, visited_nodes) ==
+                PathDoesNotExistRecursiveInternal(g, PathEnd(p), b, visited_nodes)
     {
-        !PathDoesNotExistRecursiveInternal(g, a, b, {})
+        var visited_nodes := PathSet(RemovePathEnd(p));
+        var new_visited_nodes := PathSet(p);
+        var end := PathEnd(p);
+        reveal PathValid();
+        assert g.IsNode(end);
+        reveal Seq.ToSet();
+        assert new_visited_nodes == visited_nodes + {end};
+        assert |new_visited_nodes| == |visited_nodes| + 1;
+        assert |PathSet(p)| > |PathSet(RemovePathEnd(p))|;
+        assert end !in visited_nodes;
+        if (end == b) {
+            reveal PathValid();
+            assert !PathDoesNotExistRecursiveInternal(
+                g, end, b, visited_nodes);
+            var esp := Path([end]);
+            reveal PathExcludes();
+            SimpleShortExcludedPathExistsByExample(
+                g, esp, end, b, visited_nodes);
+            assert SimpleShortExcludedPathExists(g, end, b, visited_nodes);
+            assert !SimpleShortExcludedPathExists(g, end, b, visited_nodes) ==
+                PathDoesNotExistRecursiveInternal(g, PathEnd(p), b, visited_nodes);
+        } else {
+            // Show that if of the children has a path
+            // then this has a path.
+            // Show that otherwise then this does not have a path.
+            if exists n: Node :: NextNode(g, end, n) && n < g.NodeBound &&
+                    n !in new_visited_nodes &&
+                    SimpleShortExcludedPathExists(g, n, b, new_visited_nodes) {
+                var n: Node :| NextNode(g, end, n) && n < g.NodeBound &&
+                    n !in new_visited_nodes &&
+                    SimpleShortExcludedPathExists(g, n, b, new_visited_nodes);
+                assert SimpleShortExcludedPathExists(g, n, b, new_visited_nodes);  
+                var shorter: Path :| SimpleShortExcludedPathFromTo(
+                    g, shorter, n, b, new_visited_nodes);
+                reveal PathExcludes();
+                PathPrependNoRepeats(g, shorter, end);
+                PathPrependExcludes(g, shorter, end, visited_nodes);
+                var longer: Path := PathPrepend(g, shorter, end);
+                SimpleShortExcludedPathExistsByExample(
+                    g, longer, end, b, visited_nodes);
+                assert SimpleShortExcludedPathExists(g, end, b, visited_nodes);
+                var new_path := PathAppend(g, p, n);
+                NumberOfRemainingNodesDecreases(g, PathSet(p), n, PathSet(new_path));
+                NotPathExistsIsPathDoesNotExistRecursive(g, b, new_path);
+                assert !PathDoesNotExistRecursiveInternal(
+                    g, PathEnd(new_path), b, new_visited_nodes);
+                assert !PathDoesNotExistRecursiveInternal(g, PathEnd(p), b, visited_nodes);
+            } else {
+                if SimpleShortExcludedPathExists(g, end, b, visited_nodes) {
+                    var sse: Path :| SimpleShortExcludedPathFromTo(
+                        g, sse, end, b, visited_nodes);
+                    var n := sse.v[1];
+                    assert NextNode(g, end, n);
+                    reveal PathValid();
+                    ValidNodeBound(g, n);
+                    assert n < g.NodeBound;
+                    reveal PathExcludes();
+                    assert n !in new_visited_nodes;
+                    var shorter := Path(sse.v[1..]);
+                    SimpleShortExcludedPathExistsByExample(
+                        g, shorter, n, b, new_visited_nodes);
+                    assert SimpleShortExcludedPathExists(g, n, b, new_visited_nodes);
+                    // This constradicts that such as 'n' does not exist.
+                    assert false;
+                }
+                forall n: Node | NextNode(g, end, n) && n < g.NodeBound &&
+                        n !in new_visited_nodes
+                    ensures
+                        var new_path := PathAppend(g, p, n);
+                        PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes)
+                {
+                    assert !SimpleShortExcludedPathExists(g, n, b, new_visited_nodes);
+                    var new_path := PathAppend(g, p, n);
+                    NumberOfRemainingNodesDecreases(g, PathSet(p), n, PathSet(new_path));
+                    NotPathExistsIsPathDoesNotExistRecursive(g, b, new_path);
+                    assert PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes);
+                }
+                assert !SimpleShortExcludedPathExists(g, end, b, visited_nodes);
+                assert PathDoesNotExistRecursiveInternal(g, end, b, visited_nodes);
+            }
+        }
     }
 
     predicate PathFromTo(g: Digraph, p: Path, a: Node, b: Node)
+        // The path is valid and goes between these parts.
     {
         PathValid(g, p) && |p.v| > 1 && (p.v[0] == a) && (p.v[|p.v|-1] == b)
     }
 
     predicate SimplePathFromTo(g: Digraph, p: Path, a: Node, b: Node)
+        // That path is valid and has no repeats (except possibly the end points).
     {
         PathValid(g, p) && |p.v| > 1 && (p.v[0] == a) && (p.v[|p.v|-1] == b) &&
         PathNoRepeats(Path(p.v[0..|p.v|-2]))
     }
 
+    predicate SimpleShortExcludedPathFromTo(
+        g: Digraph, p: Path, a: Node, b: Node, exclusion: set<Node>)
+        // That path is valid and has no repeats
+        // and doesn't go through any nodes in exclusion
+    {
+        PathValid(g, p) && |p.v| > 0 && (p.v[0] == a) && (p.v[|p.v|-1] == b) &&
+        PathNoRepeats(p) &&
+        PathExcludes(p, exclusion)
+    }
+
     predicate ShortPathFromTo(g: Digraph, p: Path, a: Node, b: Node)
+        // A valid path between two ports.  But a path of length 1 is allowed.
     {
         PathValid(g, p) && |p.v| > 0 && (p.v[0] == a) && (p.v[|p.v|-1] == b)
     }
 
-    function PathIndex(p: Path, n: Node): (r: nat)
-        requires n in p.v
-        ensures
-            r < |p.v| &&
-            p.v[r] == n
-        decreases |p.v|
-    {
-        if p.v[0] == n then
-            0
-        else
-            PathIndex(Path(p.v[1..|p.v|]), n) + 1
-    }
-
     ghost predicate {:opaque} DigraphLoop(g: Digraph)
+        // There's a loop in the digraph.
+        // (there exists a path that is a loop).
     {
         exists p: Path :: PathValid(g, p) && PathLoop(p)
     }
 
     ghost predicate {:opaque} DigraphLoop2(g: Digraph)
+        // There's a loop in the digraph.
+        // (there exists a node which has a path goes to itself)
     {
         exists n: Node :: PathExists(g, n, n)
     }
@@ -341,6 +649,8 @@ module DG {
     }
 
     lemma DigraphLoopEquiv(g: Digraph)
+        // The two definitions for whether the digraph has a loop
+        // are equivalent.
         ensures DigraphLoop(g) == DigraphLoop2(g)
     {
         reveal DigraphLoop();
@@ -356,6 +666,7 @@ module DG {
     }
 
     ghost function GetLoopPath(g: Digraph): (r: Path)
+        // Returns a loop from a digraph that has a loop.
         requires DigraphLoop(g)
     {
         reveal DigraphLoop();
@@ -436,7 +747,7 @@ module DG {
                     assert !r.IsConnected(p.v[0], p.v[1]);
                     assert !PathValid(r, p);
                 } else {
-                    var index := PathIndex(p, n);
+                    var index := PathFindIndex(p, n);
                     AddNodePathValidHelper(r, n, p.v[index-1]);
                     assert !r.IsConnected(p.v[index-1], p.v[index]);
                     assert !PathValid(r, p);
