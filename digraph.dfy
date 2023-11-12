@@ -847,6 +847,20 @@ module DG {
         reveal PathValid(); 
     }
 
+    lemma ConnectNodesPathStillExists(
+            g: Digraph, n: Node, m: Node, a: Node, b: Node)
+        requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
+        requires PathExists(g, a, b)
+        ensures
+            var r := ConnectNodes(g, n, m);
+            PathExists(r, a, b)
+    {
+        var r := ConnectNodes(g, n, m);
+        var p :| PathFromTo(g, p, a, b);
+        ConnectNodesPathStillValid(g, n, m, p);
+        PathExistsByExample(r, p, a, b);
+    }
+
     lemma ConnectNodesPathExists(g: Digraph, n: Node, m: Node)
         requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
         ensures

@@ -57,4 +57,12 @@ module Utils {
         }
     }
 
+    lemma SetSizes<T>(a: set<T>, b: set<T>, c: set<T>)
+        requires c == a + b
+        requires forall t: T :: t in a ==> t !in b
+        requires forall t: T :: t in b ==> t !in a
+        ensures |c| == |a| + |b|
+    {
+    }
+
 }
