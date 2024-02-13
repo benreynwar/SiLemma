@@ -66,14 +66,16 @@ module Circuit {
     datatype HPINP = HPINP(hpn: HPNode, p: CPort)
     datatype HPONP = HPONP(hpn: HPNode, p: CPort)
 
-    ghost predicate HPINPValid(hpinp: HPINP)
+    ghost predicate HPINPValid(c: Circuit, hpinp: HPINP)
+        requires CircuitValid(c)
     {
-        HierarchyPathValid(hpinp.hpn.hp)
+        HierarchyPathValid(c, hpinp.hpn.hp)
     }
 
-    ghost predicate HPONPValid(hponp: HPONP)
+    ghost predicate HPONPValid(c: Circuit, hponp: HPONP)
+        requires CircuitValid(c)
     {
-        HPNodeValid(hponp.hpn)
+        HPNodeValid(c, hponp.hpn)
     }
     
     const MAX_HIERLEVEL := 128
@@ -103,10 +105,9 @@ module Circuit {
     // Represents the path taken through a hierarchy of nodes where a node can
     // represent a lower-level circuit.
     datatype HierarchyPath =
-        | Top (c: Circuit)
+        | Top
         | Level(
             n: CNode,
-            c: Circuit,
             parent: HierarchyPath
             )
 
@@ -116,81 +117,83 @@ module Circuit {
             n: CNode
         )
 
-    ghost predicate HierarchyPathValidInternal(hp: HierarchyPath, n: CNode, c: Circuit)
-        // Checks is a hierarchy path is valid and that node `n` exists in the lowest
-        // layer and that it's kind is `nk`.
+    function HierarchyPathCircuit(c: Circuit, hp: HierarchyPath): (r: Circuit)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        decreases hp, 1
     {
         match hp
-        case Top(top_c) =>
-            (top_c.NodeKind(n) == Some(CHier(c))) &&
-            CircuitValid(top_c)
-        case Level(next_n, next_c, parent) =>
-            (next_c.NodeKind(n) == Some(CHier(c))) &&
-            CircuitValid(next_c) &&
-            HierarchyPathValidInternal(hp.parent, next_n, next_c)
+        case Top => c
+        case Level(n, parent) =>
+            assert HierarchyPathValid(c, parent);
+            var parent_c := HierarchyPathCircuit(c, parent);
+            parent_c.NodeKind(n).value.Circuit
     }
 
-    ghost predicate HierarchyPathValid(hp: HierarchyPath)
+    lemma HierarchyPathCircuitValid(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        ensures CircuitValid(HierarchyPathCircuit(c, hp))
+    {
+        if hp.Top? {
+        } else {
+            HierarchyPathCircuitValid(c, hp.parent);
+        }
+    }
+
+    ghost predicate HierarchyPathValid(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c)
+        decreases hp, 0
     {
         match hp
-        case Top(c) => CircuitValid(c)
-        case Level(n, c, parent) =>
-            HierarchyPathValidInternal(parent, n, c) && CircuitValid(c)
+        case Top => true
+        case Level(n, parent) =>
+            HierarchyPathValid(c, parent) &&
+            var hp_c := HierarchyPathCircuit(c, parent);
+            hp_c.NodeKind(n).Some? && hp_c.NodeKind(n).value.CHier?
     }
 
-    ghost predicate HPNodeValid(hpn: HPNode)
+    ghost predicate HPNodeValid(c: Circuit, hpn: HPNode)
+        requires CircuitValid(c)
     {
-        var c := HierarchyPathCircuit(hpn.hp);
-        var maybe_nk := c.NodeKind(hpn.n);
-        HierarchyPathValid(hpn.hp) && maybe_nk.Some?
+        HierarchyPathValid(c, hpn.hp) &&
+        var hp_c := HierarchyPathCircuit(c, hpn.hp);
+        var maybe_nk := hp_c.NodeKind(hpn.n);
+        HierarchyPathValid(c, hpn.hp) && maybe_nk.Some?
     }
 
-    ghost predicate HPNodeIsLeaf(hpn: HPNode)
-        requires HPNodeValid(hpn)
+    ghost predicate HPNodeIsLeaf(c: Circuit, hpn: HPNode)
+        requires CircuitValid(c)
+        requires HPNodeValid(c, hpn)
     {
-        var c := HierarchyPathCircuit(hpn.hp);
-        var maybe_nk := c.NodeKind(hpn.n);
+        var hp_c := HierarchyPathCircuit(c, hpn.hp);
+        var maybe_nk := hp_c.NodeKind(hpn.n);
         !maybe_nk.value.CHier?
     }
 
-    function ExtendHierarchyPath(hp: HierarchyPath, n: CNode): (r: HierarchyPath)
-        requires HierarchyPathValid(hp)
-        requires HierarchyPathCircuit(hp).NodeKind(n).Some?
-        requires HierarchyPathCircuit(hp).NodeKind(n).value.CHier?
-        ensures HierarchyPathValid(r)
+    function ExtendHierarchyPath(c: Circuit, hp: HierarchyPath, n: CNode): (r: HierarchyPath)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        requires HierarchyPathCircuit(c, hp).NodeKind(n).Some?
+        requires HierarchyPathCircuit(c, hp).NodeKind(n).value.CHier?
+        ensures HierarchyPathValid(c, r)
     {
-        var c := HierarchyPathCircuit(hp);
-        assert CircuitValid(c);
-        var next_c := c.NodeKind(n).value.Circuit;
+        var hp_c := HierarchyPathCircuit(c, hp);
+        HierarchyPathCircuitValid(c, hp);
+        assert CircuitValid(hp_c);
+        var next_c := hp_c.NodeKind(n).value.Circuit;
         assert CircuitValid(next_c);
-        Level(n, next_c, hp)
+        Level(n, hp)
     }
 
-    function CompleteHierarchyPath(hp: HierarchyPath, n: CNode): (r: HPNode)
-        requires HierarchyPathValid(hp)
-        requires HierarchyPathCircuit(hp).NodeKind(n).Some?
-        requires !HierarchyPathCircuit(hp).NodeKind(n).value.CHier?
-        ensures HPNodeValid(r)
+    function CompleteHierarchyPath(c: Circuit, hp: HierarchyPath, n: CNode): (r: HPNode)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        requires HierarchyPathCircuit(c, hp).NodeKind(n).Some?
+        requires !HierarchyPathCircuit(c, hp).NodeKind(n).value.CHier?
+        ensures HPNodeValid(c, r)
     {
         HPNode(hp, n)
-    }
-
-    function HierarchyPathCircuit(hp: HierarchyPath): Circuit
-    {
-        match hp
-        case Top(c) => c
-        case Level(n, c, parent) => c
-    }
-
-    lemma HierarchyPathCircuitValid(hp: HierarchyPath)
-        requires HierarchyPathValid(hp)
-        ensures CircuitValid(HierarchyPathCircuit(hp))
-    {
-        if hp.Top? {
-            assert CircuitValid(hp.c);
-        } else {
-            assert CircuitValid(hp.c);
-        }
     }
 
     ghost predicate CNodeKindValid(c: Circuit, nk: CNodeKind)
@@ -274,38 +277,39 @@ module Circuit {
     }
 
 
-    function HGNodeToHPNode(hp: HierarchyPath, n: HNode) : (r: Option<HPNode>)
+    function HGNodeToHPNode(c: Circuit, hp: HierarchyPath, n: HNode) : (r: Option<HPNode>)
+        requires CircuitValid(c)
         // The Hierarchy path points to a circuit.
         // The HNode is a node within that circuit, possibly buried inside a CHier.
         // We return a HierarchyPath all the way to that node.
-        requires HierarchyPathValid(hp)
-        requires CircuitValid(HierarchyPathCircuit(hp))
-        ensures r.None? || (HPNodeValid(r.value) && HPNodeIsLeaf(r.value))
-        decreases HierarchyPathCircuit(hp).HierLevel
+        requires HierarchyPathValid(c, hp)
+        requires CircuitValid(HierarchyPathCircuit(c, hp))
+        ensures r.None? || (HPNodeValid(c, r.value) && HPNodeIsLeaf(c, r.value))
+        decreases HierarchyPathCircuit(c, hp).HierLevel
     {
-        var c := HierarchyPathCircuit(hp);
+        var hp_c := HierarchyPathCircuit(c, hp);
         var unpacked_n := SeqNatToNat.NatToNats(n as nat, 2);
         var n0 := unpacked_n[0] as CNode;
         var n1 := unpacked_n[1] as HNode;
-        match c.NodeKind(n0)
+        match hp_c.NodeKind(n0)
         case None => None
         case Some(nk) =>
             match nk
             case CHier(_) =>
-                var new_hp := ExtendHierarchyPath(hp, n0);
-                HierLevelDecreases(c, n0);
-                SubCircuitValid(c, n0);
-                HGNodeToHPNode(new_hp, n1)
+                var new_hp := ExtendHierarchyPath(c, hp, n0);
+                HierLevelDecreases(hp_c, n0);
+                SubCircuitValid(hp_c, n0);
+                HGNodeToHPNode(c, new_hp, n1)
             case _ =>
-                var new_hpn := CompleteHierarchyPath(hp, n0);
+                var new_hpn := CompleteHierarchyPath(c, hp, n0);
                 if n1 == 0 then Some(new_hpn) else None
     }
 
     function HierarchyPathToHGNodeInternal(hp: HierarchyPath, hn: HNode) : (r: HNode)
     {
         match hp
-        case Top(c) => hn
-        case Level(n, nk, parent) =>
+        case Top => hn
+        case Level(n, parent) =>
             var new_hn := SeqNatToNat.NatsToNat([n as nat, hn as nat]) as HNode;
             HierarchyPathToHGNodeInternal(parent, new_hn)
     }
@@ -317,21 +321,22 @@ module Circuit {
 
     function HGINPtoHPINP(c: Circuit, inp: HG.INP) : (r: Option<HPINP>)
         requires CircuitValid(c)
-        ensures r.Some? ==> HPINPValid(r.value)
+        ensures r.Some? ==> HPINPValid(c, r.value)
     {
         var cp := inp.p as CPort;
-        match HGNodeToHPNode(Top(c), inp.n as HNode)
+        match HGNodeToHPNode(c, Top, inp.n as HNode)
             case None => None
             case Some(hp) =>
                 Some(HPINP(hp, cp))
     }
 
-    function HPINPtoHPONP(hpinp: HPINP) : (r: Option<HPONP>)
-        requires HPINPValid(hpinp)
-        ensures r.None? || HPONPValid(r.value)
+    function HPINPtoHPONP(c: Circuit, hpinp: HPINP) : (r: Option<HPONP>)
+        requires CircuitValid(c)
+        requires HPINPValid(c, hpinp)
+        ensures r.None? || HPONPValid(c, r.value)
     {
         var hp := hpinp.hpn.hp;
-        var c := HierarchyPathCircuit(hp);
+        var c := HierarchyPathCircuit(c, hp);
         var inp := INP(hpinp.hpn.n, hpinp.p);
         var maybe_onp: Option<ONP> := c.PortSource(inp);
             match maybe_onp
@@ -348,24 +353,26 @@ module Circuit {
                         Some(HPONP(hpn, onp.p))
     }
 
-    function HPNodeToNK(hpn: HPNode): CNodeKind
-        requires HPNodeValid(hpn)
+    function HPNodeToNK(c: Circuit, hpn: HPNode): CNodeKind
+        requires CircuitValid(c)
+        requires HPNodeValid(c, hpn)
     {
-        HierarchyPathCircuit(hpn.hp).NodeKind(hpn.n).value
+        HierarchyPathCircuit(c, hpn.hp).NodeKind(hpn.n).value
     }
 
-    function HPONPtoHGONP(onp: HPONP) : HG.ONP
-        requires HPONPValid(onp)
+    function HPONPtoHGONP(c: Circuit, onp: HPONP) : HG.ONP
+        requires CircuitValid(c)
+        requires HPONPValid(c, onp)
     {
-        var c := HierarchyPathCircuit(onp.hpn.hp);
+        var c := HierarchyPathCircuit(c, onp.hpn.hp);
         assert CircuitValid(c);
         // We need to check if it the output port of a hiearchical node.
         // If so we need to find the appropriate internal COutput Node.
-        var nk := HPNodeToNK(onp.hpn);
+        var nk := HPNodeToNK(c, onp.hpn);
         assert nk == c.NodeKind(onp.hpn.n).value;
         match nk
         case CHier(c) =>
-            var new_hp := ExtendHierarchyPath(onp.hpn.hp, onp.hpn.n);
+            var new_hp := ExtendHierarchyPath(c, onp.hpn.hp, onp.hpn.n);
             var new_n: CNode := onp.p as CNode;
             var new_hpn := HPNode(new_hp, new_n);
             var n := HPNodeToHGNode(new_hpn);
@@ -449,22 +456,22 @@ module Circuit {
         match maybe_hpinp
         case None => None
         case Some(hpinp) =>
-            var maybe_hponp := HPINPtoHPONP(hpinp);
+            var maybe_hponp := HPINPtoHPONP(c, hpinp);
             match maybe_hponp
             case None => None
             case Some(hponp) =>
-                var hgonp := HPONPtoHGONP(hponp);
+                var hgonp := HPONPtoHGONP(c, hponp);
                 Some(hgonp)
     }
 
     function GetHGNodeKind(c: Circuit, n: HG.HNode): Option<HG.HNodeKind>
         requires CircuitValid(c)
     {
-        var maybe_hpn := HGNodeToHPNode(Top(c), n as HNode);
+        var maybe_hpn := HGNodeToHPNode(c, Top, n as HNode);
         match maybe_hpn
         case None => None
         case Some(hpn) =>
-            var level_c := HierarchyPathCircuit(hpn.hp);
+            var level_c := HierarchyPathCircuit(c, hpn.hp);
             var nk := level_c.NodeKind(hpn.n).value;
             assert !nk.CHier?;
             match nk
@@ -494,6 +501,9 @@ module Circuit {
           CircuitHGPortBound(c)
         )
     }
+
+    // Show that if there is a path in the Circuit there is a path in the HGraph.
+    // Show that if there is not a path in the Circuit there is no path in the HGraph.
 
     function AndBehav(m: map<CPort, bool>): Option<map<CPort, bool> >
     {
