@@ -34,6 +34,12 @@ module HG {
         PathExists: (HPort, HPort) -> bool
     )
 
+    const IdentNodeKind := HNodeKind(
+        IPorts := {0 as HPort},
+        OPorts := {0 as HPort},
+        PathExists := (a, b) => (a == 0) && (b == 0)
+    )
+
     const InputNodeKind := HNodeKind(
         IPorts := {},
         OPorts := {0 as HPort},
