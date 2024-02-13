@@ -122,7 +122,7 @@ module Circuit {
     {
         match hp
         case Top(top_c) =>
-            (c.NodeKind(n) == Some(CHier(c))) &&
+            (top_c.NodeKind(n) == Some(CHier(c))) &&
             CircuitValid(top_c)
         case Level(next_n, next_c, parent) =>
             (next_c.NodeKind(n) == Some(CHier(c))) &&
