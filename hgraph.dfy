@@ -40,21 +40,25 @@ module HG {
         PathExists := (a, b) => (a == 0) && (b == 0)
     )
 
+    // Conventions for port indices for some NodeKinds
+    const INPUT_PORT: HPort := 0
+    const OUTPUT_PORT: HPort := 1
+
     const InputNodeKind := HNodeKind(
         IPorts := {},
-        OPorts := {0 as HPort},
+        OPorts := {OUTPUT_PORT as HPort},
         PathExists := (_, _) => false
     )
 
     const OutputNodeKind := HNodeKind(
-        IPorts := {0 as HPort},
+        IPorts := {INPUT_PORT as HPort},
         OPorts := {},
         PathExists := (_, _) => false
     )
 
     const RegisterNodeKind := HNodeKind(
-        IPorts := {0 as HPort},
-        OPorts := {0 as HPort},
+        IPorts := {INPUT_PORT as HPort},
+        OPorts := {OUTPUT_PORT as HPort},
         PathExists := (_, _) => false
     )
 
@@ -91,6 +95,7 @@ module HG {
         p in n.IPorts || p in n.OPorts
     }
 
+    datatype NP = NP(n: HNode, p: HPort)
     datatype INP = INP(n: HNode, p: HPort)
     predicate INPValid(g: HGraph, p: INP)
     {

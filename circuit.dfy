@@ -44,6 +44,31 @@ module Circuit {
         case CSeq() => {0 as CPort}
     }
 
+    predicate IsIPort(nk: CNodeKind, p: CPort)
+    {
+        match nk
+        // The port numbers of a hierarical block and just the node ids of
+        // the input and output nodes.
+        case CHier(c) => c.NodeKind(p as CNode) == Some(CInput)
+        case CComb(iports, oports, path_exists, behav) => p in iports
+        case CInput() => false
+        case CConst(v) => false
+        case COutput() => p == HG.INPUT_PORT as CPort
+        case CSeq() => p == HG.INPUT_PORT as CPort
+    }
+
+    predicate IsIPortLenient(nk: CNodeKind, p: CPort)
+    // We allow a CInput to have an input port.
+    // This is useful when converting from a HGraph.  A node in the HGraph that
+    // maps to the CInput will have an input port because it is straddling the hierarchical
+    // boundary.
+    // We later map it to the input port of the CHier on the higher level.
+    {
+        match nk
+        case CInput() => p == HG.INPUT_PORT as CPort
+        case _ => IsIPort(nk, p)
+    }
+
     function OPorts(nk: CNodeKind): set<CPort>
     {
         match nk
@@ -55,36 +80,76 @@ module Circuit {
         case CSeq() => {0 as CPort}
     }
 
+    predicate IsOPort(nk: CNodeKind, p: CPort)
+    {
+        match nk
+        // The port numbers of a hierarical block and just the node ids of
+        // the input and output nodes.
+        case CHier(c) => c.NodeKind(p as CNode) == Some(COutput)
+        case CComb(iports, oports, path_exists, behav) => p in oports
+        case CInput() => p == HG.OUTPUT_PORT as CPort
+        case CConst(v) => p == HG.OUTPUT_PORT as CPort
+        case COutput() => false
+        case CSeq() => p == HG.OUTPUT_PORT as CPort
+    }
+
+    predicate IsOPortLenient(nk: CNodeKind, p: CPort)
+    // We allow a COutput to have an output port.
+    // This is useful when converting from a HGraph.  A node in the HGraph that
+    // maps to the COutput will have an output port because it is straddling the hierarchical
+    // boundary.
+    // We later map it to the output port of the CHier on the higher level.
+    {
+        match nk
+        case COutput() => p == HG.OUTPUT_PORT as CPort
+        case _ => IsIPort(nk, p)
+    }
+
     // INP and ONP reference ports on a single level of the hierarchy.
     // The 'n' can point at an internal node, or at a port on the external
     // interface.
-    datatype INP = INP(n: CNode, p: CPort)
-    datatype ONP = ONP(n: CNode, p: CPort)
+
+    datatype NP = NP(n: CNode, p: CPort)
 
     // HPINP and HPONP can reference a port nested in the hierarchy.
     // This is useful as an intermediate when converting to a HGraph.
-    datatype HPINP = HPINP(hpn: HPNode, p: CPort)
-    datatype HPONP = HPONP(hpn: HPNode, p: CPort)
 
-    ghost predicate HPINPValid(c: Circuit, hpinp: HPINP)
+    datatype HPNP = HPNP(hpn: HPNode, p: CPort)
+
+    predicate HPNPValidInput(c: Circuit, hpnp: HPNP)
         requires CircuitValid(c)
     {
-        HierarchyPathValid(c, hpinp.hpn.hp)
+        HierarchyPathValid(c, hpnp.hpn.hp) &&
+        var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
+        var maybe_nk := hp_c.NodeKind(hpnp.hpn.n);
+        maybe_nk.Some? &&
+        IsIPort(maybe_nk.value, hpnp.p)
     }
 
-    ghost predicate HPONPValid(c: Circuit, hponp: HPONP)
+    ghost predicate HPNPValidOutput(c: Circuit, hpnp: HPNP)
         requires CircuitValid(c)
     {
-        HPNodeValid(c, hponp.hpn)
+        HierarchyPathValid(c, hpnp.hpn.hp) &&
+        var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
+        var maybe_nk := hp_c.NodeKind(hpnp.hpn.n);
+        maybe_nk.Some? &&
+        IsOPort(maybe_nk.value, hpnp.p)
     }
-    
+
+    ghost predicate HPNPValid(c: Circuit, hpnp: HPNP)
+        requires CircuitValid(c)
+    {
+        HPNPValidInput(c, hpnp) ||
+        HPNPValidOutput(c, hpnp)
+    }
+
     const MAX_HIERLEVEL := 128
 
     datatype Circuit = Circuit(
         //IPorts: set<CNode>,
         //OPorts: set<CNode>,
         NodeKind: CNode -> Option<CNodeKind>,
-        PortSource: INP -> Option<ONP>,
+        PortSource: NP -> Option<NP>,
         // This is larger or equal to all nodes for which NodeKind(node) is Some
         // We use this help dafny prove that things are finite and terminate.
         NodeBound: CNode,
@@ -137,11 +202,17 @@ module Circuit {
     {
         if hp.Top? {
         } else {
+            assert HierarchyPathValid(c, hp.parent);
+            var parent_c := HierarchyPathCircuit(c, hp.parent);
             HierarchyPathCircuitValid(c, hp.parent);
+            assert CircuitValid(parent_c);
+            assert CircuitNodeKindValid(parent_c);
+            var hp_c := HierarchyPathCircuit(c, hp);
+            assert CircuitValid(hp_c);
         }
     }
 
-    ghost predicate HierarchyPathValid(c: Circuit, hp: HierarchyPath)
+    predicate HierarchyPathValid(c: Circuit, hp: HierarchyPath)
         requires CircuitValid(c)
         decreases hp, 0
     {
@@ -180,7 +251,7 @@ module Circuit {
     {
         var hp_c := HierarchyPathCircuit(c, hp);
         HierarchyPathCircuitValid(c, hp);
-        assert CircuitValid(hp_c);
+        assert CircuitNodeKindValid(hp_c);
         var next_c := hp_c.NodeKind(n).value.Circuit;
         assert CircuitValid(next_c);
         Level(n, hp)
@@ -213,7 +284,42 @@ module Circuit {
         case _ => true
     }
 
-    ghost predicate CircuitValid(c: Circuit)
+    ghost predicate CircuitPortSourceValid(c: Circuit)
+    {
+        // For all possible ports.
+        // If the port is not a valid output port then PortSource should give None.
+        // If the port is a valid output port then it should lead to a valid input
+        // port.
+        forall n: CNode ::
+            forall p: CPort ::
+                var inp := NP(n, p);
+                if NPValidInput(c, inp) then
+                    match c.PortSource(inp)
+                    // It's ok if it doesn't connect to anything.
+                    // We consider that a valid circuit, but not a complete circuit.
+                    // That way we can build a circuit but it is still valid.
+                    case None => true
+                    case Some(onp) => NPValidOutput(c, onp)
+                else
+                    c.PortSource(inp) == None
+    }
+
+    ghost predicate CircuitPortSourceComplete(c: Circuit)
+        requires CircuitPortSourceValid(c)
+    {
+        forall n: CNode ::
+            forall p: CPort ::
+                var inp := NP(n, p);
+                if NPValidInput(c, inp) then
+                    match c.PortSource(inp)
+                    case None => false
+                    case Some(onp) => NPValidOutput(c, onp)
+                else
+                    assert c.PortSource(inp) == None;
+                    true
+    }
+
+    ghost predicate CircuitNodeKindValid(c: Circuit)
         decreases  c.HierLevel, 1
     {
         forall n: CNode ::
@@ -224,25 +330,37 @@ module Circuit {
                 CNodeKindValid(c, maybe_nk.Extract())
     }
 
-    ghost predicate ValidINP(c: Circuit, inp: INP)
+    ghost predicate CircuitValid(c: Circuit)
+        decreases  c.HierLevel, 2
     {
-        match c.NodeKind(inp.n)
-        // The node doesn't exist.
-        case None => false
-        case Some(nk) => inp.p in IPorts(nk)
+        CircuitNodeKindValid(c) &&
+        CircuitPortSourceValid(c)
     }
 
-    ghost predicate ValidONP(c: Circuit, onp: ONP)
+    ghost predicate NPValid(c: Circuit, np: NP)
     {
-        match c.NodeKind(onp.n)
+        NPValidInput(c, np) || NPValidOutput(c, np)
+    }
+
+    ghost predicate NPValidInput(c: Circuit, np: NP)
+    {
+        match c.NodeKind(np.n)
+        // The node doesn't exist.
         case None => false
-        case Some(nk) => onp.p in OPorts(nk)
+        case Some(nk) => IsIPort(nk, np.p)
+    }
+
+    ghost predicate NPValidOutput(c: Circuit, np: NP)
+    {
+        match c.NodeKind(np.n)
+        case None => false
+        case Some(nk) => IsOPort(nk, np.p)
     }
 
     ghost predicate CircuitComplete(c: Circuit)
         decreases c.HierLevel, 1
     {
-        forall inp: INP :: ValidINP(c, inp) ==> c.PortSource(inp).Some?
+        forall inp: NP :: NPValid(c, inp) ==> c.PortSource(inp).Some?
     }
 
     function CNodeKindToHNodeKind(nk: CNodeKind): HG.HNodeKind
@@ -262,6 +380,7 @@ module Circuit {
             CircuitValid(c)
         ensures c.NodeKind(n).Extract().Circuit.HierLevel < c.HierLevel
     {
+        assert CircuitNodeKindValid(c);
     }
 
     lemma SubCircuitValid(c: Circuit, n: CNode)
@@ -274,8 +393,8 @@ module Circuit {
             CircuitValid(c)
         ensures CircuitValid(c.NodeKind(n).Extract().Circuit)
     {
+        assert CircuitNodeKindValid(c);
     }
-
 
     function HGNodeToHPNode(c: Circuit, hp: HierarchyPath, n: HNode) : (r: Option<HPNode>)
         requires CircuitValid(c)
@@ -319,38 +438,112 @@ module Circuit {
         HierarchyPathToHGNodeInternal(hpn.hp, hpn.n as HNode)
     }
 
-    function HGINPtoHPINP(c: Circuit, inp: HG.INP) : (r: Option<HPINP>)
+    function HGNPtoHPNP(c: Circuit, np: HG.NP) : (r: Option<HPNP>)
         requires CircuitValid(c)
-        ensures r.Some? ==> HPINPValid(c, r.value)
+        ensures r.Some? ==> HPNPValid(c, r.value)
     {
-        var cp := inp.p as CPort;
-        match HGNodeToHPNode(c, Top, inp.n as HNode)
+        var cp := np.p as CPort;
+        match HGNodeToHPNode(c, Top, np.n as HNode)
             case None => None
-            case Some(hp) =>
-                Some(HPINP(hp, cp))
+            case Some(hpn) =>
+                var hp_c := HierarchyPathCircuit(c, hpn.hp);
+                var maybe_nk := hp_c.NodeKind(hpn.n);
+                match maybe_nk
+                case None => None
+                case Some(CInput) =>
+                    if np.p == HG.INPUT_PORT then
+                        if hpn.hp.Top? then
+                            // We can't have an input port into a top level input.
+                            None
+                        else
+                            var hpnp := HPNP(HPNode(hpn.hp.parent, hpn.hp.n), hpn.n as CPort);
+                            assert HPNPValidInput(c, hpnp);
+                            assert HPNPValid(c, hpnp);
+                            Some(hpnp)
+                    else
+                        // This is not a valid input port.
+                        None
+                case Some(COutput) =>
+                    if np.p == HG.OUTPUT_PORT then
+                        if hpn.hp.Top? then
+                            // We can't have an output port on a top level output.
+                            None
+                        else
+                            var hpnp := HPNP(HPNode(hpn.hp.parent, hpn.hp.n), hpn.n as CPort);
+                            assert HPNPValid(c, hpnp);
+                            Some(hpnp)
+                    else
+                        // This is not a valid output port.
+                        None
+                case Some(CHier(next_c)) =>
+                    // Check if the port corresponds to an input or output node in the circuit.
+                    var maybe_nk := next_c.NodeKind(np.p as CNode);
+                    (
+                    match maybe_nk
+                    case None =>
+                        // The port on the CHier doesn't correspond to a node in that circuit.
+                        None
+                    case Some(Input) =>
+                        var hpnp := HPNP(hpn, np.p as CPort);
+                        assert HPNPValid(c, hpnp);
+                        Some(hpnp)
+                    case Some(Output) =>
+                        var hpnp := HPNP(hpn, np.p as CPort);
+                        assert HPNPValid(c, hpnp);
+                        Some(hpnp)
+                    case _ =>
+                        // The port on the CHier corresponds to a node that is not an input
+                        // or an output.
+                        None
+                    )
+                case Some(CComb(iports, oports, path_exists, behav)) =>
+                    // Check if the port is valid
+                    if (np.p as CPort in iports) || (np.p as CPort in oports) then
+                        Some(HPNP(hpn, np.p as CPort))
+                    else
+                        None
+                case Some(CConst(value)) =>
+                    // The only valid port for a CConst is OUTPUT_PORT
+                    if np.p == HG.OUTPUT_PORT then
+                        Some(HPNP(hpn, np.p as CPort))
+                    else
+                        None
+                case Some(CSeq()) =>
+                    // The only valid port for a CSeq is INPUT_PORT and OUTPUT_PORT
+                    if (np.p == HG.OUTPUT_PORT) || (np.p == HG.INPUT_PORT) then
+                        Some(HPNP(hpn, np.p as CPort))
+                    else
+                        None
     }
 
-    function HPINPtoHPONP(c: Circuit, hpinp: HPINP) : (r: Option<HPONP>)
+    function {:vcs_split_on_every_assert} HPINPtoHPONP(c: Circuit, hpinp: HPNP) : (r: Option<HPNP>)
         requires CircuitValid(c)
-        requires HPINPValid(c, hpinp)
-        ensures r.None? || HPONPValid(c, r.value)
+        requires HPNPValidInput(c, hpinp)
+        ensures r.None? || HPNPValid(c, r.value)
     {
         var hp := hpinp.hpn.hp;
-        var c := HierarchyPathCircuit(c, hp);
-        var inp := INP(hpinp.hpn.n, hpinp.p);
-        var maybe_onp: Option<ONP> := c.PortSource(inp);
+        var parent_c := HierarchyPathCircuit(c, hp);
+        HierarchyPathCircuitValid(c, hp);
+        assert CircuitValid(parent_c);
+        assert CircuitNodeKindValid(parent_c);
+        assert CircuitPortSourceValid(parent_c);
+        var inp := NP(hpinp.hpn.n, hpinp.p);
+        assert NPValidInput(parent_c, inp);
+        var maybe_onp: Option<NP> := parent_c.PortSource(inp);
             match maybe_onp
             // The input port does not connect to anything.
             case None => None
             // The input port does connect.
             case Some(onp) =>
-                match c.NodeKind(onp.n)
-                    // But the node it connects to doesn't exist.
-                    case None => None
-                    // The node it connects to does exist.
-                    case Some(nk) =>
-                        var hpn := HPNode(hp, onp.n);
-                        Some(HPONP(hpn, onp.p))
+                assert NPValid(parent_c, onp);
+                assert NPValidOutput(parent_c, onp);
+                var nk := parent_c.NodeKind(onp.n);
+                assert nk.Some?;
+                assert IsOPort(nk.value, onp.p);
+                var hpn := HPNode(hp, onp.n);
+                var hpnp := HPNP(hpn, onp.p);
+                assert HPNPValidOutput(c, hpnp);
+                Some(hpnp)
     }
 
     function HPNodeToNK(c: Circuit, hpn: HPNode): CNodeKind
@@ -360,26 +553,27 @@ module Circuit {
         HierarchyPathCircuit(c, hpn.hp).NodeKind(hpn.n).value
     }
 
-    function HPONPtoHGONP(c: Circuit, onp: HPONP) : HG.ONP
+    function HPNPtoHGNP(c: Circuit, np: HPNP) : HG.ONP
         requires CircuitValid(c)
-        requires HPONPValid(c, onp)
+        requires HPNPValid(c, np)
     {
-        var c := HierarchyPathCircuit(c, onp.hpn.hp);
-        assert CircuitValid(c);
+        var hp_c := HierarchyPathCircuit(c, np.hpn.hp);
+        HierarchyPathCircuitValid(c, np.hpn.hp);
+        assert CircuitValid(hp_c);
         // We need to check if it the output port of a hiearchical node.
         // If so we need to find the appropriate internal COutput Node.
-        var nk := HPNodeToNK(c, onp.hpn);
-        assert nk == c.NodeKind(onp.hpn.n).value;
+        var nk := HPNodeToNK(c, np.hpn);
+        assert nk == hp_c.NodeKind(np.hpn.n).value;
         match nk
-        case CHier(c) =>
-            var new_hp := ExtendHierarchyPath(c, onp.hpn.hp, onp.hpn.n);
-            var new_n: CNode := onp.p as CNode;
+        case CHier(c_next) =>
+            var new_hp := ExtendHierarchyPath(c, np.hpn.hp, np.hpn.n);
+            var new_n: CNode := np.p as CNode;
             var new_hpn := HPNode(new_hp, new_n);
             var n := HPNodeToHGNode(new_hpn);
-            HG.ONP(n as HG.HNode, onp.p as HG.HPort)
+            HG.ONP(n as HG.HNode, np.p as HG.HPort)
         case _ =>
-            var n := HPNodeToHGNode(onp.hpn);
-            HG.ONP(n as HG.HNode, onp.p as HG.HPort)
+            var n := HPNodeToHGNode(np.hpn);
+            HG.ONP(n as HG.HNode, np.p as HG.HPort)
     }
 
     function MaxSubcircuitNodeBoundInternal(c: Circuit, n: CNode, max: HG.HNode): HG.HNode
@@ -452,16 +646,19 @@ module Circuit {
         // First go to HPINP.
         // That back to HPONP.
         // Then to HGONP.
-        var maybe_hpinp := HGINPtoHPINP(c, inp);
+        var maybe_hpinp := HGNPtoHPNP(c, HG.NP(inp.n, inp.p));
         match maybe_hpinp
         case None => None
         case Some(hpinp) =>
-            var maybe_hponp := HPINPtoHPONP(c, hpinp);
-            match maybe_hponp
-            case None => None
-            case Some(hponp) =>
-                var hgonp := HPONPtoHGONP(c, hponp);
-                Some(hgonp)
+            if HPNPValidInput(c, hpinp) then
+                var maybe_hponp := HPINPtoHPONP(c, hpinp);
+                match maybe_hponp
+                case None => None
+                case Some(hponp) =>
+                    var hgonp := HPNPtoHGNP(c, hponp);
+                    Some(hgonp)
+            else
+                None
     }
 
     function GetHGNodeKind(c: Circuit, n: HG.HNode): Option<HG.HNodeKind>
@@ -556,24 +753,24 @@ module Circuit {
       )
     }
 
-    function AddIPort(g: Circuit): (Circuit, ONP)
+    function AddIPort(g: Circuit): (Circuit, NP)
     {
         var (c, n) := AddNode(g, CInput, map[]);
-        (c, ONP(n, 0))
+        (c, NP(n, 0))
     }
 
-    function AddOPort(g: Circuit, onp: ONP): Circuit
+    function AddOPort(g: Circuit, onp: NP): Circuit
     {
         var (c, n) := AddNode(g, COutput, map[0 := onp]);
         c
     }
 
-    function AddNode(g: Circuit, nk: CNodeKind, ip: map<CPort, ONP>): (Circuit, CNode)
+    function AddNode(g: Circuit, nk: CNodeKind, ip: map<CPort, NP>): (Circuit, CNode)
     {
       var new_node := g.NodeBound;
       var c := Circuit(
           NodeKind := n => if n == new_node then Some(nk) else g.NodeKind(n),
-          PortSource := (inp: INP) =>
+          PortSource := (inp: NP) =>
             if inp.n == new_node then
               if inp.p in ip then
                 Some(ip[inp.p])
@@ -594,10 +791,10 @@ module Circuit {
         var (g, i_0) := AddIPort(g);
         var (g, i_1) := AddIPort(g);
         var (g, node_xor) := AddNode(g, XorCNode, map[0 := i_0, 1 := i_1]);
-        var xor_output := ONP(node_xor, 0);
+        var xor_output := NP(node_xor, 0);
         var g := AddOPort(g, xor_output);
         var (g, node_add) := AddNode(g, AndCNode, map[0 := i_0, 1 := i_1]);
-        var add_output := ONP(node_add, 0);
+        var add_output := NP(node_add, 0);
         var g := AddOPort(g, add_output);
         g
     }
