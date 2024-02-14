@@ -126,7 +126,7 @@ module Circuit {
         IsIPort(maybe_nk.value, hpnp.p)
     }
 
-    ghost predicate HPNPValidOutput(c: Circuit, hpnp: HPNP)
+    predicate HPNPValidOutput(c: Circuit, hpnp: HPNP)
         requires CircuitValid(c)
     {
         HierarchyPathValid(c, hpnp.hpn.hp) &&
@@ -136,7 +136,7 @@ module Circuit {
         IsOPort(maybe_nk.value, hpnp.p)
     }
 
-    ghost predicate HPNPValid(c: Circuit, hpnp: HPNP)
+    predicate HPNPValid(c: Circuit, hpnp: HPNP)
         requires CircuitValid(c)
     {
         HPNPValidInput(c, hpnp) ||
