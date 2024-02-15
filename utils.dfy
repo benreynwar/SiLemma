@@ -1,3 +1,4 @@
+
 module Utils {
 
     lemma AllBelowBoundSize(bound: nat)
@@ -64,5 +65,107 @@ module Utils {
         ensures |c| == |a| + |b|
     {
     }
+
+    lemma SetSizeOne<T>(s: set<T>, x: T)
+        requires x in s
+        requires |s| == 1
+        ensures s == {x}
+    {
+        var y :| y in s;
+        var new_s := s - {y};
+        assert s == new_s + {y};
+    }
+
+    ghost predicate GEValid<T(!new)>(ge: (T, T)->bool)
+    {
+        (forall a: T, b: T, c: T :: ge(a, b) && ge(b, c) ==> ge(a, c)) &&
+        (forall a: T :: ge(a, a)) &&
+        (forall a: T, b: T :: ge(a, b) || ge(b, a))
+    }
+
+    function Max<T>(ge: (T, T)->bool, a: T, b: T): (r: T)
+        requires GEValid(ge)
+        ensures ge(r, a)
+        ensures ge(r, b)
+    {
+        if ge(a, b) then a else b
+    }
+
+    ghost function MaxInSet<T>(ge: (T, T)->bool, s: set<T>): (r: T)
+        requires GEValid(ge)
+        requires |s| > 0
+        decreases |s|
+        ensures
+            forall x :: x in s ==> ge(r, x)
+    {
+        var x :| x in s;
+        if |s| == 1 then
+            SetSizeOne(s, x);
+            x
+        else
+            var new_s := s - {x};
+            var new_max := MaxInSet(ge, new_s);
+            var max := Max(ge, x, new_max);
+            max
+    }
+
+    predicate IsOrder(l: nat, order: seq<nat>)
+    {
+        (|order| == l) &&
+        (forall index: nat :: index < l ==> index in order)
+    }
+
+    ghost predicate Commutative<T(!new)>(op: (T, T)->T)
+    {
+        forall a: T, b: T :: op(a, b) == op(b, a)
+    }
+    ghost predicate Associative<T(!new)>(op: (T, T)->T)
+    {
+        forall a: T, b: T, c: T :: op(a, op(b, c)) == op(op(a, b), c)
+    }
+    predicate IsReordering<T(==)>(a: seq<T>, b: seq<T>)
+    {
+        multiset(a) == multiset(b)
+    }
+
+    function LeftFold<T>(op: (T, T)->T, start:T, s: seq<T>): T
+    {
+        if |s| == 0 then
+            start
+        else
+            op(s[0], LeftFold(op, start, s[1..]))
+    }
+
+    function Switch<T>(a: seq<T>, index: nat): (r: seq<T>)
+        requires index > 0
+        requires index < |a|
+        //ensures multiset(a) == multiset(r)
+    {
+        var r := a[..index-1] + [a[index]] + [a[index-1]] + a[index+1..];
+        r
+    }
+
+    lemma LeftFoldMoveLeftInsensitive<T>(op: (T, T)->T, start: T, a: seq<T>, index: nat)
+        requires index > 0
+        requires index < |a|
+        //ensures
+        //    var b := MoveLeft(a, index);
+        //    LeftFold(op, start, a) == LeftFold(op, start, b)
+    {
+        if index > 1 {
+            LeftFoldMoveLeftInsensitive(op, start, a[1..], index-1);
+        } else {
+        }
+    }
+
+    //lemma LeftFoldOrderInsensitive<T>(op: (T, T)->T, start: T, a: seq<T>, b: seq<T>)
+    //    requires Commutative(op)
+    //    requires Associative(op)
+    //    requires IsReordering(a, b)
+    //    ensures LeftFold(op, start, a) == LeftFold(op, start, b)
+    //{
+
+    //}
+
 
 }

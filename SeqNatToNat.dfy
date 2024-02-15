@@ -1,4 +1,8 @@
+include "../libraries/src/Wrappers.dfy"
+
 module SeqNatToNat {
+
+  import opened Wrappers
 
   // Define functions that take a Seq<nat> and convert it
   // reversibly to a single nat.
@@ -128,8 +132,25 @@ module SeqNatToNat {
       PushBit(h, t)
   }
 
+  function BitsToNatRev(ns: seq<bool>): (r: nat)
+    decreases |ns|
+    ensures r < pow2(|ns|)
+  {
+    if |ns| == 0 then
+      0
+    else
+      var h := ns[|ns|-1];
+      var t := BitsToNatRev(ns[..|ns|-1]);
+      t + if h then pow2(|ns|-1) else 0
+  }
+
+  //lemma BitsToNatEquiv(ns: seq<bool>)
+  //  ensures BitsToNat(ns) == BitsToNatRev(ns)
+  //{
+  //}
+
   lemma BitsToNatNotZero(ns: seq<bool>)
-    requires exists index: nat :: index < |ns| && ns[index];
+    requires exists index: nat :: index < |ns| && ns[index]
     ensures BitsToNat(ns) > 0
   {
   }
@@ -500,4 +521,5 @@ module SeqNatToNat {
         assert NatsToNat(NatToNats(n, l)) == n;
     }
   }
+    
 }

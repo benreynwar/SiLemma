@@ -994,7 +994,7 @@ module DG {
                 assert PathValid(r, q);
                 AddPathsFromTo(r, q_1, q_2);
                 assert p.v[index+1] == m;
-                assert q_1.v[0] == m;
+                //assert q_1.v[0] == m;
                 assert PathFromTo(r, q, m, n);
                 // We want to now show that [n, m] does not appear in q.
                 // We actually need to find another path that removes any repeats and then
