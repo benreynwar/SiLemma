@@ -154,16 +154,17 @@ module CircuitPath {
     {
     }
 
-    function ReversePathAppendValid(c: Circuit, p: Path, n: HPNP): (r: Path)
+    lemma ReversePathAppendValid(c: Circuit, p: Path, n: HPNP)
         // Add a node onto a path.
         requires CircuitValid(c)
         requires HPNPValid(c, n)
         requires p.PathCons?
         requires HPNPConnected(c, n, p.head)
         requires ReversePathValid(c, p)
-        ensures ReversePathValid(c, r)
+        ensures
+            var r := PathAppend(p, n);
+            ReversePathValid(c, r)
     {
-        PathAppend(p, n)
     }
 
     function ReversePathInternal(p: Path, partial_reversed: Path): (r: Path)
@@ -172,6 +173,16 @@ module CircuitPath {
         match p
         case PathNil => partial_reversed
         case PathCons(head, tail) => ReversePathInternal(tail, PathCons(head, partial_reversed))
+    }
+
+    lemma ReversedLengthOnePathIsUnchanged(p: Path)
+        requires p.PathCons?
+        requires p.tail == PathNil
+        ensures ReversePath(p) == p
+    {
+        var head := p.head;
+        assert p == PathCons(head, PathNil);
+        assert ReversePath(p) == ReversePathInternal(p, PathNil);
     }
 
     lemma ReversePathInternalForwardValid(c: Circuit, p: Path, partial_reversed: Path)
@@ -238,6 +249,22 @@ module CircuitPath {
         prepended
     }
 
+    lemma PathStartIsReversedHead(p: Path)
+        requires p.PathCons?
+        ensures ReversePath(p).head == PathStart(p)
+    {
+        match p
+        case PathCons(head, PathNil) => {
+            assert head == PathStart(p);
+            assert ReversePath(p) == ReversePathInternal(p, PathNil);
+            assert ReversePath(p).head == head;
+        }
+        case PathCons(head, tail) => {
+            PathStartIsReversedHead(tail);
+            assert ReversePath(tail).head == PathStart(tail);
+        }
+    }
+
     lemma PathPrependValid(c: Circuit, p: Path, n: HPNP)
         // Add a node onto a path.
         requires CircuitValid(c)
@@ -247,8 +274,16 @@ module CircuitPath {
         requires PathValid(c, p)
         ensures
             var r := PathPrepend(p, n);
-            PathValid(c, r)
+            PathValid(c, r);
     {
+        var reversed := ReversePath(p);
+        assert reversed.head == PathStart(p);
+        ReversePathForwardValid(c, p);
+        assert ReversePathValid(c, reversed);
+        var appended := PathAppend(reversed, n);
+        ReversePathAppendValid(c, reversed, n);
+        assert ReversePathValid(c, appended);
+        var prepended := ReversePath(appended);
     }
 
 }
