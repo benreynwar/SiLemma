@@ -1,8 +1,6 @@
-include "../libraries/src/Wrappers.dfy"
-
 module SeqNatToNat {
 
-  import opened Wrappers
+  import opened Std.Wrappers
 
   // Define functions that take a Seq<nat> and convert it
   // reversibly to a single nat.
