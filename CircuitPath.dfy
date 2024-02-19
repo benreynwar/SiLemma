@@ -19,10 +19,11 @@ module CircuitPath {
         case Some(a_nk) =>
             match a_nk
             case CInput => (
-                match a.hpn.hp
                 // This is an output from a CInput. It's not connected.
-                case Top => false
-                case Level(hier_n, parent_hp) =>
+                if HPLength(a.hpn.hp) == 0 then
+                    false
+                else
+                    var (hier_n, parent_hp) := HPHeadTail(a.hpn.hp);
                     // If it's an input inside a hier node, then it connects to
                     // the input port on the hier node on the next level up.
                     if parent_hp == b.hpn.hp then
@@ -69,36 +70,137 @@ module CircuitPath {
             HPNPOtoIConnected(c, a, b))
     }
 
-    function HierarchyPathToNatInternal(hp: HierarchyPath, hn: nat) : (r: nat)
+    //function PadZeros(a: seq<nat>, l: nat): (r: seq<nat>)
+    //    requires |a| <= l
+    //    ensures |r| == l
+    //{
+    //    a + seq (l - |a|, i requires 0 <= i < l => 0)
+    //}
+    
+
+    function HPNPToSeqNat(hpnp: HPNP): (r: seq<nat>)
     {
-        match hp
-        case Top => hn
-        case Level(n, parent) =>
-            var new_hn := SeqNatToNat.NatsToNat([n as nat, hn]) as nat;
-            HierarchyPathToNatInternal(parent, new_hn)
+        var l := |hpnp.hpn.hp.v|;
+        var hp_seq := SeqCNodeToSeqNat(hpnp.hpn.hp.v);
+        hp_seq + [hpnp.hpn.n as nat, hpnp.p as nat]
     }
 
-    function HPNodeToNat(hpn: HPNode) : (r: nat)
+    function HPNPToNat(hpnp: HPNP): nat
     {
-        HierarchyPathToNatInternal(hpn.hp, hpn.n as nat)
+        var ns := HPNPToSeqNat(hpnp);
+        SeqNatToNat.ArbLenNatsToNat(ns)
     }
 
-    function HPNPToNat(hpnp: HPNP) : (r: nat)
+    //lemma HPLengthBoundInternal(c: Circuit, hp: HierarchyPath)
+    //    requires CircuitValid(c)
+    //    requires HierarchyPathValid(c, hp)
+    //    ensures
+    //        var hier_c := HierarchyPathCircuit(c, hp);
+    //        HPLength(hp) <= (c.HierLevel - hier_c.HierLevel)
+    //{
+    //    if HPLength(hp) == 0 {
+    //    } else {
+    //        var hier_c := HierarchyPathCircuit(c, hp);
+    //        var (head, tail) := HPHeadTail(hp);
+    //        var tail_c := HierarchyPathCircuit(c, tail);
+    //        var nk := tail_c.NodeKind(head).value;
+    //        assert nk.CHier?;
+    //        HierarchyPathCircuitValid(c, tail);
+    //        assert CircuitValid(tail_c);
+    //        assert CNodeKindValid(tail_c, nk);
+    //        assert tail_c.HierLevel > hier_c.HierLevel;
+    //    }
+    //}
+
+    function SeqCNodeToSeqNat(a: seq<CNode>): seq<nat>
     {
-        SeqNatToNat.NatsToNat([HPNodeToNat(hpnp.hpn) as nat, hpnp.p as nat])
+        seq(|a|, i requires 0 <= i < |a| => a[i] as nat)
     }
 
-    lemma NatsToNatUnique(a: nat, b: nat, c: nat, d: nat)
-        requires (a, b) != (c, d)
-        ensures SeqNatToNat.NatsToNat([a, b]) != SeqNatToNat.NatsToNat([c, d])
+    lemma SeqCNodeNotEqualSeqNatNotEqual(a: seq<CNode>, b: seq<CNode>)
+        ensures a != b ==> SeqCNodeToSeqNat(a) != SeqCNodeToSeqNat(b)
     {
+        if a == b {
+            assert forall i: nat :: i < |a| ==> a[i] == b[i];
+        } else {
+            if |a| == |b| {
+                assert exists i: nat :: i < |a| && a[i] != b[i];
+                var i: nat :| i < |a| && a[i] != b[i];
+                assert SeqCNodeToSeqNat(a)[i] != SeqCNodeToSeqNat(b)[i];
+            } else {
+            }
+        }
     }
 
-    lemma NatsToNatBounded(a: nat, b: nat, c: nat, d: nat)
-        requires (a < c) && (b < d)
-        ensures SeqNatToNat.NatsToNat([a, b]) < SeqNatToNat.NatsToNat([c, d])
+    lemma HPNPToSeqNatUnique(a: HPNP, b: HPNP)
+        ensures (a != b) ==> (HPNPToSeqNat(a) != HPNPToSeqNat(b))
     {
+        var na := HPNPToSeqNat(a);
+        var nb := HPNPToSeqNat(b);
+        if (|a.hpn.hp.v| != |b.hpn.hp.v|) {
+        } else {
+            if (a != b) {
+                var a_v := a.hpn.hp.v;
+                var b_v := b.hpn.hp.v;
+                if (a_v != b_v) {
+                    assert |na| == |a_v| + 2;
+                    assert a_v != b_v;
+                    var a_v_n := SeqCNodeToSeqNat(a_v);
+                    var b_v_n := SeqCNodeToSeqNat(b_v);
+                    SeqCNodeNotEqualSeqNatNotEqual(a_v, b_v);
+                    assert a_v_n != b_v_n;
+                    assert na[..|a_v|] == a_v_n;
+                    assert nb[..|b_v|] == b_v_n;
+                } else if (a.hpn.n != b.hpn.n) {
+                    assert na[|a_v|] == a.hpn.n as nat;
+                } else if (a.p != b.p) {
+                    assert na[|a_v|+1] == a.p as nat;
+                } else {
+                }
+            } else {
+            }
+        }
     }
+
+    lemma HPNPToNatUnique(a: HPNP, b: HPNP)
+        ensures (a != b) ==> (HPNPToNat(a) != HPNPToNat(b))
+    {
+        HPNPToSeqNatUnique(a, b);
+        SeqNatToNat.ArbLenNatsToNatUnique(HPNPToSeqNat(a), HPNPToSeqNat(b));
+    }
+
+    //function HierarchyPathToNatInternal(hp: HierarchyPath, hn: nat) : (r: nat)
+    //    decreases |hp.v|
+    //{
+    //    if HPLength(hp) == 0 then
+    //        SeqNatToNat.NatsToNat([hn, 0]) as nat
+    //    else
+    //        var (n, parent) := HPHeadTail(hp);
+    //        var new_hn := SeqNatToNat.NatsToNat([n as nat, hn]) as nat;
+    //        HierarchyPathToNatInternal(parent, new_hn)
+    //}
+
+    //function HPNodeToNat(hpn: HPNode) : (r: nat)
+    //{
+    //    HierarchyPathToNatInternal(hpn.hp, hpn.n as nat)
+    //}
+
+    //function HPNPToNat(hpnp: HPNP) : (r: nat)
+    //{
+    //    SeqNatToNat.NatsToNat([HPNodeToNat(hpnp.hpn) as nat, hpnp.p as nat])
+    //}
+
+    //lemma NatsToNatUnique(a: nat, b: nat, c: nat, d: nat)
+    //    requires (a, b) != (c, d)
+    //    ensures SeqNatToNat.NatsToNat([a, b]) != SeqNatToNat.NatsToNat([c, d])
+    //{
+    //}
+
+    //lemma NatsToNatBounded(a: nat, b: nat, c: nat, d: nat)
+    //    requires (a < c) && (b < d)
+    //    ensures SeqNatToNat.NatsToNat([a, b]) < SeqNatToNat.NatsToNat([c, d])
+    //{
+    //}
 
     function HPNPBound(c: Circuit): nat
     {
@@ -135,11 +237,6 @@ module CircuitPath {
     {
     }
 
-    lemma HPNPNatsUnique(a: HPNP, b: HPNP)
-        ensures (a != b) ==> HPNPToNat(a) != HPNPToNat(b)
-    {
-    }
-
     lemma CtoGValid(c: Circuit)
         requires CircuitValid(c)
         ensures DG.DigraphValid(CtoG(c))
@@ -154,7 +251,7 @@ module CircuitPath {
             HPNPBounded(c, n);
             NoSelfConnections(c, n);
             ConnectedNodesValid(c, n, m);
-            HPNPNatsUnique(n, m);
+            HPNPToNatUnique(n, m);
         }
         assert (forall n: HPNP :: HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n));
         assert (forall n: HPNP :: !HPNPConnected(c, n, n));

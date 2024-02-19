@@ -519,5 +519,91 @@ module SeqNatToNat {
         assert NatsToNat(NatToNats(n, l)) == n;
     }
   }
-    
+
+  function ArbLenNatsToNat(ns: seq<nat>): nat
+  {
+    if |ns| == 0 then
+      0
+    else
+      var n_body := NatsToNat(ns);
+      NatsToNat([|ns|, n_body])
+  }
+
+  function NatToArbLenNats(n: nat): seq<nat>
+  {
+    if n == 0 then
+      []
+    else
+      var l_and_v := NatToNats(n, 2);
+      var l := l_and_v[0];
+      var v := l_and_v[1];
+      if l == 0 then
+        []
+      else
+        NatToNats(v, l)
+  }
+
+  lemma ArbLenNatsLengthCorrect(a: seq<nat>)
+    ensures 
+      var n := ArbLenNatsToNat(a);
+      var l := NatToNats(n, 2)[0];
+      l == |a|
+  {
+    var n := ArbLenNatsToNat(a);
+    var l := NatToNats(n, 2)[0];
+    if a == [] {
+    } else {
+      var n_body := NatsToNat(a);
+      assert n == NatsToNat([|a|, n_body]);
+      NatsToNatToNats([|a|, n_body]);
+      assert NatToNats(n, 2) == [|a|, n_body];
+    }
+  }
+      
+  lemma {:vcs_split_on_every_assert} ArbLenNatsToNatUnique(a: seq<nat>, b: seq<nat>)
+    ensures a != b ==> ArbLenNatsToNat(a) != ArbLenNatsToNat(b)
+  {
+    var a_n := ArbLenNatsToNat(a);
+    var b_n := ArbLenNatsToNat(b);
+    var a_l_and_v := NatToNats(a_n, 2);
+    var b_l_and_v := NatToNats(b_n, 2);
+    var a_l := a_l_and_v[0];
+    var b_l := b_l_and_v[0];
+    ArbLenNatsLengthCorrect(a);
+    ArbLenNatsLengthCorrect(b);
+    assert a_l == |a|;
+    assert b_l == |b|;
+    if (|a| != |b|) {
+    } else {
+      if |a| == 0 {
+      } else {
+        var a_body := NatsToNat(a);
+        var b_body := NatsToNat(b);
+        var a_n := NatsToNat([|a|, a_body]);
+        var b_n := NatsToNat([|b|, b_body]);
+        NatsToNatToNats(a);
+        NatsToNatToNats(b);
+        NatsToNatToNats([|a|, a_body]);
+        NatsToNatToNats([|b|, b_body]);
+        if a != b {
+          assert a_body != b_body;
+          assert a_n != b_n;
+        }
+      }
+    }
+  }
+
+  function {:vcs_split_on_every_assert} NatsToNatBound(l: nat, bound: nat): nat
+    requires l > 0
+  {
+    var bound_ns := seq(l, i requires 0 <= i < l => bound);
+    NatsToNat(bound_ns)
+  }
+
+  lemma {:vcs_split_on_every_assert} NatsToNatBounded(a: seq<nat>, bound: nat)
+    requires |a| > 0
+    requires forall i : nat :: i < |a| ==> a[i] < bound
+    ensures NatsToNat(a) < NatsToNatBound(|a|, bound)
+  {
+  }
 }

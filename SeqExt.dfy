@@ -1,12 +1,10 @@
-include "../libraries/src/Collections/Sequences/Seq.dfy"
-
 module SeqExt {
-  import opened Seq
+  import Seq = Std.Collections.Seq
 
   lemma LemmaToSetAdds<X>(xs: seq<X>, ys: seq<X>)
-    ensures ToSet(xs) + ToSet(ys) == ToSet(xs + ys)
+    ensures Seq.ToSet(xs) + Seq.ToSet(ys) == Seq.ToSet(xs + ys)
   {
-    reveal ToSet();
+    reveal Seq.ToSet();
     assert forall x :: x in (xs + ys) <==> (x in xs) || (x in ys);
   }
         
