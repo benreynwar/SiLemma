@@ -2,11 +2,49 @@ module CircuitPath {
 
     import opened Std.Wrappers
     import Seq = Std.Collections.Seq
+    import Functions = Std.Functions
     import SeqNatToNat
     import SeqExt
     import opened Circuit
     import CircuitBounds
     import DG
+    import Utils
+
+    predicate PathValid(lib: CLib, c: Circuit, p: seq<HPNP>)
+        requires CircuitValid(lib, c)
+    {
+        forall hpnp :: hpnp in p ==> HPNPValid(lib, c, hpnp)
+    }
+    
+    ghost predicate PathValidNoRepeats(lib: CLib, c: Circuit, p: seq<HPNP>)
+        requires CircuitValid(lib, c)
+    {
+        PathValid(lib, c, p) && Seq.HasNoDuplicates(p)
+    }
+
+    lemma PathLengthBound(lib: CLib, c: Circuit, p: seq<HPNP>)
+        requires CircuitValid(lib, c)
+        requires PathValidNoRepeats(lib, c, p)
+        ensures |p| <= CircuitBounds.HPNPBound(lib, c)
+    {
+        var bound := CircuitBounds.HPNPBound(lib, c);
+        forall hpnp: HPNP | hpnp in p
+            ensures HPNPToNat(hpnp) < bound
+        {
+            HPNPInBound(lib, c, hpnp);
+        }
+        var natted := Seq.Map(x => HPNPToNat(x), p);
+        forall a: HPNP, b: HPNP
+            ensures HPNPToNat(a) == HPNPToNat(b) ==> a == b
+        {
+            HPNPToNatInjective(a, b);
+        }
+        assert Functions.Injective(x => HPNPToNat(x));
+        SeqExt.MapConservesNoDuplicates(x => HPNPToNat(x), p);
+        assert Seq.HasNoDuplicates(natted);
+        Utils.SeqSize(natted, bound);
+        assert |natted| <= bound;
+    }
 
     predicate {:opaque} HPNPOtoIConnected(lib: CLib, c: Circuit, a: HPNP, b: HPNP)
         requires CircuitValid(lib, c)
@@ -71,14 +109,6 @@ module CircuitPath {
         (HPNPValidOutput(lib, c, a) && HPNPValidInput(lib, c, b) &&
             HPNPOtoIConnected(lib, c, a, b))
     }
-
-    //function PadZeros(a: seq<nat>, l: nat): (r: seq<nat>)
-    //    requires |a| <= l
-    //    ensures |r| == l
-    //{
-    //    a + seq (l - |a|, i requires 0 <= i < l => 0)
-    //}
-    
 
     function HPNPToSeqNat(hpnp: HPNP): (r: seq<nat>)
     {
@@ -166,7 +196,7 @@ module CircuitPath {
         }
     }
 
-    lemma HPNPToNatUnique(a: HPNP, b: HPNP)
+    lemma HPNPToNatInjective(a: HPNP, b: HPNP)
         ensures (a != b) ==> (HPNPToNat(a) != HPNPToNat(b))
     {
         HPNPToSeqNatUnique(a, b);
@@ -240,7 +270,7 @@ module CircuitPath {
             OutOfBoundInvalid(lib, c, n);
             NoSelfConnections(lib, c, n);
             ConnectedNodesValid(lib, c, n, m);
-            HPNPToNatUnique(n, m);
+            HPNPToNatInjective(n, m);
         }
         assert (forall n: HPNP :: HPNPToNat(n) >= CircuitBounds.HPNPBound(lib, c) ==> !HPNPValid(lib, c, n));
         assert (forall n: HPNP :: !HPNPConnected(lib, c, n, n));
@@ -274,7 +304,6 @@ module CircuitPath {
         assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
     }
 
-
     lemma HPNPInBound(lib: CLib, c: Circuit, hpnp: HPNP)
         requires CircuitValid(lib, c)
         requires HPNPValid(lib, c, hpnp)
@@ -297,6 +326,154 @@ module CircuitPath {
         assert |hpnp_as_seq| <= c.HierLevel + 2;
         SeqNatToNat.ArbLenNatsToNatBounded(hpnp_as_seq, c.HierLevel+2, element_bound);
         assert SeqNatToNat.ArbLenNatsToNat(hpnp_as_seq) < bound;
+    }
+    
+    ghost predicate CircuitNoLoops(lib: CLib, c: Circuit)
+        requires CircuitValid(lib, c)
+    {
+        var g := CtoG(lib, c);
+        !DG.DigraphLoop(g)
+    }
+
+    function {:vcs_split_on_every_assert} EvaluateINP(lib: CLib, c: Circuit, m: HPNP -> bool, inp: HPNP, seen_path: seq<HPNP>): bool
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires HPNPValidInput(lib, c, inp)
+        decreases CircuitBounds.HPNPBound(lib, c) - |seen_path|, 1
+    {
+        var inp_c := HierarchyPathCircuit(lib, c, inp.hpn.hp);
+        HPCircuitComplete(lib, c, inp.hpn.hp);
+        assert CircuitComplete(lib, inp_c);
+        var inp_inp := NP(inp.hpn.n, inp.p);
+        var onp := inp_c.PortSource(inp_inp).value;
+        assert NPValidOutput(lib, inp_c, onp);
+        var new_seen_path := seen_path + [inp];
+        var hponp := HPNP(HPNode(inp.hpn.hp, onp.n), onp.p);
+        assert HPNPValidOutput(lib, c, hponp);
+        EvaluateONP(lib, c, m, hponp, new_seen_path)
+    }
+
+    function {:vcs_split_on_every_assert} EvaluateONPCInput(lib: CLib, c: Circuit, isigs: HPNP -> bool, onp: HPNP,
+                               seen_path: seq<HPNP>): bool
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires HPNPValidOutput(lib, c, onp)
+        requires PathValidNoRepeats(lib, c, seen_path)
+        requires onp !in seen_path
+        requires 
+            var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+            var nk := hp_c.NodeKind(onp.hpn.n).value;
+            nk.CInput?
+        decreases CircuitBounds.HPNPBound(lib, c) - |seen_path|, 1
+    {
+        var new_seen_path := seen_path + [onp];
+        NewSeenPathBound(lib, c, isigs, onp, seen_path);
+        if HPLength(onp.hpn.hp) == 0 then
+            // This is an input to the top level.
+            isigs(onp)
+        else
+            var (hier_n, parent_hp) := HPHeadTail(onp.hpn.hp);
+            assert HierarchyPathValid(lib, c, parent_hp);
+            // If it's an input inside a hier node, then it connects to
+            // the input port on the hier node on the next level up.
+            var inp := HPNP(HPNode(parent_hp, hier_n), onp.hpn.n as CPort);
+            var hier_c := HierarchyPathCircuit(lib, c, parent_hp);
+            HierarchyPathCircuitValid(lib, c, parent_hp);
+            var nk := hier_c.NodeKind(inp.hpn.n).value;
+            var cref := nk.CRef;
+            assert CircuitNodeKindValid(lib, hier_c);
+            var c := lib.Circuits[cref];
+            assert IsIPort(lib, nk, inp.p);
+            assert HPNPValidInput(lib, c, inp);
+            EvaluateINP(lib, c, isigs, inp, new_seen_path)
+    }
+
+    function EvaluateONPCHier(
+            lib: CLib, c: Circuit, isigs: HPNP -> bool, onp: HPNP, seen_path: seq<HPNP>): bool
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires HPNPValidOutput(lib, c, onp)
+        requires PathValidNoRepeats(lib, c, seen_path)
+        requires onp !in seen_path
+        requires 
+            var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+            var nk := hp_c.NodeKind(onp.hpn.n).value;
+            nk.CHier?
+        decreases CircuitBounds.HPNPBound(lib, c) - |seen_path|, 1
+    {
+        NewSeenPathBound(lib, c, isigs, onp, seen_path);
+        var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+        var new_seen_path := seen_path + [onp];
+        var lower_c := NodeToSubcircuit(lib, hp_c, onp.hpn.n);
+        // It's an output port from a hier node.
+        // It only connects to the input into the corresponding Output node in that circuit.
+
+        // The port number should reference an output port CNode inside the Circuit.
+        var maybe_level_nk := lower_c.NodeKind(onp.p as CNode);
+        assert maybe_level_nk.Some?;
+        assert maybe_level_nk.value.COutput?;
+        var new_hp := ExtendHierarchyPath(lib, c, onp.hpn.hp, onp.hpn.n);
+        EvaluateINP(lib, c, isigs, HPNP(HPNode(new_hp, onp.p as CNode), 0), new_seen_path)
+    }
+
+    function EvaluateONPCComb(
+            lib: CLib, c: Circuit, isigs: HPNP -> bool, onp: HPNP, seen_path: seq<HPNP>): bool
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires HPNPValidOutput(lib, c, onp)
+        requires onp !in seen_path
+        requires 
+            var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+            var nk := hp_c.NodeKind(onp.hpn.n).value;
+            nk.CComb?
+        decreases CircuitBounds.HPNPBound(lib, c) - |seen_path|, 1
+    {
+        true
+    }
+
+    lemma NewSeenPathBound(lib: CLib, c: Circuit, isigns: HPNP -> bool, onp: HPNP,
+                           seen_path: seq<HPNP>)
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires PathValidNoRepeats(lib, c, seen_path)
+        requires HPNPValidOutput(lib, c, onp)
+        requires onp !in seen_path
+        ensures PathValidNoRepeats(lib, c, seen_path + [onp])
+        ensures |seen_path + [onp]| <= CircuitBounds.HPNPBound(lib, c)
+    {
+        var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+        var nk := hp_c.NodeKind(onp.hpn.n).value;
+        var new_seen_path := seen_path + [onp];
+        reveal Seq.HasNoDuplicates();
+        assert |new_seen_path| > |seen_path|;
+        var bound := CircuitBounds.HPNPBound(lib, c);
+        PathLengthBound(lib, c, new_seen_path);
+        assert |new_seen_path| <= bound;
+        
+    }
+
+    function EvaluateONP(lib: CLib, c: Circuit, isigs: HPNP -> bool, onp: HPNP, seen_path: seq<HPNP>): bool
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires CircuitNoLoops(lib, c)
+        requires PathValidNoRepeats(lib, c, seen_path)
+        requires HPNPValidOutput(lib, c, onp)
+        requires onp !in seen_path
+        decreases CircuitBounds.HPNPBound(lib, c) - |seen_path|, 2
+    {
+        var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
+        var nk := hp_c.NodeKind(onp.hpn.n).value;
+        match nk
+        case CInput() => EvaluateONPCInput(lib, c, isigs, onp, seen_path)
+        case CHier(_) => EvaluateONPCHier(lib, c, isigs, onp, seen_path)
+        case CComb(_, _, _, _) => EvaluateONPCComb(lib, c, isigs, onp, seen_path)
+        case CSeq() => isigs(onp)
+        case CConst(v) => v
     }
 
 }

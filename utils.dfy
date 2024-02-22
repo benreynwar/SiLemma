@@ -1,6 +1,34 @@
 
 module Utils {
 
+    import Std.Collections.Seq
+
+    lemma SeqSize(ns: seq<nat>, bound: nat)
+        requires Seq.HasNoDuplicates(ns)
+        requires forall x :: x in ns ==> x < bound
+        ensures |ns| <= bound
+    {
+        var s := Seq.ToSet(ns);
+        reveal Seq.ToSet();
+        Seq.LemmaCardinalityOfSetNoDuplicates(ns);
+        assert |s| == |ns|;
+        BoundedSetSize(bound, s);
+    }
+
+    lemma SeqIncrease(ns: seq<nat>, n: nat, bound: nat)
+        requires Seq.HasNoDuplicates(ns)
+        requires forall x :: x in ns ==> x < bound
+        requires n < bound
+        requires n !in ns
+        ensures |ns| <= bound
+        ensures forall x :: x in ns+[n] ==> x < bound
+        ensures |ns+[n]| <= bound
+        ensures |ns+[n]| == |ns| + 1
+    {
+        var nsn := ns + [n];
+        SeqSize(nsn, bound);
+    }
+
     lemma AllBelowBoundSize(bound: nat)
         ensures
             var below := set n : nat | n < bound :: n;

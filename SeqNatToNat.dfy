@@ -612,6 +612,8 @@ module SeqNatToNat {
     requires lb > la
     ensures NatsToNatBound(la, bound) < NatsToNatBound(lb, bound)
   {
+    // Show how each element contributes to the bound.
+    // Show that each element increases.
   }
 
   lemma {:vcs_split_on_every_assert} ArbLenBoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
@@ -619,6 +621,8 @@ module SeqNatToNat {
     requires lb > la
     ensures ArbLenNatsToNatBound(la, bound) < ArbLenNatsToNatBound(lb, bound)
   {
+    // Show how each element contributes to the bound.
+    // Show that each element increases.
   }
 
   lemma {:vcs_split_on_every_assert} ArbLenNatsToNatBounded(a: seq<nat>, max_length: nat, bound: nat)
@@ -627,6 +631,8 @@ module SeqNatToNat {
     requires forall i : nat :: i < |a| ==> a[i] < bound
     ensures ArbLenNatsToNat(a) < ArbLenNatsToNatBound(max_length, bound)
   {
+    // Show how each element contributes to the bound.
+    // Show that each element increases.
   }
 
   lemma ArbLenNatsToNatOutOfBoundElementOutOfBound(a: seq<nat>, max_length: nat, bound: nat)

@@ -126,7 +126,7 @@ module Circuit {
         case CHier(cr) =>
             var maybe_c := GetSubcircuit(lib, cr);
             (match maybe_c
-            case None => false
+            case None() => false
             case Some(subc) => subc.NodeKind(p as CNode) == Some(CInput)
             )
         case CComb(iports, oports, path_exists, behav) => p in iports
@@ -142,7 +142,7 @@ module Circuit {
         case CHier(cr) =>
             var maybe_c := GetSubcircuit(lib, cr);
             (match maybe_c
-            case None => {}
+            case None() => {}
             case Some(subc) => set n | n < subc.NodeBound && subc.NodeKind(n) == Some(COutput) :: n as CPort
             )
         case CComb(iports, oports, path_exists, behav) => oports
@@ -160,7 +160,7 @@ module Circuit {
         case CHier(cr) =>
             var maybe_c := GetSubcircuit(lib, cr);
             (match maybe_c
-            case None => false
+            case None() => false
             case Some(subc) => subc.NodeKind(p as CNode) == Some(COutput)
             )
         case CComb(iports, oports, path_exists, behav) => p in oports
@@ -503,9 +503,35 @@ module Circuit {
     }
 
     ghost predicate CircuitComplete(lib: CLib, c: Circuit)
-        decreases c.HierLevel, 1
+        requires CircuitValid(lib, c)
+        decreases c.HierLevel
     {
-        forall inp: NP :: NPValid(lib, c, inp) ==> c.PortSource(inp).Some?
+        (forall inp: NP :: NPValid(lib, c, inp) ==> c.PortSource(inp).Some?) &&
+        (forall n: CNode :: c.NodeKind(n).Some? && c.NodeKind(n).value.CHier? ==>
+            var subcref := c.NodeKind(n).value.CRef;
+            (subcref as nat < |lib.Circuits|) &&
+            var subc := lib.Circuits[subcref];
+            CircuitValid(lib, subc) &&
+            (subc.HierLevel < c.HierLevel) &&
+            CircuitComplete(lib, subc)
+        )
+    }
+
+    lemma HPCircuitComplete(lib: CLib, c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(lib, c)
+        requires CircuitComplete(lib, c)
+        requires HierarchyPathValid(lib, c, hp)
+        ensures
+            var hp_c := HierarchyPathCircuit(lib, c, hp);
+            CircuitValid(lib, hp_c) &&
+            CircuitComplete(lib, hp_c)
+        decreases |hp.v|
+    {
+        if |hp.v| == 0 {
+        } else {
+            var (head, tail) := HPHeadTail(hp);
+            HPCircuitComplete(lib, c, tail);
+        }
     }
 
     lemma HierLevelDecreases(lib: CLib, c: Circuit, n: CNode)
@@ -820,24 +846,6 @@ module Circuit {
         var g := AddOPort(g, add_output);
         g
     }
-    
-    //function EvaluateINP(g: Circuit, m: map<CPort, bool>, inp: INP, seen_path: seq<NP>): bool
-    //    decreases LongestPathBack(g, inp)
-    //{
-    //    var maybe_onp := g.PortSource(inp);
-    //    assert maybe_onp.Some?;
-    //    var onp := maybe_onp.value;
-    //    match onp.n
-    //        case HBoundary() => m[onp.p] 
-    //        case HNode(n) =>
-    //            var maybe_nk := g.NodeKind(n);
-    //            assert maybe_nk.Some?;
-    //            var nk := maybe_nk.value;
-    //            match nk
-    //                case CLeaf =>
-    //                    var node_inputs := (map p | p in nk.IPorts :: EvaluateINP(g, m, INP(HNode(n), p)));
-  
-    //    true
-    //}
+
 
 }
