@@ -1,6 +1,7 @@
 module SeqNatToNat {
 
   import opened Std.Wrappers
+  import Std.Collections.Seq
 
   // Define functions that take a Seq<nat> and convert it
   // reversibly to a single nat.
@@ -603,7 +604,7 @@ module SeqNatToNat {
   function {:vcs_split_on_every_assert} ArbLenNatsToNatBound(max_length: nat, bound: nat): nat
     requires max_length > 0
   {
-    var bound_ns := seq(max_length, i requires 0 <= i < max_length => bound);
+    var bound_ns := Seq.Repeat(bound, max_length);
     ArbLenNatsToNat(bound_ns)
   }
 

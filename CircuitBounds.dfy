@@ -11,6 +11,7 @@ module CircuitBounds {
         ensures c.NodeKind(n).Some? && c.NodeKind(n).value.CHier? ==>
             r.Some? && (r.value == c.NodeKind(n).value.CRef)
     {
+        reveal CircuitValid();
         assert CircuitNodeKindValid(lib, c);
         match c.NodeKind(n)
             case Some(nk) => (
@@ -60,6 +61,7 @@ module CircuitBounds {
         ensures forall cref: CircuitRef :: cref in r ==>
             CRefCircuitValid(lib, cref) && CRefHierLevelReduced(lib, c, cref)
     {
+        reveal CircuitValid();
         assert CircuitNodeKindValid(lib, c);
         assert forall n: CNode :: n >= c.NodeBound ==> c.NodeKind(n).None?;
         DirectSubCRefsInternal(lib, c, c.NodeBound, [])
@@ -212,6 +214,7 @@ module CircuitBounds {
             var hier_c := HierarchyPathCircuit(lib, c, hp);
             var tail_c := HierarchyPathCircuit(lib, c, tail);
             HierarchyPathCircuitValid(lib, c, tail);
+            reveal CircuitValid();
             assert head <= tail_c.NodeBound;
             SubcircuitInHierNodeBound(lib, c, tail);
             assert tail_c.NodeBound as nat <= HierNodeBound(lib, c);
@@ -225,7 +228,7 @@ module CircuitBounds {
 
     // Show that the any valid hpnp is smaller than total bound
 
-    ghost function HPNPElementBound(lib: CLib, c: Circuit): nat
+    function HPNPElementBound(lib: CLib, c: Circuit): nat
         requires CircuitValid(lib, c)
     {
         var max_node_index := HierNodeBound(lib, c);
@@ -243,6 +246,7 @@ module CircuitBounds {
         ensures hpnp.p as nat < HPNPElementBound(lib, c)
     {
         var element_bound := HPNPElementBound(lib, c);
+        HPNPValidHPValid(lib, c, hpnp);
         HPInHierNodeBound(lib, c, hpnp.hpn.hp);
         var hier_c := HierarchyPathCircuit(lib, c, hpnp.hpn.hp);
         HierarchyPathCircuitValid(lib, c, hpnp.hpn.hp);
@@ -250,23 +254,21 @@ module CircuitBounds {
         assert hier_c.NodeBound as nat <= element_bound;
         SubcircuitInHierPortBound(lib, c, hpnp.hpn.hp);
         assert hier_c.PortBound as nat <= element_bound;
+        reveal CircuitValid();
         assert CircuitNodeKindValid(lib, hier_c);
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
         assert hpnp.p < hier_c.PortBound;
         assert hpnp.hpn.n < hier_c.NodeBound;
     }
 
-    ghost function HPNPBound(lib: CLib, c: Circuit): nat
+    function HPNPBound(lib: CLib, c: Circuit): nat
         requires CircuitValid(lib, c)
     {
         var max_index := HPNPElementBound(lib, c);
-        var ns := seq(c.HierLevel+2, i requires 0 <= i < c.HierLevel+2 => max_index);
+        var ns := Seq.Repeat(max_index, c.HierLevel+2);
         SeqNatToNat.ArbLenNatsToNat(ns)
     }
 
-    lemma HPNPInBound(lib: CLib, c: Circuit, hpnp: HPNP)
-        requires CircuitValid(lib, c)
-        requires HPNPValid(lib, c, hpnp)
-    {
-    }
 
 }
