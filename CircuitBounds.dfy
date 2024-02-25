@@ -17,7 +17,7 @@ module CircuitBounds {
             case Some(nk) => (
                 match nk
                 case CHier(cref) =>
-                    assert CNodeKindValid(lib, c, nk);
+                    assert CNodeKindValid(lib, c.HierLevel, c.PortBound, nk);
                     assert CRefValid(lib, cref);
                     Some(cref)
                 case _ => None
@@ -38,8 +38,8 @@ module CircuitBounds {
         requires forall i: nat :: i < |subcircuits| ==>
             CRefCircuitValid(lib, subcircuits[i]) && CRefHierLevelReduced(lib, c, subcircuits[i])
         requires forall m: CNode :: m >= n && c.NodeKind(m).Some? && c.NodeKind(m).value.CHier? ==> c.NodeKind(m).value.CRef in subcircuits
-        ensures forall i: nat :: i < |r| ==> CRefCircuitValid(lib, r[i]) &&
-            CRefHierLevelReduced(lib, c, r[i])
+        ensures forall i: nat :: i < |r| ==>
+            CRefCircuitValid(lib, r[i]) && CRefHierLevelReduced(lib, c, r[i])
         ensures forall m: CNode :: c.NodeKind(m).Some? && c.NodeKind(m).value.CHier? ==>
             c.NodeKind(m).value.CRef in r
     {

@@ -27,7 +27,8 @@ module Circuit {
           IPorts: set<CPort>,
           OPorts: set<CPort>,
           PathExists: (CPort, CPort) -> bool,
-          Behav: map<CPort, bool> -> Option<map<CPort, bool>>
+          Behav: map<CPort, bool> -> Option<map<CPort, bool>>,
+          PortNames: string -> Option<CPort>
         )
         // A contant 0 or 1
       | CConst(value: bool)
@@ -55,7 +56,7 @@ module Circuit {
         assert forall i: CNode ::
             i < c.NodeBound && c.NodeKind(i).Some? && c.NodeKind(i).value.CHier? ==>
             var nk := c.NodeKind(i).value;
-            CNodeKindValid(lib, c, nk);
+            CNodeKindValid(lib, c.HierLevel, c.PortBound, nk);
         (set i: CNode | i < c.NodeBound && c.NodeKind(i).Some? && c.NodeKind(i).value.CHier? :: c.NodeKind(i).value.CRef)
     }
 
@@ -101,7 +102,7 @@ module Circuit {
             reveal HPNPValidOutput();
             var hp_c := HierarchyPathCircuit(lib, c, hpnp.hpn.hp);
             var nk := HPNPtoNK(lib, c, hpnp);
-            CNodeKindValid(lib, hp_c, nk)
+            CNodeKindValid(lib, hp_c.HierLevel, c.PortBound, nk)
     {
         HPNPValidHPValid(lib, c, hpnp);
         var hp_c := HierarchyPathCircuit(lib, c, hpnp.hpn.hp);
@@ -111,7 +112,7 @@ module Circuit {
         var nk := hp_c.NodeKind(hpnp.hpn.n).value;
         reveal CircuitValid();
         assert CircuitNodeKindValid(lib, hp_c);
-        assert CNodeKindValid(lib, hp_c, nk);
+        assert CNodeKindValid(lib, hp_c.HierLevel, c.PortBound, nk);
         nk
     }
 
@@ -124,7 +125,7 @@ module Circuit {
         var nk := HPNPtoNK(lib, c, hpnp);
         HPNPValidHPValid(lib, c, hpnp);
         var hp_c := HierarchyPathCircuit(lib, c, hpnp.hpn.hp);
-        assert CNodeKindValid(lib, hp_c, nk);
+        assert CNodeKindValid(lib, hp_c.HierLevel, c.PortBound, nk);
         lib.Circuits[nk.CRef]
     }
 
@@ -147,7 +148,7 @@ module Circuit {
             case None => {}
             case Some(subc) => set n | n < subc.NodeBound && subc.NodeKind(n) == Some(CInput) :: n as CPort
             )
-        case CComb(iports, oports, path_exists, behav) => iports
+        case CComb(iports, oports, path_exists, behav, names) => iports
         case CInput() => {}
         case CConst(v) => {}
         case COutput() => {0 as CPort}
@@ -165,7 +166,7 @@ module Circuit {
             case None() => false
             case Some(subc) => subc.NodeKind(p as CNode) == Some(CInput)
             )
-        case CComb(iports, oports, path_exists, behav) => p in iports
+        case CComb(iports, oports, path_exists, behav, name) => p in iports
         case CInput() => false
         case CConst(v) => false
         case COutput() => p == INPUT_PORT as CPort
@@ -181,7 +182,7 @@ module Circuit {
             case None() => {}
             case Some(subc) => set n | n < subc.NodeBound && subc.NodeKind(n) == Some(COutput) :: n as CPort
             )
-        case CComb(iports, oports, path_exists, behav) => oports
+        case CComb(iports, oports, path_exists, behav, names) => oports
         case CInput() => {0 as CPort}
         case COutput() => {}
         case CConst(v) => {0 as CPort}
@@ -199,7 +200,7 @@ module Circuit {
             case None() => false
             case Some(subc) => subc.NodeKind(p as CNode) == Some(COutput)
             )
-        case CComb(iports, oports, path_exists, behav) => p in oports
+        case CComb(iports, oports, path_exists, behav, names) => p in oports
         case CInput() => p == OUTPUT_PORT as CPort
         case CConst(v) => p == OUTPUT_PORT as CPort
         case COutput() => false
@@ -265,7 +266,8 @@ module Circuit {
         // We use this help dafny prove that things are finite and terminate.
         NodeBound: CNode,
         PortBound: CPort,
-        HierLevel: nat
+        HierLevel: nat,
+        PortNames: string -> Option<CNode>
     )
 
     function CircuitIPorts(c: Circuit) : set<CNode>
@@ -340,7 +342,7 @@ module Circuit {
             reveal CircuitValid();
             var nk := tail_c.NodeKind(n).value;
             assert CircuitNodeKindValid(lib, tail_c);
-            assert CNodeKindValid(lib, tail_c, nk);
+            assert CNodeKindValid(lib, tail_c.HierLevel, tail_c.PortBound, nk);
             Some(tail_c.NodeKind(n).value.CRef)
     }
 
@@ -363,7 +365,7 @@ module Circuit {
             var nk := tail_c.NodeKind(n).value;
             reveal CircuitValid();
             assert CircuitNodeKindValid(lib, tail_c);
-            assert CNodeKindValid(lib, tail_c, nk);
+            assert CNodeKindValid(lib, tail_c.HierLevel, tail_c.PortBound, nk);
             var cref := tail_c.NodeKind(n).value.CRef;
             assert GetSubcircuit(lib, cref).Some?;
             assert cref as nat < |lib.Circuits|;
@@ -448,17 +450,18 @@ module Circuit {
         HPNode(hp, n)
     }
 
-    ghost predicate CNodeKindValid(lib: CLib, c: Circuit, nk: CNodeKind)
-        decreases c.HierLevel, 0
+    ghost predicate CNodeKindValid(
+        lib: CLib, hier_level: nat, port_bound: CPort, nk: CNodeKind)
+        decreases hier_level, 0
     {
         (
         match nk
         case CHier(lower_cref) =>
             GetSubcircuit(lib, lower_cref).Some? &&
             var lower_c := GetSubcircuit(lib, lower_cref).value;
-            (lower_c.HierLevel < c.HierLevel) &&
+            (lower_c.HierLevel < hier_level) &&
             CircuitValid(lib, lower_c)
-        case CComb(iports, oports, path_exists, behav) =>
+        case CComb(iports, oports, path_exists, behav, names) =>
           (forall a: CPort, b: CPort ::
               (a !in iports ==> !nk.PathExists(a, b)) &&
               (b !in oports ==> !nk.PathExists(a, b)))
@@ -468,8 +471,8 @@ module Circuit {
         case _ => true
         ) && (
             forall p: CPort ::
-                (IsIPort(lib, nk, p) ==> p < c.PortBound) &&
-                (IsOPort(lib, nk, p) ==> p < c.PortBound) &&
+                (IsIPort(lib, nk, p) ==> p < port_bound) &&
+                (IsOPort(lib, nk, p) ==> p < port_bound) &&
                 !(IsIPort(lib, nk, p) && IsOPort(lib, nk, p))
         )
     }
@@ -518,7 +521,7 @@ module Circuit {
                 if maybe_nk.None? then
                     true
                 else
-                    CNodeKindValid(lib, c, maybe_nk.Extract())
+                    CNodeKindValid(lib, c.HierLevel, c.PortBound, maybe_nk.Extract())
         ) && (
             forall n: CNode :: n >= c.NodeBound ==> c.NodeKind(n) == None
         )
@@ -818,11 +821,22 @@ module Circuit {
     {
         (p in {0, 1}) && (q == 0)
     }
+
+    function PortNames2to1(name: string): Option<CPort>
+    {
+        match name
+        case "i0" => Some(0 as CPort)
+        case "i1" => Some(1 as CPort)
+        case "o" => Some(2 as CPort)
+        case _ => None
+    }
+
     const AndCNode: CNodeKind := CComb(
         IPorts := {0 as CPort, 1 as CPort},
-        OPorts := {0 as CPort},
+        OPorts := {2 as CPort},
         PathExists := BinaryPathExists,
-        Behav := AndBehav
+        Behav := AndBehav,
+        PortNames := PortNames2to1
     )
 
     function xor(b: bool, c: bool): bool
@@ -844,7 +858,8 @@ module Circuit {
         IPorts := {0 as CPort, 1 as CPort},
         OPorts := {0 as CPort},
         PathExists := BinaryPathExists,
-        Behav := XorBehav
+        Behav := XorBehav,
+        PortNames := PortNames2to1
     )
 
     function MakeEmptyCircuit(): Circuit
@@ -854,7 +869,8 @@ module Circuit {
           PortSource := _ => None,
           NodeBound := 0,
           PortBound := 0,
-          HierLevel := 0
+          HierLevel := 0,
+          PortNames := _ => None
       )
     }
 
@@ -886,7 +902,8 @@ module Circuit {
               g.PortSource(inp),
           NodeBound := g.NodeBound+1,
           PortBound := g.PortBound,
-          HierLevel := g.HierLevel
+          HierLevel := g.HierLevel,
+          PortNames := g.PortNames
       );
       (c, new_node)
     }

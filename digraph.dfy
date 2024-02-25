@@ -548,9 +548,9 @@ module DG {
         if (a == b) then
             false
         else
-            forall n: Node :: NextNode(g, a, n) && g.NodeMap(n) < g.NodeBound &&
-                    n !in new_visited_nodes ==>
-                PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes)
+            forall n: Node :: (NextNode(g, a, n) && g.NodeMap(n) < g.NodeBound &&
+                n !in new_visited_nodes) ==>
+                    PathDoesNotExistRecursiveInternal(g, n, b, new_visited_nodes)
     }
 
     lemma {:vcs_split_on_every_assert} NotPathExistsIsPathDoesNotExistRecursive<Node(!new)>(

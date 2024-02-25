@@ -26,6 +26,7 @@ module Utils {
         ensures |ns+[n]| == |ns| + 1
     {
         var nsn := ns + [n];
+        reveal Seq.HasNoDuplicates();
         SeqSize(nsn, bound);
     }
 
@@ -38,8 +39,8 @@ module Utils {
         if bound == 0 {
         } else {
             AllBelowBoundSize(bound-1);
-            var belowminus := set n : nat | n < bound-1 :: n;
-            var below := set n : nat | n < bound :: n;
+            var belowminus := (set n : nat | n < bound-1 :: n);
+            var below := (set n : nat | n < bound :: n);
             assert below == belowminus + {bound-1};
         }
     }

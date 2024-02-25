@@ -49,7 +49,7 @@ module CircuitPath {
                     hier_inp == b 
                 case _ => false
             )
-            case CComb(_, _, path_exists, _) =>
+            case CComb(_, _, path_exists, _, _) =>
                 (a.hpn.hp == b.hpn.hp) &&
                 (a.hpn.n == b.hpn.n) &&
                 path_exists(a.p, b.p)
@@ -108,7 +108,7 @@ module CircuitPath {
             HierarchyPathCircuitValid(lib, c, tail);
             assert CircuitValid(lib, tail_c);
             reveal CircuitValid();
-            assert CNodeKindValid(lib, tail_c, nk);
+            assert CNodeKindValid(lib, tail_c.HierLevel, tail_c.PortBound, nk);
             assert tail_c.HierLevel > hier_c.HierLevel;
             HPLengthBound(lib, c, tail);
         }

@@ -40,7 +40,7 @@ module CircuitStuff {
         var hp_c := HierarchyPathCircuit(lib, c, onp.hpn.hp);
         HierarchyPathCircuitValid(lib, c, onp.hpn.hp);
         var nk := HPNPtoNK(lib, c, onp);
-        assert CNodeKindValid(lib, hp_c, nk);
+        assert CNodeKindValid(lib, hp_c.HierLevel, hp_c.PortBound, nk);
         var lower_c := HPNPtoSubcircuit(lib, c, onp);
         reveal HPNPValidOutput();
         // It's an output port from a hier node.
@@ -170,7 +170,7 @@ module CircuitStuff {
         match nk
         case CInput() => EvaluateONPCInput(lib, c, isigs, p)
         case CHier(_) => EvaluateONPCHier(lib, c, isigs, p)
-        case CComb(_, _, _, _) => EvaluateONPCComb(lib, c, isigs, p)
+        case CComb(_, _, _, _, _) => EvaluateONPCComb(lib, c, isigs, p)
         case CSeq() => isigs(onp)
         case CConst(v) => v
     }
