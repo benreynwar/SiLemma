@@ -6,8 +6,8 @@ module CircuitStuff {
     import opened CircuitPath
     import DG
 
-    function {:opaque} INPtoONP(lib: CLib, c: Circuit, inp: HPNP): (onp: HPNP)
-        requires CircuitValid(lib, c)
+    function {:opaque} INPtoONP(c: Circuit, inp: HPNP): (onp: HPNP)
+        requires CircuitValid(c)
         requires CircuitComplete(lib, c)
         requires HPNPValidInput(lib, c, inp)
         ensures HPNPValidOutput(lib, c, onp)
@@ -29,7 +29,7 @@ module CircuitStuff {
         onp
     }
 
-    function {:opaque} ONPtoDeeperINP(lib: CLib, c: Circuit, onp: HPNP): (inp: HPNP)
+    function {:opaque} ONPtoDeeperINP(c: Circuit, onp: HPNP): (inp: HPNP)
         requires CircuitValid(lib, c)
         requires HPNPValidOutput(lib, c, onp)
         requires HPNPtoNK(lib, c, onp).CHier?
@@ -62,7 +62,7 @@ module CircuitStuff {
     }
 
     function {:vcs_split_on_every_assert} EvaluateINP(
-            lib: CLib, c: Circuit, m: HPNP -> bool, p: DG.Path<HPNP>): bool
+            c: Circuit, m: HPNP -> bool, p: DG.Path<HPNP>): bool
         requires CircuitValid(lib, c)
         requires CircuitComplete(lib, c)
         requires CircuitNoLoops(lib, c)
@@ -81,7 +81,7 @@ module CircuitStuff {
     }
 
     function {:vcs_split_on_every_assert} EvaluateONPCInput(
-            lib: CLib, c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
+            c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
         requires CircuitValid(lib, c)
         requires CircuitComplete(lib, c)
         requires CircuitNoLoops(lib, c)
@@ -122,7 +122,7 @@ module CircuitStuff {
     }
 
     function {:vcs_split_on_every_assert} EvaluateONPCHier(
-            lib: CLib, c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
+            c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
         requires CircuitValid(lib, c)
         requires CircuitComplete(lib, c)
         requires CircuitNoLoops(lib, c)
@@ -140,7 +140,7 @@ module CircuitStuff {
     }
 
     function EvaluateONPCComb(
-            lib: CLib, c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
+            c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
         requires CircuitValid(lib, c)
         requires CircuitComplete(lib, c)
         requires CircuitNoLoops(lib, c)
@@ -153,7 +153,7 @@ module CircuitStuff {
         true
     }
 
-    function EvaluateONP(lib: CLib, c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
+    function EvaluateONP(c: Circuit, isigs: HPNP -> bool, p: DG.Path<HPNP>): bool
         requires CircuitValid(lib, c)
         requires CircuitComplete(lib, c)
         requires CircuitNoLoops(lib, c)

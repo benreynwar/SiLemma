@@ -27,4 +27,7 @@ module Primitives {
         PortNames := C.PortNames2to1
     )
 
+    //lemma XorValid()
+    //    ensures C.CNodeKindValid(
+
 }

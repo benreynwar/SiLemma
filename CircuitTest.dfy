@@ -5,17 +5,6 @@ module CircuitTest {
     import P = Primitives
     // Make a circuit with a single XOR gate.
 
-    function behav_xor(inputs: map<C.CPort, bool>): Option<map<C.CPort, bool>>
-    {
-        if 0 !in inputs then
-            None
-        else if 1 !in inputs then
-            None
-        else
-            var o := if inputs[0] == inputs[1] then false else true;
-            Some(map[2 := o])
-    }
-
     const circ := C.Circuit(
         NodeKind := (n: C.CNode) => (match n
             case 0 => Some(C.CInput())
@@ -34,19 +23,17 @@ module CircuitTest {
         PortBound := 3,
         HierLevel := 0
     )
-    const lib := C.CLib([circ])
-
     const HierLevel: nat := 0
     const PortBound: C.CPort := 4
 
     lemma nk_xor_valid()
-        ensures C.CNodeKindValid(lib, HierLevel, PortBound, nk_xor)
+        ensures C.CNodeKindValid(HierLevel, PortBound, P.nk_xor)
     {
         reveal C.CircuitValid();
     }
 
     lemma CircValid()
-        ensures C.CircuitValid(lib, circ)
+        ensures C.CircuitValid(circ)
     {
         reveal C.CircuitValid();
     }

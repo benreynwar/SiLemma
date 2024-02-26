@@ -10,13 +10,13 @@ module CircuitPath {
     import DG
     import Utils
 
-    predicate {:opaque} HPNPOtoIConnected(lib: CLib, c: Circuit, a: HPNP, b: HPNP)
-        requires CircuitValid(lib, c)
-        requires HPNPValidOutput(lib, c, a)
-        requires HPNPValidInput(lib, c, b)
+    predicate {:opaque} HPNPOtoIConnected(c: Circuit, a: HPNP, b: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, a)
+        requires HPNPValidInput(c, b)
     {
-        HPNPValidHPValid(lib, c, a);
-        var a_c := HierarchyPathCircuit(lib, c, a.hpn.hp);
+        HPNPValidHPValid(c, a);
+        var a_c := HierarchyPathCircuit(c, a.hpn.hp);
         var maybe_a_nk := a_c.NodeKind(a.hpn.n);
         match maybe_a_nk
         case None => false
@@ -38,13 +38,13 @@ module CircuitPath {
             )
             case CHier(_) => (
                 reveal HPNPValidOutput();
-                var lower_c := NodeToSubcircuit(lib, a_c, a.hpn.n);
+                var lower_c := NodeToSubcircuit(a_c, a.hpn.n);
                 // It's an output port from a hier node.
                 // It only connects to the input into the corresponding Output node in that circuit.
                 var maybe_level_nk := lower_c.NodeKind(a.p as CNode);
                 match maybe_level_nk
                 case Some(Output) =>
-                    var new_hp := ExtendHierarchyPath(lib, c, a.hpn.hp, a.hpn.n);
+                    var new_hp := ExtendHierarchyPath(c, a.hpn.hp, a.hpn.n);
                     var hier_inp := HPNP(HPNode(new_hp, a.p as CNode), 0);
                     hier_inp == b 
                 case _ => false
@@ -56,25 +56,25 @@ module CircuitPath {
             case CReg => false
     }
 
-    predicate {:opaque} HPNPItoOConnected(lib: CLib, c: Circuit, a: HPNP, b: HPNP)
-        requires CircuitValid(lib, c)
-        requires HPNPValidInput(lib, c, a)
-        requires HPNPValidOutput(lib, c, b)
+    predicate {:opaque} HPNPItoOConnected(c: Circuit, a: HPNP, b: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValidInput(c, a)
+        requires HPNPValidOutput(c, b)
     {
-        HPNPValidHPValid(lib, c, a);
-        var a_c := HierarchyPathCircuit(lib, c, a.hpn.hp);
+        HPNPValidHPValid(c, a);
+        var a_c := HierarchyPathCircuit(c, a.hpn.hp);
         var inp := NP(a.hpn.n, a.p);
         var onp := NP(b.hpn.n, b.p);
         a_c.PortSource(inp) == Some(onp)
     }
 
-    predicate {:opaque} HPNPConnected(lib: CLib, c: Circuit,  a: HPNP, b: HPNP)
-        requires CircuitValid(lib, c)
+    predicate {:opaque} HPNPConnected(c: Circuit,  a: HPNP, b: HPNP)
+        requires CircuitValid(c)
     {
-        (HPNPValidInput(lib, c, a) && HPNPValidOutput(lib, c, b) &&
-            HPNPItoOConnected(lib, c, a, b)) ||
-        (HPNPValidOutput(lib, c, a) && HPNPValidInput(lib, c, b) &&
-            HPNPOtoIConnected(lib, c, a, b))
+        (HPNPValidInput(c, a) && HPNPValidOutput(c, b) &&
+            HPNPItoOConnected(c, a, b)) ||
+        (HPNPValidOutput(c, a) && HPNPValidInput(c, b) &&
+            HPNPOtoIConnected(c, a, b))
     }
 
     function HPNPToSeqNat(hpnp: HPNP): (r: seq<nat>)
@@ -90,27 +90,27 @@ module CircuitPath {
         SeqNatToNat.ArbLenNatsToNat(ns)
     }
 
-    lemma HPLengthBound(lib: CLib, c: Circuit, hp: HierarchyPath)
-        requires CircuitValid(lib, c)
-        requires HierarchyPathValid(lib, c, hp)
+    lemma HPLengthBound(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
         ensures
-            var hier_c := HierarchyPathCircuit(lib, c, hp);
+            var hier_c := HierarchyPathCircuit(c, hp);
             HPLength(hp) <= (c.HierLevel - hier_c.HierLevel)
         decreases HPLength(hp)
     {
         if HPLength(hp) == 0 {
         } else {
-            var hier_c := HierarchyPathCircuit(lib, c, hp);
+            var hier_c := HierarchyPathCircuit(c, hp);
             var (head, tail) := HPHeadTail(hp);
-            var tail_c := HierarchyPathCircuit(lib, c, tail);
+            var tail_c := HierarchyPathCircuit(c, tail);
             var nk := tail_c.NodeKind(head).value;
             assert nk.CHier?;
-            HierarchyPathCircuitValid(lib, c, tail);
-            assert CircuitValid(lib, tail_c);
+            HierarchyPathCircuitValid(c, tail);
+            assert CircuitValid(tail_c);
             reveal CircuitValid();
-            assert CNodeKindValid(lib, tail_c.HierLevel, tail_c.PortBound, nk);
+            assert CNodeKindValid(tail_c.HierLevel, tail_c.PortBound, nk);
             assert tail_c.HierLevel > hier_c.HierLevel;
-            HPLengthBound(lib, c, tail);
+            HPLengthBound(c, tail);
         }
     }
 
@@ -171,105 +171,105 @@ module CircuitPath {
         SeqNatToNat.ArbLenNatsToNatUnique(HPNPToSeqNat(a), HPNPToSeqNat(b));
     }
 
-    function {:opaque} CtoG(lib: CLib, c: Circuit): (g: DG.Digraph<HPNP>)
-        requires CircuitValid(lib, c)
+    function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
+        requires CircuitValid(c)
     {
         DG.Digraph(
-            hpnp => HPNPValid(lib, c, hpnp),
-            (a, b) => HPNPConnected(lib, c, a, b),
+            hpnp => HPNPValid(c, hpnp),
+            (a, b) => HPNPConnected(c, a, b),
             HPNPToNat,
-            CircuitBounds.HPNPBound(lib, c)
+            CircuitBounds.HPNPBound(c)
         )
     }
 
-    function CtoGV(lib: CLib, c: Circuit): (g: DG.Digraph<HPNP>)
-        requires CircuitValid(lib, c)
+    function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
+        requires CircuitValid(c)
         ensures DG.DigraphValid(g)
     {
-        CtoGValid(lib, c);
-        CtoG(lib, c)
+        CtoGValid(c);
+        CtoG(c)
     }
         
 
-    lemma NoSelfConnections(lib: CLib, c: Circuit, n: HPNP)
-        requires CircuitValid(lib, c)
-        ensures !HPNPConnected(lib, c, n, n)
+    lemma NoSelfConnections(c: Circuit, n: HPNP)
+        requires CircuitValid(c)
+        ensures !HPNPConnected(c, n, n)
     {
         reveal HPNPConnected();
-        if HPNPValid(lib, c, n) {
-            HPNPValidHPValid(lib, c, n);
-            var hier_c := HierarchyPathCircuit(lib, c, n.hpn.hp);
-            HierarchyPathCircuitValid(lib, c, n.hpn.hp);
+        if HPNPValid(c, n) {
+            HPNPValidHPValid(c, n);
+            var hier_c := HierarchyPathCircuit(c, n.hpn.hp);
+            HierarchyPathCircuitValid(c, n.hpn.hp);
             reveal CircuitValid();
-            assert CircuitNodeKindValid(lib, hier_c);
-            if HPNPValidInput(lib, c, n) {
+            assert CircuitNodeKindValid(hier_c);
+            if HPNPValidInput(c, n) {
                 reveal HPNPValidInput();
                 reveal HPNPValidOutput();
-                assert !HPNPValidOutput(lib, c, n);
-                assert !HPNPConnected(lib, c, n, n);
+                assert !HPNPValidOutput(c, n);
+                assert !HPNPConnected(c, n, n);
             } else {
             }
         } else {
-            assert !HPNPValidInput(lib, c, n);
-            assert !HPNPValidOutput(lib, c, n);
+            assert !HPNPValidInput(c, n);
+            assert !HPNPValidOutput(c, n);
         }
     }
 
-    lemma ConnectedNodesValid(lib: CLib, c: Circuit, n: HPNP, m: HPNP)
-        requires CircuitValid(lib, c)
-        ensures HPNPConnected(lib, c, n, m) ==> HPNPValid(lib, c, n) && HPNPValid(lib, c, m)
+    lemma ConnectedNodesValid(c: Circuit, n: HPNP, m: HPNP)
+        requires CircuitValid(c)
+        ensures HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m)
     {
         reveal HPNPConnected();
     }
 
-    lemma OutOfBoundInvalid(lib: CLib, c: Circuit, n: HPNP)
-        requires CircuitValid(lib, c)
-        ensures HPNPToNat(n) >= CircuitBounds.HPNPBound(lib, c) ==> !HPNPValid(lib, c, n)
+    lemma OutOfBoundInvalid(c: Circuit, n: HPNP)
+        requires CircuitValid(c)
+        ensures HPNPToNat(n) >= CircuitBounds.HPNPBound(c) ==> !HPNPValid(c, n)
     {
-        if HPNPToNat(n) >= CircuitBounds.HPNPBound(lib, c) {
-            if HPNPValid(lib, c, n) {
-                HPNPInBound(lib, c, n);
-                assert HPNPToNat(n) < CircuitBounds.HPNPBound(lib, c);
+        if HPNPToNat(n) >= CircuitBounds.HPNPBound(c) {
+            if HPNPValid(c, n) {
+                HPNPInBound(c, n);
+                assert HPNPToNat(n) < CircuitBounds.HPNPBound(c);
                 assert false;
             } else {
             }
-            assert !HPNPValid(lib, c, n);
+            assert !HPNPValid(c, n);
         }
     }
 
-    lemma CtoGValid(lib: CLib, c: Circuit)
-        requires CircuitValid(lib, c)
-        ensures DG.DigraphValid(CtoG(lib, c))
+    lemma CtoGValid(c: Circuit)
+        requires CircuitValid(c)
+        ensures DG.DigraphValid(CtoG(c))
     {
         reveal CtoG();
-        var g := CtoG(lib, c);
+        var g := CtoG(c);
         forall n: HPNP, m: HPNP
-            ensures HPNPToNat(n) >= CircuitBounds.HPNPBound(lib, c) ==> !HPNPValid(lib, c, n)
-            ensures !HPNPConnected(lib, c, n, n)
-            ensures HPNPConnected(lib, c, n, m) ==> HPNPValid(lib, c, n) && HPNPValid(lib, c, m)
+            ensures HPNPToNat(n) >= CircuitBounds.HPNPBound(c) ==> !HPNPValid(c, n)
+            ensures !HPNPConnected(c, n, n)
+            ensures HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m)
             ensures (n != m) ==> HPNPToNat(n) != HPNPToNat(m)
         {
-            OutOfBoundInvalid(lib, c, n);
-            NoSelfConnections(lib, c, n);
-            ConnectedNodesValid(lib, c, n, m);
+            OutOfBoundInvalid(c, n);
+            NoSelfConnections(c, n);
+            ConnectedNodesValid(c, n, m);
             HPNPToNatInjective(n, m);
         }
-        assert (forall n: HPNP :: HPNPToNat(n) >= CircuitBounds.HPNPBound(lib, c) ==> !HPNPValid(lib, c, n));
-        assert (forall n: HPNP :: !HPNPConnected(lib, c, n, n));
-        assert (forall n: HPNP, m: HPNP :: HPNPConnected(lib, c, n, m) ==> HPNPValid(lib, c, n) && HPNPValid(lib, c, m));
+        assert (forall n: HPNP :: HPNPToNat(n) >= CircuitBounds.HPNPBound(c) ==> !HPNPValid(c, n));
+        assert (forall n: HPNP :: !HPNPConnected(c, n, n));
+        assert (forall n: HPNP, m: HPNP :: HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m));
         assert (forall n: HPNP, m: HPNP :: n != m ==> HPNPToNat(n) != HPNPToNat(m));
         reveal DG.DigraphValid();
     }
 
-    lemma HPNPAsSeqNatInBound(lib: CLib, c: Circuit, hpnp: HPNP)
-        requires CircuitValid(lib, c)
-        requires HPNPValid(lib, c, hpnp)
+    lemma HPNPAsSeqNatInBound(c: Circuit, hpnp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValid(c, hpnp)
         ensures forall n: nat :: n in HPNPToSeqNat(hpnp) ==>
-            n < CircuitBounds.HPNPElementBound(lib, c)
+            n < CircuitBounds.HPNPElementBound(c)
     {
-        CircuitBounds.HPNPElementsInBound(lib, c, hpnp);
+        CircuitBounds.HPNPElementsInBound(c, hpnp);
         var hpnp_as_seq := HPNPToSeqNat(hpnp);
-        var element_bound := CircuitBounds.HPNPElementBound(lib, c); 
+        var element_bound := CircuitBounds.HPNPElementBound(c); 
         var hp := hpnp.hpn.hp;
         assert forall n: CNode :: n in hp.v ==> n as nat < element_bound;
         assert forall i: nat :: i < |hp.v| ==> (hp.v[i] in hp.v);
@@ -286,47 +286,47 @@ module CircuitPath {
         assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
     }
 
-    lemma HPNPInBound(lib: CLib, c: Circuit, hpnp: HPNP)
-        requires CircuitValid(lib, c)
-        requires HPNPValid(lib, c, hpnp)
-        ensures HPNPToNat(hpnp) < CircuitBounds.HPNPBound(lib, c)
+    lemma HPNPInBound(c: Circuit, hpnp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValid(c, hpnp)
+        ensures HPNPToNat(hpnp) < CircuitBounds.HPNPBound(c)
     {
         var hpnp_as_seq := HPNPToSeqNat(hpnp);
-        var element_bound := CircuitBounds.HPNPElementBound(lib, c); 
-        HPNPAsSeqNatInBound(lib, c, hpnp);
+        var element_bound := CircuitBounds.HPNPElementBound(c); 
+        HPNPAsSeqNatInBound(c, hpnp);
         var len := |hpnp_as_seq|;
         var bound := SeqNatToNat.ArbLenNatsToNatBound(c.HierLevel+2, element_bound);
-        assert bound == CircuitBounds.HPNPBound(lib, c);
+        assert bound == CircuitBounds.HPNPBound(c);
         assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
         assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] in hpnp_as_seq;
         assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] < element_bound;
-        HPNPValidHPValid(lib, c, hpnp);
-        HPLengthBound(lib, c, hpnp.hpn.hp);
+        HPNPValidHPValid(c, hpnp);
+        HPLengthBound(c, hpnp.hpn.hp);
         assert HPLength(hpnp.hpn.hp) <= c.HierLevel;
         assert |hpnp_as_seq| <= c.HierLevel + 2;
         SeqNatToNat.ArbLenNatsToNatBounded(hpnp_as_seq, c.HierLevel+2, element_bound);
         assert SeqNatToNat.ArbLenNatsToNat(hpnp_as_seq) < bound;
     }
     
-    ghost predicate CircuitNoLoops(lib: CLib, c: Circuit)
-        requires CircuitValid(lib, c)
+    ghost predicate CircuitNoLoops(c: Circuit)
+        requires CircuitValid(c)
     {
-        var g := CtoG(lib, c);
+        var g := CtoG(c);
         !DG.DigraphLoop(g)
     }
 
-    lemma NoLoopsMeansNotInPath(lib: CLib, c: Circuit, p: DG.Path<HPNP>, n: HPNP)
-        requires CircuitValid(lib, c)
-        requires CircuitNoLoops(lib, c)
-        requires PathValid(lib, c, p)
-        requires HPNPValid(lib, c, n)
-        requires |p.v| > 0 ==> HPNPConnected(lib, c, DG.PathEnd(p), n)
+    lemma NoLoopsMeansNotInPath(c: Circuit, p: DG.Path<HPNP>, n: HPNP)
+        requires CircuitValid(c)
+        requires CircuitNoLoops(c)
+        requires PathValid(c, p)
+        requires HPNPValid(c, n)
+        requires |p.v| > 0 ==> HPNPConnected(c, DG.PathEnd(p), n)
         ensures n !in p.v
     {
-        var new_p := PathAppend(lib, c, p, n);
+        var new_p := PathAppend(c, p, n);
         assert new_p == DG.Path(p.v + [n]);
-        assert PathValid(lib, c, new_p);
-        DG.NoLoopsMeansNoRepeats(CtoGV(lib, c));
+        assert PathValid(c, new_p);
+        DG.NoLoopsMeansNoRepeats(CtoGV(c));
         assert DG.PathNoRepeats(new_p);
         if n in p.v {
             var index: nat :| index < |p.v| && p.v[index] == n;
@@ -336,45 +336,45 @@ module CircuitPath {
         }
     }
 
-    function PathAppend(lib: CLib, c: Circuit, p: DG.Path<HPNP>, n: HPNP): (r: DG.Path<HPNP>)
+    function PathAppend(c: Circuit, p: DG.Path<HPNP>, n: HPNP): (r: DG.Path<HPNP>)
         // Just a PathAppend with more friendly requirements for a circuit.
-        requires CircuitValid(lib, c)
-        requires DG.PathValid(CtoGV(lib, c), p)
-        requires HPNPValid(lib, c, n)
-        requires (|p.v| > 0 ==> HPNPConnected(lib, c, DG.PathEnd(p), n))
-        ensures DG.PathValid(CtoGV(lib, c), r)
+        requires CircuitValid(c)
+        requires DG.PathValid(CtoGV(c), p)
+        requires HPNPValid(c, n)
+        requires (|p.v| > 0 ==> HPNPConnected(c, DG.PathEnd(p), n))
+        ensures DG.PathValid(CtoGV(c), r)
     {
         reveal CtoG();
-        DG.PathAppend(CtoGV(lib, c), p, n)
+        DG.PathAppend(CtoGV(c), p, n)
     }
 
-    predicate PathValid(lib: CLib, c: Circuit, seen_path: DG.Path<HPNP>)
-        requires CircuitValid(lib, c)
+    predicate PathValid(c: Circuit, seen_path: DG.Path<HPNP>)
+        requires CircuitValid(c)
     {
-        DG.PathValid(CtoGV(lib, c), seen_path)
+        DG.PathValid(CtoGV(c), seen_path)
     }
 
-    function NumberOfRemainingNodes(lib: CLib, c: Circuit, seen_path: DG.Path<HPNP>): nat
-        requires CircuitValid(lib, c)
-        requires CircuitNoLoops(lib, c)
-        requires PathValid(lib, c, seen_path)
+    function NumberOfRemainingNodes(c: Circuit, seen_path: DG.Path<HPNP>): nat
+        requires CircuitValid(c)
+        requires CircuitNoLoops(c)
+        requires PathValid(c, seen_path)
     {
-        DG.NoLoopsMeansNoRepeats(CtoGV(lib, c));
-        DG.NumberOfRemainingNodesPath(CtoGV(lib, c), seen_path)
+        DG.NoLoopsMeansNoRepeats(CtoGV(c));
+        DG.NumberOfRemainingNodesPath(CtoGV(c), seen_path)
     }
 
-    lemma NumberOfRemainingNodesDecreases(lib: CLib, c: Circuit, seen_path: DG.Path<HPNP>, n: HPNP)
-        requires CircuitValid(lib, c)
-        requires CircuitNoLoops(lib, c)
-        requires PathValid(lib, c, seen_path)
-        requires HPNPValid(lib, c, n)
-        requires |seen_path.v| > 0 ==> HPNPConnected(lib, c, DG.PathEnd(seen_path), n)
+    lemma NumberOfRemainingNodesDecreases(c: Circuit, seen_path: DG.Path<HPNP>, n: HPNP)
+        requires CircuitValid(c)
+        requires CircuitNoLoops(c)
+        requires PathValid(c, seen_path)
+        requires HPNPValid(c, n)
+        requires |seen_path.v| > 0 ==> HPNPConnected(c, DG.PathEnd(seen_path), n)
         ensures
-            var new_p := PathAppend(lib, c, seen_path, n);
-            NumberOfRemainingNodes(lib, c, new_p) <
-            NumberOfRemainingNodes(lib, c, seen_path)
+            var new_p := PathAppend(c, seen_path, n);
+            NumberOfRemainingNodes(c, new_p) <
+            NumberOfRemainingNodes(c, seen_path)
     {
-        DG.NoLoopsMeansNoRepeats(CtoGV(lib, c));
+        DG.NoLoopsMeansNoRepeats(CtoGV(c));
         assert DG.PathNoRepeats(seen_path);
     }
 
