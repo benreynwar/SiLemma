@@ -1,15 +1,19 @@
 module DG {
 
+    import opened Std.Wrappers
     import Utils
     import SeqExt
-    import Seq = Std.Collections.Seq
+    import Std.Collections.Seq
+    import Std.Collections.Set
+    import Std.Functions
 
     datatype Path<Node> = Path(v: seq<Node>)
 
-    datatype Digraph<-Node> = Digraph(
+    datatype Digraph<!Node> = Digraph(
         IsNode: Node -> bool,
         IsConnected: (Node, Node) -> bool,
         NodeMap: Node -> nat,
+        InvNodeMap: nat -> Option<Node>,
         NodeBound: nat
     )
 
@@ -18,7 +22,9 @@ module DG {
         (forall n: Node :: g.NodeMap(n) >= g.NodeBound ==> !g.IsNode(n)) &&
         (forall n: Node :: !g.IsConnected(n, n)) && // No self-connections
         (forall n: Node, m: Node :: g.IsConnected(n, m) ==> g.IsNode(n) && g.IsNode(m)) &&
-        (forall n: Node, m: Node :: n != m ==> g.NodeMap(n) != g.NodeMap(m))
+        (forall n: Node, m: Node :: n != m ==> g.NodeMap(n) != g.NodeMap(m)) &&
+        (forall n: Node :: g.InvNodeMap(g.NodeMap(n)) == Some(n)) &&
+        Functions.Injective(g.NodeMap) && Functions.Injective(g.InvNodeMap)
     }
 
     lemma ValidNodeBound<Node>(g: Digraph, n: Node)
@@ -745,6 +751,7 @@ module DG {
             m=>(m==n) || g.IsNode(m),
             g.IsConnected,
             g.NodeMap,
+            g.InvNodeMap,
             if g.NodeMap(n) >= g.NodeBound then g.NodeMap(n)+1 else g.NodeBound
         )
     }
@@ -867,6 +874,7 @@ module DG {
             g.IsNode,
             (a, b) => ((a==n) && (b==m)) || g.IsConnected(a, b),
             g.NodeMap,
+            g.InvNodeMap,
             g.NodeBound
         )
     }
@@ -1053,7 +1061,7 @@ module DG {
                 assert PathValid(r, q);
                 AddPathsFromTo(r, q_1, q_2);
                 assert p.v[index+1] == m;
-                //assert q_1.v[0] == m;
+                assert q_1.v[0] == m;
                 assert PathFromTo(r, q, m, n);
                 // We want to now show that [n, m] does not appear in q.
                 // We actually need to find another path that removes any repeats and then
@@ -1071,16 +1079,113 @@ module DG {
         }
     }
 
-    // We want to use this to be able to show for circuit that if we don't have loops then
-    // we can follow a path without worrying about infinite recursion.
+    function StepBack<Node(!new)>(g: Digraph, n: Node): (r: set<Node>)
+        requires DigraphValid(g)
+        requires NodeValid(g, n)
+        ensures forall m :: m in r ==> NodeValid(g, m)
+        ensures forall m :: m in r <==> g.IsConnected(n, m)
+    {
+        reveal DigraphValid();
+        var mapped := set m: nat | m < g.NodeBound :: m;
+        var nodes := Set.Map(g.InvNodeMap, mapped);
+        var filter := (n: Option<Node>) => n.Some?;
+        var filtered_nodes := Set.Filter(filter, nodes);
+        var extracted_nodes := set n | n in nodes && n.Some? :: n.value;
+        var connected_nodes := set m | m in extracted_nodes && g.IsConnected(n, m) :: m;
+        connected_nodes 
+    }
 
-    // When we are following a path we have a variable that is the path we have been following.
+    ghost function StepSetBackInternal<Node(!new)>(g: Digraph, in_ns: set<Node>, out_ns: set<Node>): (r: set<Node>)
+        requires DigraphValid(g)
+        requires forall n :: n in in_ns ==> NodeValid(g, n)
+        requires forall n :: n in out_ns ==> NodeValid(g, n)
+        ensures forall n :: n in r ==> NodeValid(g, n)
+        ensures forall m :: (m in r <==> exists n :: (n in in_ns && g.IsConnected(n, m)) || (m in out_ns))
+    {
+        if |in_ns| == 0 then
+            out_ns
+        else
+            var n :| n in in_ns;
+            var connected := StepBack(g, n);
+            assert forall m :: m in connected ==> NodeValid(g, m);
+            var new_in_ns := in_ns - {n};
+            var new_out_ns := out_ns + connected;
+            StepSetBackInternal(g, new_in_ns, new_out_ns)
+    }
 
-    // If a DG has no loops we can show:
-    // 1) The path has a maximum length.
-    // 2) If the next node is connected then the new path has no repeats and is longer.
+    ghost function StepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>): (r: set<Node>)
+        requires DigraphValid(g)
+        requires forall n :: n in in_ns ==> NodeValid(g, n)
+        ensures forall n :: n in r ==> NodeValid(g, n)
+        ensures forall m :: m in r <==> exists n :: (n in in_ns && g.IsConnected(n, m))
+    {
+        StepSetBackInternal(g, in_ns, {})
+    }
 
-    //lemma NoReaPathLengthIsBound
+    ghost function MultipleStepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>, count: nat): (r: set<Node>)
+        requires DigraphValid(g)
+        requires forall n :: n in in_ns ==> NodeValid(g, n)
+        ensures forall n :: n in r ==> NodeValid(g, n)
+        decreases count
+    {
+        if count == 0 then
+            in_ns
+        else
+            var s := StepSetBack(g, in_ns);
+            MultipleStepSetBack(g, s, count-1)
+    }
+
+    lemma NextInPathInStepBack<Node(!new)>(g: Digraph, n: Node, p: Path)
+        requires DigraphValid(g)
+        requires NodeValid(g, n)
+        requires PathValid(g, p)
+        requires |p.v| > 1
+        requires n in p.v[..|p.v|-1]
+        ensures
+            var s := StepBack(g, n);
+            var index: nat :| index < |p.v|-1 && p.v[index] == n;
+            var m := p.v[index+1];
+            m in s
+    {
+        var s := StepBack(g, n);
+        var index: nat :| index < |p.v|-1 && p.v[index] == n;
+        var m := p.v[index+1];
+        reveal PathValid();
+        assert g.IsConnected(n, m);
+        assert m in s;
+    }
+
+    //lemma MultipleStepSetBackGivesMaxPathLengthHelper<Node(!new)>(g: Digraph, p: Path, n: Node, in_ns: set<Node>, out_ns: set<Node>, count: nat)
+    //    requires |p.v| > 
+    //    requires forall p : Path<Node>, n: Node :: n in out_ns && |p.v| >= (count-1) ==> n !in p.v[..|p.v|-count+2];
+
+
+    lemma {:vcs_split_on_every_assert} MultipleStepSetBackGivesMaxPathLength<Node(!new)>(g: Digraph, in_ns: set<Node>, count: nat)
+        requires DigraphValid(g)
+        requires forall n :: n in in_ns ==> NodeValid(g, n)
+        requires MultipleStepSetBack(g, in_ns, count) == {};
+        ensures forall p : Path<Node>, n: Node :: n in in_ns && |p.v| >= count ==> n !in p.v[..|p.v|-count+1]
+        decreases count
+    {
+        if count == 0 {
+            assert in_ns == {};
+        } else {
+            var out_ns := StepSetBack(g, in_ns);
+            MultipleStepSetBackGivesMaxPathLength(g, out_ns, count-1);
+            assert forall p : Path<Node>, n: Node :: n in out_ns && |p.v| >= (count-1) ==> n !in p.v[..|p.v|-count+2];
+            forall p : Path<Node>, n: Node | n in in_ns && PathValid(g, p) && n in p.v {
+                var index: nat :| index < |p.v| && p.v[index] == n;
+                if index < |p.v|-1 {
+                    var m := p.v[index+1];
+                    reveal PathValid();
+                    assert g.IsConnected(n, m);
+                    assert m in out_ns;
+                    assert m !in p.v[..|p.v|-count+2];
+                    assert index < |p.v|-count;
+                }
+            }
+        }
+    }
 
 
 }

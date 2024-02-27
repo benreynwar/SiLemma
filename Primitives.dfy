@@ -27,6 +27,14 @@ module Primitives {
         PortNames := C.PortNames2to1
     )
 
+    const xor_port_bound: C.CPort := 3
+
+    lemma nk_xor_valid()
+        ensures C.CNodeKindValid(0, xor_port_bound, nk_xor)
+    {
+    }
+
+
     //lemma XorValid()
     //    ensures C.CNodeKindValid(
 

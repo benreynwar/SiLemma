@@ -10,50 +10,153 @@ module CircuitPath {
     import DG
     import Utils
 
+    function {:opaque} CInputONPtoINP(c: Circuit, onp: HPNP): (r: HPNP)
+        // This takes an output from a CInput node, and connects it to
+        // the input into a CHier node in the next level up in the hierarchy.
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, onp)
+        requires HPNPtoNK(c, onp).CInput?
+        requires HPLength(onp.hpn.hp) > 0
+        ensures HPNPValidInput(c, r)
+    {
+        var (hier_n, parent_hp) := HPHeadTail(onp.hpn.hp);
+        HPNPValidHPValid(c, onp);
+        assert HierarchyPathValid(c, parent_hp);
+        // If it's an input inside a hier node, then it connects to
+        // the input port on the hier node on the next level up.
+        var inp := HPNP(HPNode(parent_hp, hier_n), onp.hpn.n as CPort);
+        var (hier_n, parent_hp) := HPHeadTail(onp.hpn.hp);
+        HPNPValidHPValid(c, onp);
+        var hier_c := HierarchyPathCircuit(c, parent_hp);
+        HierarchyPathCircuitValid(c, parent_hp);
+        var nk := hier_c.NodeKind(inp.hpn.n).value;
+        assert HierarchyPathValid(c, parent_hp);
+        reveal HPNPValidInput();
+        reveal CircuitValid();
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+        assert CircuitNodeKindValid(hier_c);
+        assert IsIPort(nk, inp.p);
+        assert HPNPValidInput(c, inp);
+        inp
+    }
+
+    function {:opaque} CHierONPtoINP(c: Circuit, onp: HPNP): (inp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, onp)
+        requires HPNPtoNK(c, onp).CHier?
+        ensures HPNPValidInput(c, inp)
+    {
+        HPNPValidHPValid(c, onp);
+        var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
+        HierarchyPathCircuitValid(c, onp.hpn.hp);
+        var nk := HPNPtoNK(c, onp);
+        assert CNodeKindValid(hp_c.HierLevel, hp_c.PortBound, nk);
+        var lower_c := HPNPtoSubcircuit(c, onp);
+        reveal HPNPValidOutput();
+        // It's an output port from a hier node.
+        // It only connects to the input into the corresponding Output node in that circuit.
+        // The port number should reference an output port CNode inside the Circuit.
+        var maybe_level_nk := lower_c.NodeKind(onp.p as CNode);
+        assert maybe_level_nk.Some?;
+        assert maybe_level_nk.value.COutput?;
+        var new_hp := ExtendHierarchyPath(c, onp.hpn.hp, onp.hpn.n);
+        var inp := HPNP(HPNode(new_hp, onp.p as CNode), 0);
+        reveal HPNPConnected();
+        assert HPNPValidOutput(c, onp);
+        reveal HPNPValidInput();
+        assert HPNPValidInput(c, inp);
+        inp
+    }
+
+    function CCombONPtoINP(c: Circuit, n: HPNP): (r: set<HPNP>)
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, n)
+        requires HPNPtoNK(c, n).CComb?
+        ensures forall m :: m in r ==> HPNPValid(c, m)
+    {
+        HPNPValidHPValid(c, n);
+        var hp_c := HierarchyPathCircuit(c, n.hpn.hp);
+        reveal HPNPValidOutput();
+        reveal HPNPValidInput();
+        var nk := hp_c.NodeKind(n.hpn.n).value;
+        var inps := set p: CPort | (p in nk.IPorts && nk.PathExists(n.p, p)) :: HPNP(n.hpn, p);
+        inps
+    }
+
+    function {:opaque} ONPtoINP(c: Circuit, onp: HPNP): (r: set<HPNP>)
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, onp)
+        ensures forall inp :: inp in r ==> HPNPValidInput(c, inp)
+    {
+        HPNPValidHPValid(c, onp);
+        var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
+        reveal HPNPValidOutput();
+        var nk := hp_c.NodeKind(onp.hpn.n).value;
+        match nk
+        case CInput() => if HPLength(onp.hpn.hp) > 0 then {CInputONPtoINP(c, onp)} else {}
+        case CHier(_) => {CHierONPtoINP(c, onp)}
+        case CComb(_, _, _, _, _) => CCombONPtoINP(c, onp)
+        case CSeq() => {}
+        case CConst(v) => {}
+    }
+
     predicate {:opaque} HPNPOtoIConnected(c: Circuit, a: HPNP, b: HPNP)
         requires CircuitValid(c)
         requires HPNPValidOutput(c, a)
         requires HPNPValidInput(c, b)
     {
         HPNPValidHPValid(c, a);
-        var a_c := HierarchyPathCircuit(c, a.hpn.hp);
-        var maybe_a_nk := a_c.NodeKind(a.hpn.n);
-        match maybe_a_nk
-        case None => false
-        case Some(a_nk) =>
-            match a_nk
-            case CInput => (
-                // This is an output from a CInput. It's not connected.
-                if HPLength(a.hpn.hp) == 0 then
-                    false
-                else
-                    var (hier_n, parent_hp) := HPHeadTail(a.hpn.hp);
-                    // If it's an input inside a hier node, then it connects to
-                    // the input port on the hier node on the next level up.
-                    if parent_hp == b.hpn.hp then
-                        var hier_inp := HPNP(HPNode(parent_hp, hier_n), a.hpn.n as CPort);
-                        hier_inp == b
-                    else
-                        false
-            )
-            case CHier(_) => (
-                reveal HPNPValidOutput();
-                var lower_c := NodeToSubcircuit(a_c, a.hpn.n);
-                // It's an output port from a hier node.
-                // It only connects to the input into the corresponding Output node in that circuit.
-                var maybe_level_nk := lower_c.NodeKind(a.p as CNode);
-                match maybe_level_nk
-                case Some(Output) =>
-                    var new_hp := ExtendHierarchyPath(c, a.hpn.hp, a.hpn.n);
-                    var hier_inp := HPNP(HPNode(new_hp, a.p as CNode), 0);
-                    hier_inp == b 
-                case _ => false
-            )
-            case CComb(_, _, path_exists, _, _) =>
-                (a.hpn.hp == b.hpn.hp) &&
-                (a.hpn.n == b.hpn.n) &&
-                path_exists(a.p, b.p)
-            case CReg => false
+        var onps := ONPtoINP(c, a);
+        b in onps
+    }
+
+    function {:opaque} INPtoONP(c: Circuit, inp: HPNP): (onp: HPNP)
+        requires CircuitValid(c)
+        requires CircuitComplete(c)
+        requires HPNPValidInput(c, inp)
+        ensures HPNPValidOutput(c, onp)
+    {
+        reveal HPNPConnected();
+        reveal HPNPItoOConnected();
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+        var inp_c := HierarchyPathCircuit(c, inp.hpn.hp);
+        HPCircuitComplete(c, inp.hpn.hp);
+        assert CircuitComplete(inp_c);
+        var inp_inp := NP(inp.hpn.n, inp.p);
+        reveal CircuitComplete();
+        var onp_onp := inp_c.PortSource(inp_inp).value;
+        var onp := HPNP(HPNode(inp.hpn.hp, onp_onp.n), onp_onp.p);
+        reveal CircuitValid();
+        var maybe_onp := INPtoMaybeONP(c, inp);
+        assert maybe_onp.Some?;
+        maybe_onp.value
+    }
+
+    function INPtoMaybeONP(c: Circuit, inp: HPNP): (onp: Option<HPNP>)
+        requires CircuitValid(c)
+        requires HPNPValidInput(c, inp)
+        ensures onp.Some? ==> HPNPValidOutput(c, onp.value)
+    {
+        reveal HPNPConnected();
+        reveal HPNPItoOConnected();
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+        var inp_c := HierarchyPathCircuit(c, inp.hpn.hp);
+        HierarchyPathCircuitValid(c, inp.hpn.hp);
+        var inp_inp := NP(inp.hpn.n, inp.p);
+        reveal CircuitComplete();
+        var maybe_onp_onp := inp_c.PortSource(inp_inp);
+        match maybe_onp_onp
+        case None =>
+            None
+        case Some(onp_onp) =>
+            var onp := HPNP(HPNode(inp.hpn.hp, onp_onp.n), onp_onp.p);
+            reveal CircuitValid();
+            assert CircuitValid(inp_c);
+            assert HPNPValidOutput(c, onp);
+            Some(onp)
     }
 
     predicate {:opaque} HPNPItoOConnected(c: Circuit, a: HPNP, b: HPNP)
@@ -61,11 +164,25 @@ module CircuitPath {
         requires HPNPValidInput(c, a)
         requires HPNPValidOutput(c, b)
     {
-        HPNPValidHPValid(c, a);
-        var a_c := HierarchyPathCircuit(c, a.hpn.hp);
-        var inp := NP(a.hpn.n, a.p);
-        var onp := NP(b.hpn.n, b.p);
-        a_c.PortSource(inp) == Some(onp)
+        var maybe_inp := INPtoMaybeONP(c, a);
+        match maybe_inp
+        case None =>
+            false
+        case Some(inp) =>
+            inp == b
+    }
+
+    lemma HPNPItoOConnectedINPtoONP(c: Circuit, inp: HPNP, m: HPNP)
+        requires CircuitValid(c)
+        requires CircuitComplete(c)
+        requires HPNPValidInput(c, inp)
+        requires HPNPValidOutput(c, m)
+        ensures
+            var onp := INPtoONP(c, inp);
+            HPNPItoOConnected(c, inp, m) <==> m == onp
+    {
+        reveal INPtoONP();
+        reveal HPNPItoOConnected();
     }
 
     predicate {:opaque} HPNPConnected(c: Circuit,  a: HPNP, b: HPNP)
@@ -84,10 +201,40 @@ module CircuitPath {
         hp_seq + [hpnp.hpn.n as nat, hpnp.p as nat]
     }
 
+    function SeqNatToHPNP(ns: seq<nat>): (r: Option<HPNP>)
+    {
+        if |ns| < 2 then
+            None
+        else
+            var p := ns[|ns|-1];
+            var n := ns[|ns|-2];
+            var hp_seq := seq(|ns|-2, (i: nat) requires i < |ns| => ns[i] as CNode);
+            Some(HPNP(HPNode(HP(hp_seq), n as CNode), p as CPort))
+    }
+
     function HPNPToNat(hpnp: HPNP): nat
     {
         var ns := HPNPToSeqNat(hpnp);
         SeqNatToNat.ArbLenNatsToNat(ns)
+    }
+
+    function NatToHPNP(n: nat): Option<HPNP>
+    {
+        var ns := SeqNatToNat.NatToArbLenNats(n);
+        var hpnp := SeqNatToHPNP(ns);
+        hpnp
+    }
+
+    lemma NatToHPNPToNat(n: nat)
+        requires NatToHPNP(n).Some?
+        ensures HPNPToNat(NatToHPNP(n).value) == n
+    {
+    }
+
+    lemma HPNPToNatToHPNP(hpnp: HPNP)
+        ensures NatToHPNP(HPNPToNat(hpnp)).Some?
+        ensures NatToHPNP(HPNPToNat(hpnp)).value == hpnp
+    {
     }
 
     lemma HPLengthBound(c: Circuit, hp: HierarchyPath)
@@ -178,6 +325,7 @@ module CircuitPath {
             hpnp => HPNPValid(c, hpnp),
             (a, b) => HPNPConnected(c, a, b),
             HPNPToNat,
+            NatToHPNP,
             CircuitBounds.HPNPBound(c)
         )
     }

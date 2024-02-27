@@ -4,7 +4,6 @@ module Circuit {
     import opened Std.Wrappers
     import Std.Collections.Seq
     import SeqExt
-    import MapExt
 
     newtype CPort = nat
     const INPUT_PORT: CPort := 0
@@ -112,7 +111,7 @@ module Circuit {
         reveal CircuitValid();
         assert n < c.NodeBound;
         forall i: nat | i < c.NodeBound as nat
-            ensures i as CNode in all_cnodes;
+            ensures i as CNode in all_cnodes
         {
             assert all_cnodes[i] == i as CNode;
         }
@@ -282,6 +281,21 @@ module Circuit {
         var maybe_nk := hp_c.NodeKind(hpnp.hpn.n);
         maybe_nk.Some? &&
         IsOPort(maybe_nk.value, hpnp.p)
+    }
+
+    lemma HPNPNotBothValidInputOutput(c: Circuit, hpnp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValid(c, hpnp)
+        ensures !(HPNPValidOutput(c, hpnp) && HPNPValidInput(c, hpnp))
+    {
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+        assert HierarchyPathValid(c, hpnp.hpn.hp);
+        var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
+        HierarchyPathCircuitValid(c, hpnp.hpn.hp);
+        var nk := hp_c.NodeKind(hpnp.hpn.n).value;
+        reveal CircuitValid();
+        assert CircuitNodeKindValid(hp_c);
     }
 
     predicate HPNPValid(c: Circuit, hpnp: HPNP)
@@ -494,8 +508,8 @@ module Circuit {
             CircuitValid(subc)
         case CComb(iports, oports, path_exists, behav, names) =>
           (forall a: CPort, b: CPort ::
-              (a !in iports ==> !nk.PathExists(a, b)) &&
-              (b !in oports ==> !nk.PathExists(a, b)))
+              (a !in oports ==> !nk.PathExists(a, b)) &&
+              (b !in iports ==> !nk.PathExists(a, b)))
           &&
           (forall a: CPort ::
               !(a in iports && a in oports))
@@ -597,7 +611,7 @@ module Circuit {
         requires CircuitValid(c)
         decreases c.HierLevel
     {
-        (forall inp: NP :: NPValid(c, inp) ==> c.PortSource(inp).Some?) &&
+        (forall inp: NP :: NPValidInput(c, inp) ==> c.PortSource(inp).Some?) &&
         (forall n: CNode :: c.NodeKind(n).Some? && c.NodeKind(n).value.CHier? ==>
             var subc := c.NodeKind(n).value.c;
             CircuitValid(subc) &&
