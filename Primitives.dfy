@@ -21,8 +21,8 @@ module Primitives {
     }
 
     const nk_xor := C.CComb(
-        IPorts := {0, 1},
-        OPorts := {2},
+        IPorts := [0, 1],
+        OPorts := [2],
         PathExists := (a: C.CPort, b: C.CPort) => (
             match (a, b)
             case (2, 0) => true
@@ -55,8 +55,8 @@ module Primitives {
     }
 
     const nk_and: C.CNodeKind := C.CComb(
-        IPorts := {0 as C.CPort, 1 as C.CPort},
-        OPorts := {2 as C.CPort},
+        IPorts := [0 as C.CPort, 1 as C.CPort],
+        OPorts := [2 as C.CPort],
         PathExists := BinaryPathExists,
         Behav := AndBehav,
         PortNames := PortNames2to1

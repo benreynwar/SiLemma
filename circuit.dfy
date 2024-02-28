@@ -17,8 +17,8 @@ module Circuit {
       | CHier(c: Circuit)
         // A node representing combinatorial logic.
       | CComb(
-          IPorts: set<CPort>,
-          OPorts: set<CPort>,
+          IPorts: seq<CPort>,
+          OPorts: seq<CPort>,
           PathExists: (CPort, CPort) -> bool,
           Behav: map<CPort, bool> -> Option<map<CPort, bool>>,
           PortNames: string -> Option<CPort>
@@ -31,6 +31,116 @@ module Circuit {
       | COutput()
         // A register.
       | CSeq()
+
+    function PortListBoundX(pl: seq<nat>): nat
+    {
+        if |pl| == 0 then
+            0 as nat
+        else
+            var m: nat := Seq.Max(pl);
+            m
+    }
+
+    function PortListBound(pl: seq<CPort>): CPort
+    {
+        if |pl| == 0 then
+            0 as CPort
+        else
+            var pl_nat := seq(|pl|, (index: nat) requires index < |pl| => pl[index] as nat);
+            var m: nat := Seq.Max(pl_nat);
+            m as CPort
+    }
+
+    lemma NKPortBoundBinds(nk: CNodeKind)
+        ensures 
+            var bound := NKPortBound(nk);
+            forall p: CPort ::
+                (IsIPort(nk, p) ==> p < bound) &&
+                (IsOPort(nk, p) ==> p < bound)
+    {
+        var bound := NKPortBound(nk);
+        match nk
+        case CHier(subc) => {
+            assert forall p: CPort ::
+                (IsIPort(nk, p) ==> p < bound) &&
+                (IsOPort(nk, p) ==> p < bound);
+        }
+        case CComb(iports, oports, path_exists, behav, name) => {
+            assert forall p: CPort ::
+                (IsIPort(nk, p) ==> p < bound) &&
+                (IsOPort(nk, p) ==> p < bound);
+        }
+        case CInput() => {
+        }
+        case CConst(v) =>  {
+        }
+        case COutput() => {
+        } 
+        case CSeq() => {
+            assert forall p: CPort ::
+                (IsIPort(nk, p) ==> p < bound) &&
+                (IsOPort(nk, p) ==> p < bound);
+        }
+    }
+
+    function MaxNodeInternal(c: Circuit, f: CNode -> bool, n: CNode): (r: Option<CNode>)
+        ensures r.None? ==> !exists m: CNode :: m <= n && f(m)
+        ensures r.Some? ==> !exists m: CNode :: m > r.value && m <= n && f(m)
+        decreases n
+    {
+        if f(n) then
+            Some(n)
+        else
+            if n == 0 then
+                None
+            else
+                MaxNodeInternal(c, f, n-1)
+    }
+
+    function CInputNodeBound(c: Circuit): (r: CNode)
+        requires CircuitValid(c)
+        ensures forall n: CNode ::
+            c.NodeKind(n).Some? && c.NodeKind(n).value.CInput? ==>
+            n < r
+    {
+        reveal CircuitValid();
+        assert forall n: CNode ::
+            c.NodeKind(n).Some? ==> n < c.NodeBound;
+        var maybe_n := MaxNodeInternal(c, n => c.NodeKind(n).Some? && c.NodeKind(n).value.CInput?, c.NodeBound-1);
+        match maybe_n
+        case None => 0
+        case Some(n) => n + 1
+    }
+
+    function COutputNodeBound(c: Circuit): (r: CNode)
+        ensures forall n: CNode ::
+            c.NodeKind(n).Some? && c.NodeKind(n).value.COutput? ==>
+            n < r
+    {
+        var maybe_n := MaxNodeInternal(c, n => c.NodeKind(n).Some? && c.NodeKind(n).value.COutput?, c.NodeBound-1);
+        match maybe_n
+        case None => 0
+        case Some(n) => n + 1
+    }
+
+
+    function NKPortBound(nk: CNodeKind): CPort
+    {
+        var bound := match nk
+        case CHier(c) =>
+            var max_i := CInputNodeBound(c);
+            var max_o := COutputNodeBound(c);
+            (if max_i > max_o then max_i else max_o) as CPort
+        case CComb(iports, oports, _, _, _) =>
+            var max_i := PortListBound(iports);
+            var max_o := PortListBound(oports);
+            if max_i > max_o then max_i+1 else max_o+1
+        case CConst(_) => OUTPUT_PORT +1
+        case CInput() => OUTPUT_PORT +1
+        case COutput() => INPUT_PORT +1
+        case CSeq() => (if INPUT_PORT > OUTPUT_PORT then INPUT_PORT else OUTPUT_PORT)+1;
+        bound
+    }
 
     predicate CNodeIsCHier(c: Circuit, n: CNode)
         requires CircuitValid(c)
@@ -196,7 +306,7 @@ module Circuit {
         // the input and output nodes.
         case CHier(subc) =>
             set n | n < subc.NodeBound && subc.NodeKind(n) == Some(CInput) :: n as CPort
-        case CComb(iports, oports, path_exists, behav, names) => iports
+        case CComb(iports, oports, path_exists, behav, names) => Seq.ToSet(iports)
         case CInput() => {}
         case CConst(v) => {}
         case COutput() => {0 as CPort}
@@ -221,7 +331,7 @@ module Circuit {
         match nk
         case CHier(subc) =>
             set n | n < subc.NodeBound && subc.NodeKind(n) == Some(COutput) :: n as CPort
-        case CComb(iports, oports, path_exists, behav, names) => oports
+        case CComb(iports, oports, path_exists, behav, names) => Seq.ToSet(oports)
         case CInput() => {0 as CPort}
         case COutput() => {}
         case CConst(v) => {0 as CPort}
@@ -497,28 +607,36 @@ module Circuit {
         HPNode(hp, n)
     }
 
+    ghost predicate CNodeKindSomewhatValid(nk: CNodeKind)
+    {
+        (
+        match nk
+        case CComb(iports, oports, path_exists, behav, names) =>
+          (forall a: CPort, b: CPort ::
+              (a !in oports ==> !nk.PathExists(a, b)) &&
+              (b !in iports ==> !nk.PathExists(a, b)))
+        case _ => true
+        ) && (
+            forall p: CPort ::
+                !(IsIPort(nk, p) && IsOPort(nk, p))
+        )
+    }
+
     ghost predicate CNodeKindValid(
         hier_level: nat, port_bound: CPort, nk: CNodeKind)
         decreases hier_level, 0
     {
+        CNodeKindSomewhatValid(nk) &&
         (
         match nk
         case CHier(subc) =>
             (subc.HierLevel < hier_level) &&
             CircuitValid(subc)
-        case CComb(iports, oports, path_exists, behav, names) =>
-          (forall a: CPort, b: CPort ::
-              (a !in oports ==> !nk.PathExists(a, b)) &&
-              (b !in iports ==> !nk.PathExists(a, b)))
-          &&
-          (forall a: CPort ::
-              !(a in iports && a in oports))
         case _ => true
         ) && (
             forall p: CPort ::
                 (IsIPort(nk, p) ==> p < port_bound) &&
-                (IsOPort(nk, p) ==> p < port_bound) &&
-                !(IsIPort(nk, p) && IsOPort(nk, p))
+                (IsOPort(nk, p) ==> p < port_bound)
         )
     }
 

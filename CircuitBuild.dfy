@@ -188,6 +188,7 @@ module CircuitBuild {
         EmptyCircuitHasNoHPNPConnected();
         assert forall n, m: HPNP :: !g.IsConnected(n, m);
         reveal DG.DigraphLoop();
+        reveal DG.PathValid();
         assert !DG.DigraphLoop(g);
     }
 
@@ -207,15 +208,49 @@ module CircuitBuild {
         c
     }
 
-    function AddNode(g: Circuit, nk: CNodeKind, ip: map<CPort, NP>): (r: (Circuit, CNode))
-        requires CircuitValid(g)
+    //function AddNodeEquiv(c: Circuit, nk: CNodeKind, ip: map<CPort, NP>)
+    //{
+    //    var new_c := AddNode(c, nk, ip);
+    //}
+
+    function AddNodeNoInputs(c: Circuit, nk: CNodeKind): (r: (Circuit, CNode))
+        requires CircuitValid(c)
+        requires !nk.CHier?
+        requires CNodeKindSomewhatValid(nk)
+        ensures CircuitValid(r.0)
+    {
+        reveal CircuitValid();
+        var new_node := c.NodeBound;
+        var nk_port_bound := NKPortBound(nk);
+        var new_c := Circuit(
+            NodeKind := n => if n == new_node then Some(nk) else c.NodeKind(n),
+            PortSource := c.PortSource,
+            NodeBound := c.NodeBound+1,
+            PortBound := if nk_port_bound > c.PortBound then nk_port_bound else c.PortBound,
+            HierLevel := c.HierLevel,
+            PortNames := c.PortNames
+        );
+        assert new_node < new_c.NodeBound;
+        assert forall n: CNode :: (new_c.NodeKind(n) == (if (n == new_node) then
+            Some(nk) else c.NodeKind(n))) ;
+        assert CircuitNodeKindValid(c);
+        assert CircuitPortSourceValid(c);
+        assert forall p: CPort ::
+                (IsIPort(nk, p) ==> p < new_c.PortBound) &&
+                (IsOPort(nk, p) ==> p < new_c.PortBound);
+        assert CNodeKindValid(new_c.HierLevel, new_c.PortBound, nk);
+        (new_c, new_node)
+    }
+
+    function AddNode(c: Circuit, nk: CNodeKind, ip: map<CPort, NP>): (r: (Circuit, CNode))
+        requires CircuitValid(c)
         requires !nk.CHier?
         ensures CircuitValid(r.0)
     {
         reveal CircuitValid();
-        var new_node := g.NodeBound;
-        var c := Circuit(
-            NodeKind := n => if n == new_node then Some(nk) else g.NodeKind(n),
+        var new_node := c.NodeBound;
+        var new_c := Circuit(
+            NodeKind := n => if n == new_node then Some(nk) else c.NodeKind(n),
             PortSource := (inp: NP) =>
                 if inp.n == new_node then
                     if inp.p in ip then
@@ -223,12 +258,17 @@ module CircuitBuild {
                     else
                         None
                 else
-                    g.PortSource(inp),
-            NodeBound := g.NodeBound+1,
-            PortBound := g.PortBound,
-            HierLevel := g.HierLevel,
-            PortNames := g.PortNames
+                    c.PortSource(inp),
+            NodeBound := c.NodeBound+1,
+            PortBound := c.PortBound,
+            HierLevel := c.HierLevel,
+            PortNames := c.PortNames
         );
+        assert new_node < new_c.NodeBound;
+        assert forall n: CNode :: (new_c.NodeKind(n) == (if (n == new_node) then
+            Some(nk) else c.NodeKind(n))) ;
+        assert CircuitNodeKindValid(c);
+        assert CircuitPortSourceValid(c);
         (c, new_node)
     }
 
