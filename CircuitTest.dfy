@@ -9,18 +9,31 @@ module CircuitTest {
     import DG
     // Make a circuit with a single XOR gate.
 
+    const i0_n: C.CNode := 0
+    const i1_n: C.CNode := 1
+    const o_n: C.CNode := 2
+    const xor_n: C.CNode := 3
+
+    const i0_p := C.NP(i0_n, C.OUTPUT_PORT)
+    const i1_p := C.NP(i1_n, C.OUTPUT_PORT)
+    const o_p := C.NP(o_n, C.INPUT_PORT)
+
+    const xor_i0 := C.NP(xor_n, 0)
+    const xor_i1 := C.NP(xor_n, 1)
+    const xor_o := C.NP(xor_n, 2)
+
     const circ := C.Circuit(
         NodeKind := (n: C.CNode) => (match n
-            case 0 => Some(C.CInput())
-            case 1 => Some(C.CInput())
-            case 2 => Some(C.COutput())
-            case 3 => Some(P.nk_xor)
+            case i0_n => Some(C.CInput())
+            case i1_n => Some(C.CInput())
+            case o_n => Some(C.COutput())
+            case xor_n => Some(P.nk_xor)
             case _ => None
             ),
         PortSource := (np: C.NP) => (match np
-            case NP(3, 0) => Some(C.NP(0, 1))
-            case NP(3, 1) => Some(C.NP(1, 1))
-            case NP(2, 0) => Some(C.NP(3, 2))
+            case NP(3, 0) => Some(i0_p)
+            case NP(3, 1) => Some(i1_p)
+            case NP(2, 0) => Some(xor_o)
             case _ => None),
         PortNames := _ => None,
         NodeBound := 4,
@@ -29,6 +42,16 @@ module CircuitTest {
     )
     const HierLevel: nat := 0
     const PortBound: C.CPort := 4
+
+    lemma Stuff()
+    {
+        CircValid();
+        assert C.NPValid(circ, xor_i0);
+        var xor_i0_hpnp := C.HPNP(C.HPNode(C.HP([]), xor_n), 0);
+        reveal C.HPNPValidInput();
+        reveal C.HPNPValidOutput();
+        assert C.HPNPValid(circ, xor_i0_hpnp);
+    }
 
     lemma CircValid()
         ensures C.CircuitValid(circ)
@@ -51,6 +74,9 @@ module CircuitTest {
     {
         CircValid();
         CircComplete();
+        var g := CP.CtoGV(circ);
+        var all_nodes := DG.AllNodes(g);
+        assert |all_nodes| == 6;
     }
 
     lemma Blah()
