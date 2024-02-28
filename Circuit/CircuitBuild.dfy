@@ -1,10 +1,13 @@
 module CircuitBuild {
 
     import opened Std.Wrappers
-    import opened Circuit
-    import opened CircuitPath
-    import CS = CircuitStuff
-    import P = Primitives
+    import opened CircuitHPNP
+    import opened CircuitBase
+    import opened CircuitHierarchy
+    import opened CircuitPortBounds
+    import opened CircuitToGraph
+    import DP = DigraphPaths
+    import DSB = DigraphStepBack
 
     // Proove that there are no loops in a small circuit.
     // Take a set of HPNP.
@@ -73,7 +76,7 @@ module CircuitBuild {
             var g := CtoG(c);
             DG.DigraphValid(g) &&
             DG.NodeValid(g, n) &&
-            (StepBack(c, n) == DG.StepBack(g, n))
+            (StepBack(c, n) == DSB.StepBack(g, n))
     {
         var g := CtoG(c);
         CtoGValid(c);
@@ -85,7 +88,7 @@ module CircuitBuild {
         reveal HPNPItoOConnected();
         reveal HPNPOtoIConnected();
         StepBackMatchesHPNPConnected(c, n);
-        assert forall m :: m in DG.StepBack(g, n) ==> g.IsConnected(n, m);
+        assert forall m :: m in DSB.StepBack(g, n) ==> g.IsConnected(n, m);
         assert forall m :: m in StepBack(c, n) ==> g.IsConnected(n, m);
     }
 
@@ -176,7 +179,7 @@ module CircuitBuild {
             var g := CtoGV(c);
             (forall n: HPNP :: !g.IsNode(n)) &&
             (forall n, m: HPNP :: !g.IsConnected(n, m)) &&
-            (!DG.DigraphLoop(g))
+            (!DP.DigraphLoop(g))
     {
         var c := MakeEmptyCircuit();
         EmptyCircuitHasNoHPNP();
@@ -187,9 +190,9 @@ module CircuitBuild {
         assert forall n: HPNP :: !g.IsNode(n);
         EmptyCircuitHasNoHPNPConnected();
         assert forall n, m: HPNP :: !g.IsConnected(n, m);
-        reveal DG.DigraphLoop();
+        reveal DP.DigraphLoop();
         reveal DG.PathValid();
-        assert !DG.DigraphLoop(g);
+        assert !DP.DigraphLoop(g);
     }
 
     function AddIPort(g: Circuit): (r: (Circuit, NP))
@@ -271,23 +274,5 @@ module CircuitBuild {
         assert CircuitPortSourceValid(c);
         (c, new_node)
     }
-
-    function MakeOneBitAdder(): Circuit
-    {
-        var g := MakeEmptyCircuit();
-        assert CircuitValid(g);
-        var (g, i_0) := AddIPort(g);
-        assert CircuitValid(g);
-        var (g, i_1) := AddIPort(g);
-        var (g, node_xor) := AddNode(g, P.nk_xor, map[0 := i_0, 1 := i_1]);
-        var xor_output := NP(node_xor, 0);
-        var g := AddOPort(g, xor_output);
-        var (g, node_add) := AddNode(g, P.nk_and, map[0 := i_0, 1 := i_1]);
-        var add_output := NP(node_add, 0);
-        var g := AddOPort(g, add_output);
-        assert CircuitValid(g);
-        g
-    }
-
 
 }

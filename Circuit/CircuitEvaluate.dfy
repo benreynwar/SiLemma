@@ -1,10 +1,13 @@
-module CircuitStuff {
+module CircuitEvaluate {
 
     import opened Std.Wrappers
     import Std.Collections.Seq
-    import opened Circuit
-    import opened CircuitPath
-    import DG
+    import opened CircuitBase
+    import opened CircuitHPNP
+    import opened CircuitHierarchy
+    import opened CircuitToGraph
+    import DG = DigraphBase
+    import DP = DigraphPaths
 
     function {:vcs_split_on_every_assert} EvaluateINP(
             c: Circuit, m: HPNP -> bool, p: DG.Path<HPNP>): bool
@@ -12,11 +15,11 @@ module CircuitStuff {
         requires CircuitComplete(c)
         requires CircuitNoLoops(c)
         requires |p.v| > 0
-        requires HPNPValidInput(c, DG.PathEnd(p))
+        requires HPNPValidInput(c, DP.PathEnd(p))
         requires PathValid(c, p)
         decreases NumberOfRemainingNodes(c, p), 1
     {
-        var inp := DG.PathEnd(p);
+        var inp := DP.PathEnd(p);
         var onp := INPtoONP(c, inp);
         assert HPNPValidOutput(c, onp);
         var new_p := PathAppend(c, p, onp);
@@ -31,12 +34,12 @@ module CircuitStuff {
         requires CircuitComplete(c)
         requires CircuitNoLoops(c)
         requires |p.v| > 0
-        requires HPNPValidOutput(c, DG.PathEnd(p))
+        requires HPNPValidOutput(c, DP.PathEnd(p))
         requires PathValid(c, p)
-        requires HPNPtoNK(c, DG.PathEnd(p)).CInput?
+        requires HPNPtoNK(c, DP.PathEnd(p)).CInput?
         decreases NumberOfRemainingNodes(c, p), 1
     {
-        var onp := DG.PathEnd(p);
+        var onp := DP.PathEnd(p);
         if HPLength(onp.hpn.hp) == 0 then
             // This is an input to the top level.
             isigs(onp)
@@ -58,12 +61,12 @@ module CircuitStuff {
         requires CircuitComplete(c)
         requires CircuitNoLoops(c)
         requires |p.v| > 0
-        requires HPNPValidOutput(c, DG.PathEnd(p))
+        requires HPNPValidOutput(c, DP.PathEnd(p))
         requires PathValid(c, p)
-        requires HPNPtoNK(c, DG.PathEnd(p)).CHier?
+        requires HPNPtoNK(c, DP.PathEnd(p)).CHier?
         decreases NumberOfRemainingNodes(c, p), 1
     {
-        var onp := DG.PathEnd(p);
+        var onp := DP.PathEnd(p);
         var inp := CHierONPtoINP(c, onp);
         var new_p := PathAppend(c, p, inp);
         NumberOfRemainingNodesDecreases(c, p, inp);
@@ -77,8 +80,8 @@ module CircuitStuff {
         requires CircuitNoLoops(c)
         requires PathValid(c, p)
         requires |p.v| > 0
-        requires HPNPValidOutput(c, DG.PathEnd(p))
-        requires HPNPtoNK(c, DG.PathEnd(p)).CComb?
+        requires HPNPValidOutput(c, DP.PathEnd(p))
+        requires HPNPtoNK(c, DP.PathEnd(p)).CComb?
         decreases NumberOfRemainingNodes(c, p), 1
     {
         true
@@ -90,10 +93,10 @@ module CircuitStuff {
         requires CircuitNoLoops(c)
         requires PathValid(c, p)
         requires |p.v| > 0
-        requires HPNPValidOutput(c, DG.PathEnd(p))
+        requires HPNPValidOutput(c, DP.PathEnd(p))
         decreases NumberOfRemainingNodes(c, p), 2
     {
-        var onp := DG.PathEnd(p);
+        var onp := DP.PathEnd(p);
         HPNPValidHPValid(c, onp);
         var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
         reveal HPNPValidOutput();

@@ -1,7 +1,8 @@
 module Primitives {
 
     import opened Std.Wrappers
-    import C = Circuit
+    import C = CircuitBase
+    import opened CircuitValidity
 
     function XorBehav(m: map<C.CPort, bool>): Option<map<C.CPort, bool>>
     {
@@ -36,7 +37,7 @@ module Primitives {
     const xor_port_bound: C.CPort := 3
 
     lemma nk_xor_valid()
-        ensures C.CNodeKindValid(0, xor_port_bound, nk_xor)
+        ensures CNodeKindValid(0, xor_port_bound, nk_xor)
     {
     }
 

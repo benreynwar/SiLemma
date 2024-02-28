@@ -1,8 +1,11 @@
 // Working to prove that HPNP are bounded.
-module CircuitBounds {
+module CircuitNodeBounds {
 
+    import SeqExt
+    import SeqNatToNat
     import opened Std.Wrappers
-    import opened Circuit
+    import opened CircuitBase
+    import opened CircuitHierarchy
     import Seq=Std.Collections.Seq
 
     lemma {:vcs_split_on_every_assert} HierBoundEncloses(
@@ -219,5 +222,77 @@ module CircuitBounds {
         var ns := Seq.Repeat(max_index, c.HierLevel+2);
         SeqNatToNat.ArbLenNatsToNat(ns)
     }
+
+    lemma SubcircuitInDirectSubcircuits(c: Circuit, n: CNode)
+        requires CircuitValid(c)
+        requires c.NodeKind(n).Some? && c.NodeKind(n).value.CHier?
+        ensures c.NodeKind(n).value.c in DirectSubcircuits(c)
+    {
+        assert CNodeIsCHier(c, n);
+        var all_cnodes := seq(c.NodeBound, (i: nat) requires i < c.NodeBound as nat => i as CNode);
+        var all_subcircuit_cnodes := Seq.Filter(i => CNodeIsCHier(c, i), all_cnodes);
+        var all_subcircuits := Seq.Map(
+            i requires CNodeIsCHier(c, i) => c.NodeKind(i).value.c, all_subcircuit_cnodes);
+        assert all_subcircuits == DirectSubcircuits(c);
+        reveal CircuitValid();
+        assert n < c.NodeBound;
+        forall i: nat | i < c.NodeBound as nat
+            ensures i as CNode in all_cnodes
+        {
+            assert all_cnodes[i] == i as CNode;
+        }
+        assert n in all_cnodes;
+        SeqExt.FilterStillContains((i: CNode) => CNodeIsCHier(c, i), all_cnodes, n);
+        assert n in all_subcircuit_cnodes;
+        SeqExt.MapStillContains(
+            (i: CNode) requires CNodeIsCHier(c, i) => c.NodeKind(i).value.c, all_subcircuit_cnodes, n);
+        assert c.NodeKind(n).value.c in all_subcircuits;
+    }
+
+    lemma AllSubcircuitsValid(c: Circuit)
+        requires CircuitValid(c)
+        ensures forall subc :: subc in DirectSubcircuits(c) ==>
+            CircuitValid(subc) && (subc.HierLevel < c.HierLevel)
+    {
+        forall subc | subc in DirectSubcircuits(c)
+            ensures CircuitValid(subc) && (subc.HierLevel < c.HierLevel)
+        {
+            SubcircuitValid(c, subc);
+        }
+    }
+
+    lemma SubcircuitValid(c: Circuit, subc: Circuit)
+        requires CircuitValid(c)
+        requires subc in DirectSubcircuits(c)
+        ensures CircuitValid(subc) && subc.HierLevel < c.HierLevel
+    {
+        InSubcircuitsExistsCNode(c, subc);
+        var n := SubcircuitToCNode(c, subc);
+        var nk := c.NodeKind(n).value;
+        reveal CircuitValid();
+        assert CNodeKindValid(c.HierLevel, c.PortBound, nk);
+        assert CircuitValid(subc);
+    }
+
+    lemma InSubcircuitsExistsCNode(c: Circuit, subc: Circuit)
+        requires CircuitValid(c)
+        requires subc in DirectSubcircuits(c)
+        ensures exists n: CNode :: CNodeIsCHier(c, n) && c.NodeKind(n).value.c == subc
+    {
+    }
+
+
+    ghost function SubcircuitToCNode(c: Circuit, subc: Circuit): (r: CNode)
+        requires CircuitValid(c)
+        requires subc in DirectSubcircuits(c)
+        ensures c.NodeKind(r).Some? && c.NodeKind(r).value.CHier?
+        ensures c.NodeKind(r).value.c == subc
+    {
+        InSubcircuitsExistsCNode(c, subc);
+        var n :| CNodeIsCHier(c, n) && c.NodeKind(n).value.c == subc;
+        n
+    }
+
+
 
 }
