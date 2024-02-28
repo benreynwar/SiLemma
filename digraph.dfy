@@ -1135,55 +1135,138 @@ module DG {
             MultipleStepSetBack(g, s, count-1)
     }
 
-    lemma NextInPathInStepBack<Node(!new)>(g: Digraph, n: Node, p: Path)
+    lemma {:vcs_split_on_every_assert} PathExistsEndInMultipleStepSet<Node(!new)>(g: Digraph, p: Path<Node>, in_ns: set<Node>)
         requires DigraphValid(g)
-        requires NodeValid(g, n)
         requires PathValid(g, p)
-        requires |p.v| > 1
-        requires n in p.v[..|p.v|-1]
+        requires |p.v| > 0
+        requires forall n :: n in in_ns ==> NodeValid(g, n)
+        requires PathStart(p) in in_ns
         ensures
-            var s := StepBack(g, n);
-            var index: nat :| index < |p.v|-1 && p.v[index] == n;
-            var m := p.v[index+1];
-            m in s
+            var out_s := MultipleStepSetBack(g, in_ns, |p.v|-1);
+            PathEnd(p) in out_s
+        decreases |p.v|
     {
-        var s := StepBack(g, n);
-        var index: nat :| index < |p.v|-1 && p.v[index] == n;
-        var m := p.v[index+1];
-        reveal PathValid();
-        assert g.IsConnected(n, m);
-        assert m in s;
+        var out_ns := MultipleStepSetBack(g, in_ns, |p.v|-1);
+        if |p.v| == 1 {
+            assert out_ns == in_ns;
+            assert PathEnd(p) == PathStart(p);
+            assert PathEnd(p) in out_ns;
+        } else {
+            var head := PathStart(p);
+            var tail := Path(p.v[1..]);
+            var intermed_ns := StepSetBack(g, in_ns);
+            reveal PathValid();
+            assert g.IsConnected(head, PathStart(tail));
+            assert PathStart(tail) in intermed_ns;
+            PathExistsEndInMultipleStepSet(g, tail, intermed_ns);
+        }
     }
 
-    //lemma MultipleStepSetBackGivesMaxPathLengthHelper<Node(!new)>(g: Digraph, p: Path, n: Node, in_ns: set<Node>, out_ns: set<Node>, count: nat)
-    //    requires |p.v| > 
-    //    requires forall p : Path<Node>, n: Node :: n in out_ns && |p.v| >= (count-1) ==> n !in p.v[..|p.v|-count+2];
-
-
-    lemma {:vcs_split_on_every_assert} MultipleStepSetBackGivesMaxPathLength<Node(!new)>(g: Digraph, in_ns: set<Node>, count: nat)
+    lemma IsNodeImpliesNodeValid<Node>(g: Digraph, n: Node)
         requires DigraphValid(g)
-        requires forall n :: n in in_ns ==> NodeValid(g, n)
-        requires MultipleStepSetBack(g, in_ns, count) == {};
-        ensures forall p : Path<Node>, n: Node :: n in in_ns && |p.v| >= count ==> n !in p.v[..|p.v|-count+1]
-        decreases count
+        requires g.IsNode(n)
+        ensures NodeValid(g, n)
     {
+        reveal DigraphValid();
+    }
+
+    function AllNodes<Node(!new)>(g: Digraph): (r: set<Node>)
+        requires DigraphValid(g)
+        ensures forall n: Node :: g.IsNode(n) ==> n in r
+        ensures forall n: Node :: n in r ==> g.IsNode(n)
+        ensures forall n: Node :: n in r ==> NodeValid(g, n)
+    {
+        reveal DigraphValid();
+        var mapped := set m: nat | m < g.NodeBound :: m;
+        var nodes := Set.Map(g.InvNodeMap, mapped);
+        var filter := (n: Option<Node>) => n.Some? && g.IsNode(n.value);
+        var filtered_nodes := Set.Filter(filter, nodes);
+        assert forall n :: n in filtered_nodes ==> filter(n);
+        var extracted_nodes := set n | n in filtered_nodes :: n.value;
+        extracted_nodes
+    }
+
+    lemma NoPathLengthXNoPathsLonger<Node>(g: Digraph, length: nat)
+        requires !exists p: Path<Node> :: |p.v| == length && PathValid(g, p)
+        ensures forall p: Path<Node> :: PathValid(g, p) ==> |p.v| < length
+    {
+        if exists p :: PathValid(g, p) && |p.v| >= length {
+            var p :| PathValid(g, p) && |p.v| >= length;
+            var q := Path(p.v[..length]);
+            reveal PathValid();
+            assert PathValid(g, q);
+        }
+    }
+
+    function RepeatLoopUntilLength(g: Digraph, p: Path, loop: Path, length: nat): (r: Path)
+        requires DigraphValid(g)
+        requires PathValid(g, p)
+        requires PathValid(g, loop) && PathLoop(loop)
+        requires |p.v| > 0
+        requires PathEnd(p) == PathStart(loop)
+        ensures |r.v| > length
+        ensures PathValid(g, r)
+        decreases length - |p.v|
+    {
+        reveal DigraphValid();
+        reveal PathValid();
+        if |p.v| > length then
+            p
+        else
+            var q := Path(p.v + loop.v[1..]);
+            var r := RepeatLoopUntilLength(g, q, loop, length);
+            r
+    }
+
+    lemma MultipleStepSetEmptyGivesNoLoop<Node(!new)>(g: Digraph, count: nat)
+        requires DigraphValid(g)
+        requires MultipleStepSetBack(g, AllNodes(g), count) == {}
+        ensures !DigraphLoop(g)
+    {
+        MultipleStepSetBackGivesMaxPathLength(g, count);
+        reveal DigraphLoop();
+        reveal PathValid();
+        if DigraphLoop(g) {
+            var p :| PathValid(g, p) && PathLoop(p);
+            var q := RepeatLoopUntilLength(g, p, p, count);
+        }
+    }
+
+    lemma {:vcs_split_on_every_assert} MultipleStepSetBackGivesMaxPathLength<Node(!new)>(g: Digraph, count: nat)
+        requires DigraphValid(g)
+        requires MultipleStepSetBack(g, AllNodes(g), count) == {}
+        ensures forall p : Path<Node> :: PathValid(g, p) ==> |p.v| <= count
+    {
+        // We want to show that if the input set is all nodes and the result is an empty set then the maximum path length is <= 'count'.
+        reveal PathValid();
+        var all_nodes := AllNodes(g);
+
+        assert forall n: Node :: g.IsNode(n) ==> NodeValid(g, n);
+
         if count == 0 {
-            assert in_ns == {};
-        } else {
-            var out_ns := StepSetBack(g, in_ns);
-            MultipleStepSetBackGivesMaxPathLength(g, out_ns, count-1);
-            assert forall p : Path<Node>, n: Node :: n in out_ns && |p.v| >= (count-1) ==> n !in p.v[..|p.v|-count+2];
-            forall p : Path<Node>, n: Node | n in in_ns && PathValid(g, p) && n in p.v {
-                var index: nat :| index < |p.v| && p.v[index] == n;
-                if index < |p.v|-1 {
-                    var m := p.v[index+1];
-                    reveal PathValid();
-                    assert g.IsConnected(n, m);
-                    assert m in out_ns;
-                    assert m !in p.v[..|p.v|-count+2];
-                    assert index < |p.v|-count;
+            assert MultipleStepSetBack(g, AllNodes(g), count) == all_nodes;
+            assert all_nodes == {};
+        }
+
+        if exists p: Path<Node> :: |p.v| == count+1 && PathValid(g, p) {
+            var p: Path<Node> :| |p.v| == count + 1 && PathValid(g, p);
+            assert forall n: Node :: n in p.v ==> NodeValid(g, n);
+            if count == 0 {
+                assert AllNodes(g) == {};
+                if |p.v| > 0 {
+                    var n := PathStart(p);
+                    assert n !in AllNodes(g);
+                    assert NodeValid(g, n);
+                    assert false;
                 }
+            } else {
+                PathExistsEndInMultipleStepSet(g, p, all_nodes);
             }
+            assert forall p : Path<Node> :: PathValid(g, p) ==> |p.v| <= count;
+        } else {
+            assert !exists p: Path<Node> :: |p.v| == count+1 && PathValid(g, p);
+            NoPathLengthXNoPathsLonger(g, count+1);
+            assert forall p : Path<Node> :: PathValid(g, p) ==> |p.v| <= count;
         }
     }
 
