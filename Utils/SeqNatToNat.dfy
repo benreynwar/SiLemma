@@ -617,6 +617,23 @@ module SeqNatToNat {
     // Show that each element increases.
   }
 
+  lemma {:vcs_split_on_every_assert} BoundIncreasesWithBound(l: nat, bounda: nat, boundb: nat)
+    requires l > 0
+    requires boundb > bounda
+    ensures NatsToNatBound(l, bounda) < NatsToNatBound(l, boundb)
+  {
+  }
+
+  lemma BoundIncreasesWithLengthBound(la: nat, lb: nat, bounda: nat, boundb: nat)
+    requires la > 0
+    requires lb > la
+    requires boundb > bounda
+    ensures NatsToNatBound(la, bounda) < NatsToNatBound(lb, boundb)
+  {
+    BoundIncreasesWithLength(la, lb, bounda);
+    BoundIncreasesWithBound(lb, bounda, boundb);
+  }
+
   lemma {:vcs_split_on_every_assert} ArbLenBoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
     requires la > 0
     requires lb > la

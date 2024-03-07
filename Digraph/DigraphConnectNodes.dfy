@@ -4,38 +4,41 @@ module DigraphConnectNodes {
     import opened DigraphPaths
 
     function ConnectNodes<Node(==)>(g: Digraph, n: Node, m: Node): (r: Digraph)
-        requires g.IsNode(n)
-        requires g.IsNode(m)
+        requires IsNode(g, n)
+        requires IsNode(g, m)
         requires n != m
-        requires !g.IsConnected(n, m)
+        requires !IsConnected(g, n, m)
     {
         Digraph(
-            g.IsNode,
-            (a, b) => ((a==n) && (b==m)) || g.IsConnected(a, b),
-            g.NodeMap,
-            g.InvNodeMap,
-            g.NodeBound
+            g.Nodes,
+            g.Connections + {(n, m)}
         )
     }
 
     lemma ConnectNodesDigraphValid<Node>(g: Digraph, n: Node, m: Node)
-        requires g.IsNode(n)
-        requires g.IsNode(m)
+        requires IsNode(g, n)
+        requires IsNode(g, m)
         requires n != m
-        requires !g.IsConnected(n, m)
+        requires !IsConnected(g, n, m)
         requires DigraphValid(g)
         ensures
             var r := ConnectNodes(g, n, m);
             DigraphValid(r)
     {
         reveal DigraphValid();
+        reveal IsNode();
+        reveal IsConnected();
+        var r := ConnectNodes(g, n, m);
+        assert (forall o, p: Node :: IsConnected(r, o, p) ==
+            (IsConnected(g, o, p) || ((o==n) && (p==m))));
+        assert (forall n: Node, m: Node :: IsConnected(r, n, m) ==> IsNode(r, n) && IsNode(r, m));
     }
 
     function ConnectNodesV<Node(==)>(g: Digraph, n: Node, m: Node): (r: Digraph)
-        requires g.IsNode(n)
-        requires g.IsNode(m)
+        requires IsNode(g, n)
+        requires IsNode(g, m)
         requires n != m
-        requires !g.IsConnected(n, m)
+        requires !IsConnected(g, n, m)
         requires DigraphValid(g)
         ensures DigraphValid(r)
     {
@@ -44,18 +47,23 @@ module DigraphConnectNodes {
     }
 
     lemma ConnectNodesPathStillValid<Node>(g: Digraph, n: Node, m: Node, p: Path<Node>)
-        requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
+        requires IsNode(g, n) && IsNode(g, m) && n != m && !IsConnected(g, n, m)
         requires PathValid(g, p)
         ensures
             var r := ConnectNodes(g, n, m);
             PathValid(r, p)
     {
         reveal PathValid(); 
+        var r := ConnectNodes(g, n, m);
+        reveal IsConnected();
+        reveal IsNode();
+        assert (forall o, p: Node :: IsConnected(r, o, p) ==
+            (IsConnected(g, o, p) || ((o==n) && (p==m))));
     }
 
     lemma ConnectNodesPathStillExists<Node(!new)>(
             g: Digraph, n: Node, m: Node, a: Node, b: Node)
-        requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
+        requires IsNode(g, n) && IsNode(g, m) && n != m && !IsConnected(g, n, m)
         requires PathExists(g, a, b)
         ensures
             var r := ConnectNodes(g, n, m);
@@ -68,14 +76,16 @@ module DigraphConnectNodes {
     }
 
     lemma ConnectNodesPathExists<Node(!new)>(g: Digraph, n: Node, m: Node)
-        requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
+        requires IsNode(g, n) && IsNode(g, m) && n != m && !IsConnected(g, n, m)
         ensures
             var r := ConnectNodes(g, n, m);
             PathExists(r, n, m)
     {
         var p := Path([n, m]);
         var r := ConnectNodes(g, n, m);
-        assert r.IsConnected(n, m);
+        reveal IsConnected();
+        reveal IsNode();
+        assert IsConnected(r, n, m);
         reveal PathValid();
         assert PathFromTo(r, p, n, m);
         PathExistsByExample(r, p, n, m);
@@ -85,7 +95,7 @@ module DigraphConnectNodes {
     // If there was already a path from b to a then adding a connection from a to b will
     // create a loop.
     lemma ConnectNodesDigraphLoop<Node(!new)>(g: Digraph, n: Node, m: Node)
-        requires g.IsNode(n) && g.IsNode(m) && n != m && !g.IsConnected(n, m)
+        requires IsNode(g, n) && IsNode(g, m) && n != m && !IsConnected(g, n, m)
         ensures
             var r := ConnectNodes(g, n, m);
             DigraphLoop(r) == DigraphLoop(g) || PathExists(g, m, n)
@@ -103,6 +113,8 @@ module DigraphConnectNodes {
         if PathExists(g, m, n) {
             var p :| PathFromTo(g, p, m, n);
             reveal PathValid();
+            reveal IsNode();
+            reveal IsConnected();
             assert PathFromTo(r, p, m, n);
             ConnectNodesPathStillValid(g, n, m, p);
             assert PathExists(r, m, n);
@@ -122,11 +134,13 @@ module DigraphConnectNodes {
                 // First assume that n to m is not in the path.
                 // Then prove that this is not possible.
                 if !exists index: nat :: index < |p.v|-1 && (p.v[index] == n) && (p.v[index+1] == m) {
+                    reveal IsConnected();
+                    reveal IsNode();
                     forall index: nat | index < |p.v|-1
-                        ensures g.IsConnected(p.v[index], p.v[index+1])
+                        ensures IsConnected(g, p.v[index], p.v[index+1])
                     {
-                        assert r.IsConnected(p.v[index], p.v[index+1]);
-                        assert g.IsConnected(p.v[index], p.v[index+1]);
+                        assert IsConnected(r, p.v[index], p.v[index+1]);
+                        assert IsConnected(g, p.v[index], p.v[index+1]);
                     }
                     assert false;
                 }
@@ -148,6 +162,7 @@ module DigraphConnectNodes {
                 assert PathValid(r, q);
                 AddPathsFromTo(r, q_1, q_2);
                 assert p.v[index+1] == m;
+                reveal IsNode();
                 assert q_1.v[0] == m;
                 assert PathFromTo(r, q, m, n);
                 // We want to now show that [n, m] does not appear in q.
@@ -159,6 +174,7 @@ module DigraphConnectNodes {
                 assert PathFromTo(r, s, m, n);
                 assert PathValid(r, s);
                 assert PathNoRepeats(s);
+                reveal IsConnected();
                 assert PathValid(g, s);
                 assert PathFromTo(g, s, m, n);
             }

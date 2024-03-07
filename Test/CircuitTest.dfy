@@ -27,21 +27,18 @@ module CircuitTest {
     const xor_o := NP(xor_n, 2)
 
     const circ := Circuit(
-        NodeKind := (n: CNode) => (match n
-            case i0_n => Some(CInput())
-            case i1_n => Some(CInput())
-            case o_n => Some(COutput())
-            case xor_n => Some(nk_xor)
-            case _ => None
-            ),
-        PortSource := (np: NP) => (match np
-            case NP(3, 0) => Some(i0_p)
-            case NP(3, 1) => Some(i1_p)
-            case NP(2, 0) => Some(xor_o)
-            case _ => None),
-        PortNames := _ => None,
-        NodeBound := 4,
-        PortBound := 3,
+        NodeKind := map[
+            i0_n := CInput(),
+            i1_n := CInput(),
+            o_n := COutput(),
+            xor_n := nk_xor
+            ],
+        PortSource := map[
+            NP(3, 0) := i0_p,
+            NP(3, 1) := i1_p,
+            NP(2, 0) := xor_o
+        ],
+        PortNames := map[],
         HierLevel := 0
     )
     const HierLevel: nat := 0

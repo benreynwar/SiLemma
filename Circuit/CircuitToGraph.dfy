@@ -6,26 +6,42 @@ module CircuitToGraph {
     import opened CircuitBase
     import opened CircuitHierarchy
     import opened CircuitHPNP
-    import opened CircuitNodeBounds
+    import SeqNatToNat
 
     // INP and ONP reference ports on a single level of the hierarchy.
     // The 'n' can point at an internal node, or at a port on the external
     // interface.
 
+    function SetToSeq<T>(s: set<T>): seq<T>
+    {
+        if |s| == 0 then
+            []
+        else
+            var y :| y in s;
+            var r := s - {y};
+            [y] + SetToSeq(r)
+    }
 
-    function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
+    ghost function AllValidHPNPPairs(c: Circuit): set<(HPNP, HPNP)>
+    {
+        var hpnps := AllValidHPNP(c);
+        var as_seq := SetToSeq(hpnps);
+        var pairs := (set n: nat | n < |hpnps|*|hpnps| ::
+            var (x, y) := SeqNatToNat.divmod(n, |hpnps|);
+            (as_seq[x], as_seq[y]));
+        pairs
+    }
+
+    ghost function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
         requires CircuitValid(c)
     {
         DG.Digraph(
-            hpnp => HPNPValid(c, hpnp),
-            (a, b) => HPNPConnected(c, a, b),
-            HPNPToNat,
-            NatToHPNP,
-            HPNPBound(c)
+            (set hpnp: HPNP | hpnp in AllValidHPNP(c) :: hpnp),
+            (set n: (HPNP, HPNP) | n in AllValidHPNPPairs(c) && HPNPConnected(c, n.0, n.1):: n)
         )
     }
 
-    function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
+    ghost function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
         requires CircuitValid(c)
         ensures DG.DigraphValid(g)
     {
@@ -50,7 +66,7 @@ module CircuitToGraph {
         var inp := NP(hpinp.hpn.n, hpinp.p);
         reveal HPNPValidInput();
         assert NPValidInput(parent_c, inp);
-        var maybe_onp: Option<NP> := parent_c.PortSource(inp);
+        var maybe_onp: Option<NP> := PortSource(parent_c, inp);
             match maybe_onp
             // The input port does not connect to anything.
             case None => None
@@ -58,7 +74,7 @@ module CircuitToGraph {
             case Some(onp) =>
                 assert NPValid(parent_c, onp);
                 assert NPValidOutput(parent_c, onp);
-                var nk := parent_c.NodeKind(onp.n);
+                var nk := NodeKind(parent_c, onp.n);
                 assert nk.Some?;
                 assert IsOPort(nk.value, onp.p);
                 var hpn := HPNode(hp, onp.n);
@@ -68,7 +84,7 @@ module CircuitToGraph {
                 Some(hpnp)
     }
 
-    function NumberOfRemainingNodes(c: Circuit, seen_path: DG.Path<HPNP>): nat
+    ghost function NumberOfRemainingNodes(c: Circuit, seen_path: DG.Path<HPNP>): nat
         requires CircuitValid(c)
         requires CircuitNoLoops(c)
         requires PathValid(c, seen_path)
@@ -92,27 +108,32 @@ module CircuitToGraph {
         assert DP.PathNoRepeats(seen_path);
     }
 
-    lemma CtoGValid(c: Circuit)
+    lemma {:vcs_split_on_every_assert} CtoGValid(c: Circuit)
         requires CircuitValid(c)
         ensures DG.DigraphValid(CtoG(c))
     {
         reveal CtoG();
         var g := CtoG(c);
+        //HPNPToNatInjectiveAll();
+        //NatToHPNPInjectiveAll();
         forall n: HPNP, m: HPNP
-            ensures HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n)
+            //ensures HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n)
             ensures !HPNPConnected(c, n, n)
             ensures HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m)
-            ensures (n != m) ==> HPNPToNat(n) != HPNPToNat(m)
+            //ensures (n != m) ==> HPNPToNat(n) != HPNPToNat(m)
+            //ensures NatToHPNP(HPNPToNat(n)) == Some(n)
         {
-            OutOfBoundInvalid(c, n);
+            //OutOfBoundInvalid(c, n);
             NoSelfConnections(c, n);
             ConnectedNodesValid(c, n, m);
-            HPNPToNatInjective(n, m);
+            //HPNPToNatToHPNP(n);
         }
-        assert (forall n: HPNP :: HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n));
+        //assert (forall n: HPNP :: HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n));
         assert (forall n: HPNP :: !HPNPConnected(c, n, n));
         assert (forall n: HPNP, m: HPNP :: HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m));
-        assert (forall n: HPNP, m: HPNP :: n != m ==> HPNPToNat(n) != HPNPToNat(m));
+        //assert (forall n: HPNP, m: HPNP :: n != m ==> HPNPToNat(n) != HPNPToNat(m));
+        //assert (forall n: HPNP :: NatToHPNP(HPNPToNat(n)) == Some(n));
+        //assert Functions.Injective(HPNPToNat) && Functions.Injective(NatToHPNP);
         reveal DG.DigraphValid();
     }
     
@@ -120,7 +141,7 @@ module CircuitToGraph {
         requires CircuitValid(c)
     {
         var g := CtoG(c);
-        !DG.DigraphLoop(g)
+        !DP.DigraphLoop(g)
     }
 
     lemma NoLoopsMeansNotInPath(c: Circuit, p: DG.Path<HPNP>, n: HPNP)
@@ -134,13 +155,13 @@ module CircuitToGraph {
         var new_p := PathAppend(c, p, n);
         assert new_p == DG.Path(p.v + [n]);
         assert PathValid(c, new_p);
-        DG.NoLoopsMeansNoRepeats(CtoGV(c));
-        assert DG.PathNoRepeats(new_p);
+        DP.NoLoopsMeansNoRepeats(CtoGV(c));
+        assert DP.PathNoRepeats(new_p);
         if n in p.v {
             var index: nat :| index < |p.v| && p.v[index] == n;
             assert new_p.v[index] == n;
             assert new_p.v[|new_p.v|-1] == n;
-            assert !DG.PathNoRepeats(new_p);
+            assert !DP.PathNoRepeats(new_p);
         }
     }
 
@@ -149,17 +170,29 @@ module CircuitToGraph {
         requires CircuitValid(c)
         requires DG.PathValid(CtoGV(c), p)
         requires HPNPValid(c, n)
-        requires (|p.v| > 0 ==> HPNPConnected(c, DG.PathEnd(p), n))
+        requires (|p.v| > 0 ==> HPNPConnected(c, DP.PathEnd(p), n))
         ensures DG.PathValid(CtoGV(c), r)
     {
-        reveal CtoG();
-        DG.PathAppend(CtoGV(c), p, n)
+        DG.Path(p.v + [n])
+        //reveal CtoG();
+        //DP.PathAppend(CtoGV(c), p, n)
     }
 
-    predicate PathValid(c: Circuit, seen_path: DG.Path<HPNP>)
+    ghost predicate PathValid(c: Circuit, seen_path: DG.Path<HPNP>)
         requires CircuitValid(c)
     {
         DG.PathValid(CtoGV(c), seen_path)
+    }
+
+    lemma HPNodeNotInCircuitHPNPNotInGraph(c: Circuit, hpn: HPNode)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hpn.hp)
+        requires !HPNodeInCircuit(c, hpn)
+        ensures forall p :: !DG.IsNode(CtoG(c), HPNP(hpn, p))
+    {
+        reveal CtoG();
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
     }
     
 }

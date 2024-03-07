@@ -6,9 +6,41 @@ module CircuitHPNP {
     import SeqNatToNat
     import SeqExt
     import opened CircuitBase
-    import opened CircuitNodeBounds
     import opened CircuitHierarchy
     import Utils
+
+    ghost function {:vcs_split_on_every_assert} AllValidHPNPFromHPNs(c: Circuit, hpns: set<HPNode>): (r: set<HPNP>)
+        requires CircuitValid(c)
+        requires forall hpn :: hpn in hpns ==> HPNodeValid(c, hpn)
+        ensures forall hpnp :: hpnp in r ==> HPNPValid(c, hpnp)
+    {
+        if |hpns| == 0 then
+            {}
+        else
+            var hpn :| hpn in hpns;
+            assert HPNodeValid(c, hpn);
+            reveal HPNodeValid();
+            assert HierarchyPathValid(c, hpn.hp);
+            var next_hpns := hpns - {hpn};
+            var next_hpnps := AllValidHPNPFromHPNs(c, next_hpns);
+            var hp_c := HierarchyPathCircuit(c, hpn.hp);
+            var nk := hp_c.NodeKind[hpn.n];
+            var this_hpnps := (set p | p in IPorts(nk) + OPorts(nk) :: HPNP(hpn, p));
+            reveal Seq.ToSet();
+            assert forall hpnp :: hpnp in this_hpnps ==> IsIPort(nk, hpnp.p) || IsOPort(nk, hpnp.p);
+            reveal HPNPValidInput();
+            reveal HPNPValidOutput();
+            assert forall hpnp :: hpnp in this_hpnps ==> HPNPValid(c, hpnp);
+            this_hpnps + next_hpnps
+    }
+
+    ghost function AllValidHPNP(c: Circuit): (r: set<HPNP>)
+        requires CircuitValid(c)
+        ensures forall hpnp :: hpnp in r ==> HPNPValid(c, hpnp)
+    {
+        var hpns := AllValidHPNodes(c);
+        AllValidHPNPFromHPNs(c, hpns)
+    }
 
     function {:opaque} CInputONPtoINP(c: Circuit, onp: HPNP): (r: HPNP)
         // This takes an output from a CInput node, and connects it to
@@ -29,7 +61,7 @@ module CircuitHPNP {
         HPNPValidHPValid(c, onp);
         var hier_c := HierarchyPathCircuit(c, parent_hp);
         HierarchyPathCircuitValid(c, parent_hp);
-        var nk := hier_c.NodeKind(inp.hpn.n).value;
+        var nk := NodeKind(hier_c, inp.hpn.n).value;
         assert HierarchyPathValid(c, parent_hp);
         reveal HPNPValidInput();
         reveal CircuitValid();
@@ -51,13 +83,13 @@ module CircuitHPNP {
         var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
         HierarchyPathCircuitValid(c, onp.hpn.hp);
         var nk := HPNPtoNK(c, onp);
-        assert CNodeKindValid(hp_c.HierLevel, hp_c.PortBound, nk);
+        assert CNodeKindValid(hp_c.HierLevel, nk);
         var lower_c := HPNPtoSubcircuit(c, onp);
         reveal HPNPValidOutput();
         // It's an output port from a hier node.
         // It only connects to the input into the corresponding Output node in that circuit.
         // The port number should reference an output port CNode inside the Circuit.
-        var maybe_level_nk := lower_c.NodeKind(onp.p as CNode);
+        var maybe_level_nk := NodeKind(lower_c, onp.p as CNode);
         assert maybe_level_nk.Some?;
         assert maybe_level_nk.value.COutput?;
         var new_hp := ExtendHierarchyPath(c, onp.hpn.hp, onp.hpn.n);
@@ -79,7 +111,7 @@ module CircuitHPNP {
         var hp_c := HierarchyPathCircuit(c, n.hpn.hp);
         reveal HPNPValidOutput();
         reveal HPNPValidInput();
-        var nk := hp_c.NodeKind(n.hpn.n).value;
+        var nk := NodeKind(hp_c, n.hpn.n).value;
         var inps := set p: CPort | (p in nk.IPorts && nk.PathExists(n.p, p)) :: HPNP(n.hpn, p);
         inps
     }
@@ -92,7 +124,7 @@ module CircuitHPNP {
         HPNPValidHPValid(c, onp);
         var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
         reveal HPNPValidOutput();
-        var nk := hp_c.NodeKind(onp.hpn.n).value;
+        var nk := NodeKind(hp_c, onp.hpn.n).value;
         match nk
         case CInput() => if HPLength(onp.hpn.hp) > 0 then {CInputONPtoINP(c, onp)} else {}
         case CHier(_) => {CHierONPtoINP(c, onp)}
@@ -126,7 +158,7 @@ module CircuitHPNP {
         assert CircuitComplete(inp_c);
         var inp_inp := NP(inp.hpn.n, inp.p);
         reveal CircuitComplete();
-        var onp_onp := inp_c.PortSource(inp_inp).value;
+        var onp_onp := PortSource(inp_c, inp_inp).value;
         var onp := HPNP(HPNode(inp.hpn.hp, onp_onp.n), onp_onp.p);
         reveal CircuitValid();
         var maybe_onp := INPtoMaybeONP(c, inp);
@@ -147,7 +179,7 @@ module CircuitHPNP {
         HierarchyPathCircuitValid(c, inp.hpn.hp);
         var inp_inp := NP(inp.hpn.n, inp.p);
         reveal CircuitComplete();
-        var maybe_onp_onp := inp_c.PortSource(inp_inp);
+        var maybe_onp_onp := PortSource(inp_c, inp_inp);
         match maybe_onp_onp
         case None =>
             None
@@ -212,111 +244,96 @@ module CircuitHPNP {
             Some(HPNP(HPNode(HP(hp_seq), n as CNode), p as CPort))
     }
 
-    function HPNPToNat(hpnp: HPNP): nat
-    {
-        var ns := HPNPToSeqNat(hpnp);
-        SeqNatToNat.ArbLenNatsToNat(ns)
-    }
+    //function HPNPToNat(hpnp: HPNP): nat
+    //{
+    //    var ns := HPNPToSeqNat(hpnp);
+    //    SeqNatToNat.ArbLenNatsToNat(ns)
+    //}
 
-    function NatToHPNP(n: nat): Option<HPNP>
-    {
-        var ns := SeqNatToNat.NatToArbLenNats(n);
-        var hpnp := SeqNatToHPNP(ns);
-        hpnp
-    }
+    //function NatToHPNP(n: nat): Option<HPNP>
+    //{
+    //    var ns := SeqNatToNat.NatToArbLenNats(n);
+    //    var hpnp := SeqNatToHPNP(ns);
+    //    hpnp
+    //}
 
-    lemma NatToHPNPToNat(n: nat)
-        requires NatToHPNP(n).Some?
-        ensures HPNPToNat(NatToHPNP(n).value) == n
-    {
-    }
+    //lemma NatToHPNPToNat(n: nat)
+    //    requires NatToHPNP(n).Some?
+    //    ensures HPNPToNat(NatToHPNP(n).value) == n
+    //{
+    //}
 
-    lemma HPNPToNatToHPNP(hpnp: HPNP)
-        ensures NatToHPNP(HPNPToNat(hpnp)).Some?
-        ensures NatToHPNP(HPNPToNat(hpnp)).value == hpnp
-    {
-    }
+    //lemma HPNPToNatToHPNP(hpnp: HPNP)
+    //    ensures NatToHPNP(HPNPToNat(hpnp)) == Some(hpnp)
+    //{
+    //}
 
-    lemma HPLengthBound(c: Circuit, hp: HierarchyPath)
-        requires CircuitValid(c)
-        requires HierarchyPathValid(c, hp)
-        ensures
-            var hier_c := HierarchyPathCircuit(c, hp);
-            HPLength(hp) <= (c.HierLevel - hier_c.HierLevel)
-        decreases HPLength(hp)
-    {
-        if HPLength(hp) == 0 {
-        } else {
-            var hier_c := HierarchyPathCircuit(c, hp);
-            var (head, tail) := HPHeadTail(hp);
-            var tail_c := HierarchyPathCircuit(c, tail);
-            var nk := tail_c.NodeKind(head).value;
-            assert nk.CHier?;
-            HierarchyPathCircuitValid(c, tail);
-            assert CircuitValid(tail_c);
-            reveal CircuitValid();
-            assert CNodeKindValid(tail_c.HierLevel, tail_c.PortBound, nk);
-            assert tail_c.HierLevel > hier_c.HierLevel;
-            HPLengthBound(c, tail);
-        }
-    }
+    //lemma SeqCNodeNotEqualSeqNatNotEqual(a: seq<CNode>, b: seq<CNode>)
+    //    ensures a != b ==> SeqCNodeToSeqNat(a) != SeqCNodeToSeqNat(b)
+    //{
+    //    if a == b {
+    //        assert forall i: nat :: i < |a| ==> a[i] == b[i];
+    //    } else {
+    //        if |a| == |b| {
+    //            assert exists i: nat :: i < |a| && a[i] != b[i];
+    //            var i: nat :| i < |a| && a[i] != b[i];
+    //            assert SeqCNodeToSeqNat(a)[i] != SeqCNodeToSeqNat(b)[i];
+    //        } else {
+    //        }
+    //    }
+    //}
 
-    function SeqCNodeToSeqNat(a: seq<CNode>): seq<nat>
-    {
-        seq(|a|, i requires 0 <= i < |a| => a[i] as nat)
-    }
+    //lemma HPNPToSeqNatUnique(a: HPNP, b: HPNP)
+    //    ensures (a != b) ==> (HPNPToSeqNat(a) != HPNPToSeqNat(b))
+    //{
+    //    var na := HPNPToSeqNat(a);
+    //    var nb := HPNPToSeqNat(b);
+    //    if (|a.hpn.hp.v| != |b.hpn.hp.v|) {
+    //    } else {
+    //        if (a != b) {
+    //            var a_v := a.hpn.hp.v;
+    //            var b_v := b.hpn.hp.v;
+    //            if (a_v != b_v) {
+    //                assert |na| == |a_v| + 2;
+    //                assert a_v != b_v;
+    //                var a_v_n := SeqCNodeToSeqNat(a_v);
+    //                var b_v_n := SeqCNodeToSeqNat(b_v);
+    //                SeqCNodeNotEqualSeqNatNotEqual(a_v, b_v);
+    //                assert a_v_n != b_v_n;
+    //                assert na[..|a_v|] == a_v_n;
+    //                assert nb[..|b_v|] == b_v_n;
+    //            } else if (a.hpn.n != b.hpn.n) {
+    //                assert na[|a_v|] == a.hpn.n as nat;
+    //            } else if (a.p != b.p) {
+    //                assert na[|a_v|+1] == a.p as nat;
+    //            } else {
+    //            }
+    //        } else {
+    //        }
+    //    }
+    //}
 
-    lemma SeqCNodeNotEqualSeqNatNotEqual(a: seq<CNode>, b: seq<CNode>)
-        ensures a != b ==> SeqCNodeToSeqNat(a) != SeqCNodeToSeqNat(b)
-    {
-        if a == b {
-            assert forall i: nat :: i < |a| ==> a[i] == b[i];
-        } else {
-            if |a| == |b| {
-                assert exists i: nat :: i < |a| && a[i] != b[i];
-                var i: nat :| i < |a| && a[i] != b[i];
-                assert SeqCNodeToSeqNat(a)[i] != SeqCNodeToSeqNat(b)[i];
-            } else {
-            }
-        }
-    }
+    //lemma HPNPToNatInjective(a: HPNP, b: HPNP)
+    //    ensures (a != b) ==> (HPNPToNat(a) != HPNPToNat(b))
+    //{
+    //    HPNPToSeqNatUnique(a, b);
+    //    SeqNatToNat.ArbLenNatsToNatUnique(HPNPToSeqNat(a), HPNPToSeqNat(b));
+    //}
 
-    lemma HPNPToSeqNatUnique(a: HPNP, b: HPNP)
-        ensures (a != b) ==> (HPNPToSeqNat(a) != HPNPToSeqNat(b))
-    {
-        var na := HPNPToSeqNat(a);
-        var nb := HPNPToSeqNat(b);
-        if (|a.hpn.hp.v| != |b.hpn.hp.v|) {
-        } else {
-            if (a != b) {
-                var a_v := a.hpn.hp.v;
-                var b_v := b.hpn.hp.v;
-                if (a_v != b_v) {
-                    assert |na| == |a_v| + 2;
-                    assert a_v != b_v;
-                    var a_v_n := SeqCNodeToSeqNat(a_v);
-                    var b_v_n := SeqCNodeToSeqNat(b_v);
-                    SeqCNodeNotEqualSeqNatNotEqual(a_v, b_v);
-                    assert a_v_n != b_v_n;
-                    assert na[..|a_v|] == a_v_n;
-                    assert nb[..|b_v|] == b_v_n;
-                } else if (a.hpn.n != b.hpn.n) {
-                    assert na[|a_v|] == a.hpn.n as nat;
-                } else if (a.p != b.p) {
-                    assert na[|a_v|+1] == a.p as nat;
-                } else {
-                }
-            } else {
-            }
-        }
-    }
+    //lemma HPNPToNatInjectiveAll()
+    //    ensures Functions.Injective(HPNPToNat)
+    //{
+    //    forall a, b: HPNP
+    //    {
+    //        HPNPToNatInjective(a, b);
+    //    }
+    //}
 
-    lemma HPNPToNatInjective(a: HPNP, b: HPNP)
-        ensures (a != b) ==> (HPNPToNat(a) != HPNPToNat(b))
-    {
-        HPNPToSeqNatUnique(a, b);
-        SeqNatToNat.ArbLenNatsToNatUnique(HPNPToSeqNat(a), HPNPToSeqNat(b));
-    }
+    //lemma NatToHPNPInjectiveAll()
+    //    ensures Functions.Injective(NatToHPNP)
+    //{
+    //}
+        //Functions.Injective(g.NodeMap) && Functions.Injective(g.InvNodeMap)
 
 
     lemma NoSelfConnections(c: Circuit, n: HPNP)
@@ -350,67 +367,93 @@ module CircuitHPNP {
         reveal HPNPConnected();
     }
 
-    lemma OutOfBoundInvalid(c: Circuit, n: HPNP)
-        requires CircuitValid(c)
-        ensures HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n)
-    {
-        if HPNPToNat(n) >= HPNPBound(c) {
-            if HPNPValid(c, n) {
-                HPNPInBound(c, n);
-                assert HPNPToNat(n) < HPNPBound(c);
-                assert false;
-            } else {
-            }
-            assert !HPNPValid(c, n);
-        }
-    }
-
-    lemma HPNPAsSeqNatInBound(c: Circuit, hpnp: HPNP)
-        requires CircuitValid(c)
-        requires HPNPValid(c, hpnp)
-        ensures forall n: nat :: n in HPNPToSeqNat(hpnp) ==>
-            n < HPNPElementBound(c)
-    {
-        HPNPElementsInBound(c, hpnp);
-        var hpnp_as_seq := HPNPToSeqNat(hpnp);
-        var element_bound := HPNPElementBound(c); 
-        var hp := hpnp.hpn.hp;
-        assert forall n: CNode :: n in hp.v ==> n as nat < element_bound;
-        assert forall i: nat :: i < |hp.v| ==> (hp.v[i] in hp.v);
-        assert forall i: nat :: i < |hp.v| ==> hp.v[i] as nat < element_bound;
-        assert hpnp.hpn.n as nat < element_bound;
-        assert hpnp.p as nat < element_bound;
-        assert forall i: nat :: i < |hpnp_as_seq| ==>
-            if i < |hp.v| then
-                (hpnp_as_seq[i] == hp.v[i] as nat) &&
-                (hp.v[i] as nat < element_bound) &&
-                (hpnp_as_seq[i] < element_bound)
-            else
-                true;
-        assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
-    }
-
-    lemma HPNPInBound(c: Circuit, hpnp: HPNP)
-        requires CircuitValid(c)
-        requires HPNPValid(c, hpnp)
-        ensures HPNPToNat(hpnp) < HPNPBound(c)
-    {
-        var hpnp_as_seq := HPNPToSeqNat(hpnp);
-        var element_bound := HPNPElementBound(c); 
-        HPNPAsSeqNatInBound(c, hpnp);
-        var len := |hpnp_as_seq|;
-        var bound := SeqNatToNat.ArbLenNatsToNatBound(c.HierLevel+2, element_bound);
-        assert bound == HPNPBound(c);
-        assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
-        assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] in hpnp_as_seq;
-        assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] < element_bound;
-        HPNPValidHPValid(c, hpnp);
-        HPLengthBound(c, hpnp.hpn.hp);
-        assert HPLength(hpnp.hpn.hp) <= c.HierLevel;
-        assert |hpnp_as_seq| <= c.HierLevel + 2;
-        SeqNatToNat.ArbLenNatsToNatBounded(hpnp_as_seq, c.HierLevel+2, element_bound);
-        assert SeqNatToNat.ArbLenNatsToNat(hpnp_as_seq) < bound;
-    }
+//    lemma OutOfBoundInvalid(c: Circuit, n: HPNP)
+//        requires CircuitValid(c)
+//        ensures HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n)
+//    {
+//        if HPNPToNat(n) >= HPNPBound(c) {
+//            if HPNPValid(c, n) {
+//                HPNPInBound(c, n);
+//                assert HPNPToNat(n) < HPNPBound(c);
+//                assert false;
+//            } else {
+//            }
+//            assert !HPNPValid(c, n);
+//        }
+//    }
+//
+//    lemma HPNPAsSeqNatInBound(c: Circuit, hpnp: HPNP)
+//        requires CircuitValid(c)
+//        requires HPNPValid(c, hpnp)
+//        ensures forall n: nat :: n in HPNPToSeqNat(hpnp) ==>
+//            n < HPNPElementBound(c)
+//    {
+//        HPNPElementsInBound(c, hpnp);
+//        var hpnp_as_seq := HPNPToSeqNat(hpnp);
+//        var element_bound := HPNPElementBound(c); 
+//        var hp := hpnp.hpn.hp;
+//        assert forall n: CNode :: n in hp.v ==> n as nat < element_bound;
+//        assert forall i: nat :: i < |hp.v| ==> (hp.v[i] in hp.v);
+//        assert forall i: nat :: i < |hp.v| ==> hp.v[i] as nat < element_bound;
+//        assert hpnp.hpn.n as nat < element_bound;
+//        assert hpnp.p as nat < element_bound;
+//        assert forall i: nat :: i < |hpnp_as_seq| ==>
+//            if i < |hp.v| then
+//                (hpnp_as_seq[i] == hp.v[i] as nat) &&
+//                (hp.v[i] as nat < element_bound) &&
+//                (hpnp_as_seq[i] < element_bound)
+//            else
+//                true;
+//        assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
+//    }
+//
+//    lemma HPNodeInBound(c: Circuit, hpn: HPNode)
+//        requires CircuitValid(c)
+//        requires HPNodeValid(c, hpn)
+//        //ensures hpn.n as nat < HPNPElementBound(c)
+//        ensures forall e :: e in SeqCNodeToSeqNat(hpn.hp.v) ==> e < HPNPElementBound(c)
+//    {
+//        var element_bound := HPNPElementBound(c);
+//        reveal HPNodeValid();
+//        assert HierarchyPathValid(c, hpn.hp);
+//        HPInHierNodeBound(c, hpn.hp);
+//        var hier_c := HierarchyPathCircuit(c, hpn.hp);
+//        HierarchyPathCircuitValid(c, hpn.hp);
+//        SubcircuitInHierNodeBound(c, hpn.hp);
+//        assert hier_c.NodeBound as nat <= element_bound;
+//        SubcircuitInHierPortBound(c, hpn.hp);
+//        assert hier_c.PortBound as nat <= element_bound;
+//        reveal CircuitValid();
+//        assert CircuitNodeKindValid(hier_c);
+//        reveal HPNPValidInput();
+//        reveal HPNPValidOutput();
+//        //assert hpnp.p < hier_c.PortBound;
+//        assert hpn.n < hier_c.NodeBound;
+//        assert forall e :: e in SeqCNodeToSeqNat(hpn.hp.v) ==> e < element_bound;
+//    }
+//
+//    lemma HPNPInBound(c: Circuit, hpnp: HPNP)
+//        requires CircuitValid(c)
+//        requires HPNPValid(c, hpnp)
+//        ensures HPNPToNat(hpnp) < HPNPBound(c)
+//    {
+//        var hpnp_as_seq := HPNPToSeqNat(hpnp);
+//        var element_bound := HPNPElementBound(c); 
+//        HPNPAsSeqNatInBound(c, hpnp);
+//        var len := |hpnp_as_seq|;
+//        var bound := SeqNatToNat.ArbLenNatsToNatBound(c.HierLevel+2, element_bound);
+//        assert bound == HPNPBound(c);
+//        assert forall n: nat :: n in hpnp_as_seq ==> n < element_bound;
+//        assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] in hpnp_as_seq;
+//        assert forall i: nat :: i < |hpnp_as_seq| ==> hpnp_as_seq[i] < element_bound;
+//        HPNPValidHPValid(c, hpnp);
+//        HPLengthBound(c, hpnp.hpn.hp);
+//        assert HPLength(hpnp.hpn.hp) <= c.HierLevel;
+//        assert |hpnp_as_seq| <= c.HierLevel + 2;
+//        SeqNatToNat.ArbLenNatsToNatBounded(hpnp_as_seq, c.HierLevel+2, element_bound);
+//        assert SeqNatToNat.ArbLenNatsToNat(hpnp_as_seq) < bound;
+//    }
+//
     function HPNPtoSubcircuit(c: Circuit, hpnp: HPNP): Circuit
         requires CircuitValid(c)
         requires HPNPValid(c, hpnp)
@@ -419,15 +462,16 @@ module CircuitHPNP {
         var nk := HPNPtoNK(c, hpnp);
         HPNPValidHPValid(c, hpnp);
         var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
-        assert CNodeKindValid(hp_c.HierLevel, hp_c.PortBound, nk);
+        assert CNodeKindValid(hp_c.HierLevel, nk);
         nk.c
     }
 
     function ExtendHierarchyPath(c: Circuit, hp: HierarchyPath, n: CNode): (r: HierarchyPath)
         requires CircuitValid(c)
         requires HierarchyPathValid(c, hp)
-        requires HierarchyPathCircuit(c, hp).NodeKind(n).Some?
-        requires HierarchyPathCircuit(c, hp).NodeKind(n).value.CHier?
+        requires
+            var hp_c := HierarchyPathCircuit(c, hp);
+            NodeKind(hp_c, n).Some? && NodeKind(hp_c, n).value.CHier?
         ensures HierarchyPathValid(c, r)
     {
         var hp_c := HierarchyPathCircuit(c, hp);
@@ -457,7 +501,5 @@ module CircuitHPNP {
             HPCircuitComplete(c, tail);
         }
     }
-
-
 
 }

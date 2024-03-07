@@ -180,10 +180,11 @@ module DigraphPaths {
         // This is useful when we want to show that something that walks the
         // graph will terminate.
         requires DigraphValid(g)
-        requires forall n :: n in visited_nodes ==> g.IsNode(n)
+        requires forall n :: n in visited_nodes ==> IsNode(g, n)
     {
-        NodeSetSize(g, visited_nodes);
-        g.NodeBound - |visited_nodes|
+        reveal IsNode();
+        Set.LemmaSubsetSize(visited_nodes, g.Nodes);
+        |g.Nodes| - |visited_nodes|
     }
 
     function NumberOfRemainingNodesPath<Node(==)>(g: Digraph, p: Path<Node>): nat
@@ -197,17 +198,16 @@ module DigraphPaths {
         var s := PathSet(p);
         assert forall x :: x in s ==> x in p.v;
         reveal PathValid();
-        assert forall x :: x in p.v ==> g.IsNode(x);
+        assert forall x :: x in p.v ==> IsNode(g, x);
         NodeSetSize(g, s);
-        assert |p.v| <= g.NodeBound;
-        g.NodeBound - |p.v|
+        |g.Nodes| - |p.v|
     }
 
     lemma NumberOfRemainingNodesDecreases<Node>(
         g: Digraph, visited_nodes: set<Node>, n: Node, new_visited_nodes: set<Node>)
         requires DigraphValid(g)
-        requires forall m :: m in visited_nodes ==> g.IsNode(m)
-        requires g.IsNode(n)
+        requires forall m :: m in visited_nodes ==> IsNode(g, m)
+        requires IsNode(g, n)
         requires n !in visited_nodes
         requires new_visited_nodes == visited_nodes + {n}
         ensures
@@ -219,16 +219,11 @@ module DigraphPaths {
     lemma NodeSetSize<Node>(g: Digraph, nodes: set<Node>)
         // Lets us set an upper bound on the number of nodes in a graph.
         requires DigraphValid(g)
-        requires forall n: Node :: n in nodes ==> g.IsNode(n)
-        ensures |nodes| <= g.NodeBound
+        requires forall n: Node :: n in nodes ==> IsNode(g, n)
+        ensures |nodes| <= |g.Nodes|
     {
-        reveal DigraphValid();
-        assert forall n: Node :: n in nodes ==> g.NodeMap(n) < g.NodeBound;
-        var f := (n: Node) => g.NodeMap(n);
-        var nodes_as_nats := set n | n in nodes :: f(n);
-        Utils.MappedSetSize(nodes, f, nodes_as_nats);
-        assert |nodes_as_nats| == |nodes|;
-        Utils.BoundedSetSize(g.NodeBound as nat, nodes_as_nats);
+        reveal IsNode();
+        Set.LemmaSubsetSize(nodes, g.Nodes);
     }
 
     lemma NoRepeatsPathSetSize<Node>(p: Path<Node>)
@@ -278,12 +273,15 @@ module DigraphPaths {
             PathValid(g, r)
     {
         reveal PathValid();
+        var p := AddPaths(p1, p2);
+        assert (forall i: nat :: i < |p.v| ==> IsNode(g, p.v[i]));
+        assert (forall i: nat :: i < |p.v|-1 ==> IsConnected(g, p.v[i], p.v[i+1]));
     }
 
     function PathAppend<Node>(g: Digraph, p: Path<Node>, n: Node): (r: Path<Node>)
         // Add a node onto a path.
-        requires g.IsNode(n)
-        requires |p.v| > 0 ==> g.IsConnected(p.v[|p.v|-1], n)
+        requires IsNode(g, n)
+        requires |p.v| > 0 ==> IsConnected(g, p.v[|p.v|-1], n)
         requires PathValid(g, p)
         ensures PathValid(g, r)
     {

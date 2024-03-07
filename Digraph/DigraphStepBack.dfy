@@ -60,8 +60,6 @@ module DigraphStepBack {
         reveal PathValid();
         var all_nodes := AllNodes(g);
 
-        assert forall n: Node :: g.IsNode(n) ==> NodeValid(g, n);
-
         if count == 0 {
             assert MultipleStepSetBack(g, AllNodes(g), count) == all_nodes;
             assert all_nodes == {};
@@ -69,13 +67,11 @@ module DigraphStepBack {
 
         if exists p: Path<Node> :: |p.v| == count+1 && PathValid(g, p) {
             var p: Path<Node> :| |p.v| == count + 1 && PathValid(g, p);
-            assert forall n: Node :: n in p.v ==> NodeValid(g, n);
             if count == 0 {
                 assert AllNodes(g) == {};
                 if |p.v| > 0 {
                     var n := PathStart(p);
                     assert n !in AllNodes(g);
-                    assert NodeValid(g, n);
                     assert false;
                 }
             } else {
@@ -91,8 +87,6 @@ module DigraphStepBack {
 
     ghost function MultipleStepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>, count: nat): (r: set<Node>)
         requires DigraphValid(g)
-        requires forall n :: n in in_ns ==> NodeValid(g, n)
-        ensures forall n :: n in r ==> NodeValid(g, n)
         decreases count
     {
         if count == 0 then
@@ -104,17 +98,13 @@ module DigraphStepBack {
 
     ghost function StepSetBackInternal<Node(!new)>(g: Digraph, in_ns: set<Node>, out_ns: set<Node>): (r: set<Node>)
         requires DigraphValid(g)
-        requires forall n :: n in in_ns ==> NodeValid(g, n)
-        requires forall n :: n in out_ns ==> NodeValid(g, n)
-        ensures forall n :: n in r ==> NodeValid(g, n)
-        ensures forall m :: (m in r <==> exists n :: (n in in_ns && g.IsConnected(n, m)) || (m in out_ns))
+        ensures forall m :: (m in r <==> exists n :: (n in in_ns && IsConnected(g, n, m)) || (m in out_ns))
     {
         if |in_ns| == 0 then
             out_ns
         else
             var n :| n in in_ns;
             var connected := StepBack(g, n);
-            assert forall m :: m in connected ==> NodeValid(g, m);
             var new_in_ns := in_ns - {n};
             var new_out_ns := out_ns + connected;
             StepSetBackInternal(g, new_in_ns, new_out_ns)
@@ -122,9 +112,7 @@ module DigraphStepBack {
 
     ghost function StepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>): (r: set<Node>)
         requires DigraphValid(g)
-        requires forall n :: n in in_ns ==> NodeValid(g, n)
-        ensures forall n :: n in r ==> NodeValid(g, n)
-        ensures forall m :: m in r <==> exists n :: (n in in_ns && g.IsConnected(n, m))
+        ensures forall m :: m in r <==> exists n :: (n in in_ns && IsConnected(g, n, m))
     {
         StepSetBackInternal(g, in_ns, {})
     }
@@ -133,7 +121,6 @@ module DigraphStepBack {
         requires DigraphValid(g)
         requires PathValid(g, p)
         requires |p.v| > 0
-        requires forall n :: n in in_ns ==> NodeValid(g, n)
         requires PathStart(p) in in_ns
         ensures
             var out_s := MultipleStepSetBack(g, in_ns, |p.v|-1);
@@ -150,7 +137,7 @@ module DigraphStepBack {
             var tail := Path(p.v[1..]);
             var intermed_ns := StepSetBack(g, in_ns);
             reveal PathValid();
-            assert g.IsConnected(head, PathStart(tail));
+            assert IsConnected(g, head, PathStart(tail));
             assert PathStart(tail) in intermed_ns;
             PathExistsEndInMultipleStepSet(g, tail, intermed_ns);
         }
@@ -159,18 +146,9 @@ module DigraphStepBack {
     
     function StepBack<Node(!new)>(g: Digraph, n: Node): (r: set<Node>)
         requires DigraphValid(g)
-        requires NodeValid(g, n)
-        ensures forall m :: m in r ==> NodeValid(g, m)
-        ensures forall m :: m in r <==> g.IsConnected(n, m)
+        ensures forall m :: m in r <==> IsConnected(g, n, m)
     {
-        reveal DigraphValid();
-        var mapped := set m: nat | m < g.NodeBound :: m;
-        var nodes := Set.Map(g.InvNodeMap, mapped);
-        var filter := (n: Option<Node>) => n.Some?;
-        var filtered_nodes := Set.Filter(filter, nodes);
-        var extracted_nodes := set n | n in nodes && n.Some? :: n.value;
-        var connected_nodes := set m | m in extracted_nodes && g.IsConnected(n, m) :: m;
-        connected_nodes 
+        (set m | m in g.Nodes && IsConnected(g, n, m))
     }
 
 }

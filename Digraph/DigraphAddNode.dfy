@@ -5,20 +5,17 @@ module DigraphAddNode {
     // Adding nodes
 
     function AddNode<Node(==)>(g: Digraph, n: Node): (r: Digraph)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
     {
         Digraph(
-            m=>(m==n) || g.IsNode(m),
-            g.IsConnected,
-            g.NodeMap,
-            g.InvNodeMap,
-            if g.NodeMap(n) >= g.NodeBound then g.NodeMap(n)+1 else g.NodeBound
+            g.Nodes + {n},
+            g.Connections
         )
     }
 
     lemma AddNodeDigraphValid<Node>(g: Digraph, n: Node)
         requires DigraphValid(g)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
         ensures
             var r := AddNode(g, n);
             DigraphValid(r)
@@ -28,7 +25,7 @@ module DigraphAddNode {
 
     function AddNodeV<Node(==)>(g: Digraph, n: Node): (r: Digraph)
         requires DigraphValid(g)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
         ensures
             DigraphValid(r)
     {
@@ -37,10 +34,10 @@ module DigraphAddNode {
     }
 
     lemma AddNodePathValidHelper<Node>(r: Digraph, n: Node, x: Node)
-        requires (forall m: Node :: !r.IsConnected(n, m))
-        requires (forall m: Node :: !r.IsConnected(m, n))
-        ensures !r.IsConnected(n, x)
-        ensures !r.IsConnected(x, n)
+        requires (forall m: Node :: !IsConnected(r, n, m))
+        requires (forall m: Node :: !IsConnected(r, m, n))
+        ensures !IsConnected(r, n, x)
+        ensures !IsConnected(r, x, n)
     {
     }
     
@@ -48,7 +45,7 @@ module DigraphAddNode {
     // It is the path containing just that node.
     lemma AddNodePathValid<Node>(g: Digraph, n: Node, p: Path<Node>)
         requires DigraphValid(g)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
         ensures
             var r := AddNode(g, n);
             (PathValid(g, p) ==> PathValid(r, p)) &&
@@ -58,10 +55,10 @@ module DigraphAddNode {
         var r := AddNode(g, n);
         reveal PathValid();
         reveal DigraphValid();
-        assert forall m: Node :: !g.IsConnected(m, n);
-        assert forall m: Node :: !g.IsConnected(n, m);
-        assert forall m: Node :: !r.IsConnected(m, n);
-        assert forall m: Node :: !r.IsConnected(n, m);
+        assert forall m: Node :: !IsConnected(g, m, n);
+        assert forall m: Node :: !IsConnected(g, n, m);
+        assert forall m: Node :: !IsConnected(r, m, n);
+        assert forall m: Node :: !IsConnected(r, n, m);
         if n in p.v {
             assert !PathValid(g, p);
             if |p.v| == 1 {
@@ -69,12 +66,12 @@ module DigraphAddNode {
             } else {
                 if p.v[0] == n {
                     AddNodePathValidHelper(r, n, p.v[1]);
-                    assert !r.IsConnected(p.v[0], p.v[1]);
+                    assert !IsConnected(r, p.v[0], p.v[1]);
                     assert !PathValid(r, p);
                 } else {
                     var index := PathFindIndex(p, n);
                     AddNodePathValidHelper(r, n, p.v[index-1]);
-                    assert !r.IsConnected(p.v[index-1], p.v[index]);
+                    assert !IsConnected(r, p.v[index-1], p.v[index]);
                     assert !PathValid(r, p);
                 }
                 assert !PathValid(r, p);
@@ -88,13 +85,15 @@ module DigraphAddNode {
     */
     lemma AddNodeLoopConserved<Node(!new)>(g: Digraph, n: Node)
         requires DigraphValid(g)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
         ensures
             var r := AddNode(g, n);
             DigraphLoop(g) == DigraphLoop(r)
     {
         var r := AddNode(g, n);
         reveal PathValid();
+        reveal IsNode();
+        reveal IsConnected();
         reveal DigraphLoop();
         if DigraphLoop(g) {
             var p := GetLoopPath(g);

@@ -7,70 +7,76 @@ module DigraphBase {
     datatype Path<Node> = Path(v: seq<Node>)
 
     datatype Digraph<!Node> = Digraph(
-        IsNode: Node -> bool,
-        IsConnected: (Node, Node) -> bool,
-        NodeMap: Node -> nat,
-        InvNodeMap: nat -> Option<Node>,
-        NodeBound: nat
+        Nodes: set<Node>,
+        Connections: set<(Node, Node)>
     )
+
+    predicate {:opaque} IsNode<Node>(g: Digraph, n: Node)
+    {
+        n in g.Nodes
+    }
+
+    predicate {:opaque} IsConnected<Node>(g: Digraph, n: Node, m: Node)
+    {
+        (n, m) in g.Connections
+    }
 
     ghost predicate {:opaque} DigraphValid<Node(!new)>(g: Digraph)
     {
-        (forall n: Node :: g.NodeMap(n) >= g.NodeBound ==> !g.IsNode(n)) &&
-        (forall n: Node :: !g.IsConnected(n, n)) && // No self-connections
-        (forall n: Node, m: Node :: g.IsConnected(n, m) ==> g.IsNode(n) && g.IsNode(m)) &&
-        (forall n: Node, m: Node :: n != m ==> g.NodeMap(n) != g.NodeMap(m)) &&
-        (forall n: Node :: g.InvNodeMap(g.NodeMap(n)) == Some(n)) &&
-        Functions.Injective(g.NodeMap) && Functions.Injective(g.InvNodeMap)
-    }
-
-    lemma ValidNodeBound<Node>(g: Digraph, n: Node)
-        requires DigraphValid(g)
-        requires g.IsNode(n)
-        ensures g.NodeMap(n) < g.NodeBound
-    {
-        reveal DigraphValid();
-    }
-
-    predicate NodeValid<Node>(g: Digraph, n: Node)
-    {
-        g.NodeMap(n) < g.NodeBound
+        (forall n: Node :: IsConnected(g, n, n)) && // No self-connections
+        (forall n: Node, m: Node :: IsConnected(g, n, m) ==> IsNode(g, n) && IsNode(g, m))
     }
     
     lemma NotNodeNotConnected<Node>(g: Digraph, n: Node)
         // If a node is not in the graph
         // then it's not connected to any nodes
         requires DigraphValid(g)
-        requires !g.IsNode(n)
+        requires !IsNode(g, n)
         ensures
-            (forall m: Node :: !g.IsConnected(m, n)) &&
-            (forall m: Node :: !g.IsConnected(n, m))
+            (forall m: Node :: !IsConnected(g, m, n)) &&
+            (forall m: Node :: !IsConnected(g, n, m))
     {
         reveal DigraphValid();
     }
 
     predicate {:opaque} PathValid<Node>(g: Digraph, p: Path<Node>)
     {
-        (forall i: nat :: i < |p.v| ==> g.IsNode(p.v[i])) &&
-        (forall i: nat :: i < |p.v|-1 ==> g.IsConnected(p.v[i], p.v[i+1]))
+        (forall i: nat :: i < |p.v| ==> IsNode(g, p.v[i])) &&
+        (forall i: nat :: i < |p.v|-1 ==> IsConnected(g, p.v[i], p.v[i+1]))
     }
-    
 
     function AllNodes<Node(!new)>(g: Digraph): (r: set<Node>)
         requires DigraphValid(g)
-        ensures forall n: Node :: g.IsNode(n) ==> n in r
-        ensures forall n: Node :: n in r ==> g.IsNode(n)
-        ensures forall n: Node :: n in r ==> NodeValid(g, n)
+        ensures forall n: Node :: IsNode(g, n) ==> n in r
+        ensures forall n: Node :: n in r ==> IsNode(g, n)
     {
-        reveal DigraphValid();
-        var mapped := set m: nat | m < g.NodeBound :: m;
-        var nodes := Set.Map(g.InvNodeMap, mapped);
-        var filter := (n: Option<Node>) => n.Some? && g.IsNode(n.value);
-        var filtered_nodes := Set.Filter(filter, nodes);
-        assert forall n :: n in filtered_nodes ==> filter(n);
-        var extracted_nodes := set n | n in filtered_nodes :: n.value;
-        extracted_nodes
+        reveal IsNode();
+        g.Nodes
     }
 
+    ghost predicate {:opaque} DigraphsEqual<Node(!new)>(g: Digraph, h: Digraph)
+    {
+        (forall n: Node :: IsNode(g, n) == IsNode(h, n)) &&
+        (forall n, m: Node :: IsConnected(g, n, m) == IsConnected(h, n, m))
+    }
+
+    lemma DigraphsEqualAreEqual<Node>(g: Digraph, h: Digraph)
+        requires DigraphsEqual(g, h)
+        ensures g == h
+    {
+        reveal DigraphsEqual();
+        reveal IsNode();
+        reveal IsConnected();
+        forall n: Node
+            ensures (n in g.Nodes) == (n in h.Nodes)
+        {
+            assert IsNode(g, n) == IsNode(h, n);
+        }
+        forall n: (Node, Node)
+            ensures (n in g.Connections) == (n in h.Connections)
+        {
+            assert IsConnected(g, n.0, n.1) == IsConnected(h, n.0, n.1);
+        }
+    }
 
 }

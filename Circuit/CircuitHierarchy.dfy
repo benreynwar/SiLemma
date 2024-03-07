@@ -1,7 +1,6 @@
 module CircuitHierarchy {
 
     import opened CircuitBase
-    import opened CircuitValidity
 
     predicate HierarchyPathValid(c: Circuit, hp: HierarchyPath)
         requires CircuitValid(c)
@@ -13,7 +12,69 @@ module CircuitHierarchy {
             var (head, tail) := HPHeadTail(hp);
             HierarchyPathValid(c, tail) &&
             var hp_c := HierarchyPathCircuit(c, tail);
-            hp_c.NodeKind(head).Some? && hp_c.NodeKind(head).value.CHier?
+            NodeKind(hp_c, head).Some? && NodeKind(hp_c, head).value.CHier?
+    }
+
+    predicate HierarchyPathValidR(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c)
+        decreases |hp.v|, 0
+    {
+        if HPLength(hp) == 0 then
+            true
+        else
+            var (start, children) := HPStartChildren(hp);
+            NodeKind(c, start).Some? && NodeKind(c, start).value.CHier? &&
+            reveal CircuitValid();
+            assert CircuitNodeKindValid(c);
+            var next_c := NodeKind(c, start).value.c;
+            HierarchyPathValid(next_c, children)
+    }
+
+    lemma HPValidEquivalence(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c) 
+        ensures HierarchyPathValid(c, hp) == HierarchyPathValidR(c, hp)
+    {
+    }
+
+    ghost function AllValidHierarchyPathsInSubcircuits(
+            c: Circuit, nodes: set<CNode>): (r: set<HierarchyPath>)
+        requires CircuitValid(c)
+        requires forall n :: n in nodes ==>
+            NodeKind(c, n).Some? && NodeKind(c, n).value.CHier?
+        ensures forall hp :: hp in r ==> HierarchyPathValid(c, hp)
+        decreases c.HierLevel, 0
+    {
+        if |nodes| == 0 then
+            {}
+        else
+            var n :| n in nodes;
+            var nk := NodeKind(c, n).value;
+            var hp_c := nk.c;
+            reveal CircuitValid();
+            assert CircuitNodeKindValid(c);
+            assert CircuitValid(hp_c);
+            var hps := AllValidHierarchyPaths(hp_c);
+            //var (head, tail) := HPHeadTail(hp);
+            //HierarchyPathValid(c, tail) &&
+            //var hp_c := HierarchyPathCircuit(c, tail);
+            //NodeKind(hp_c, head).Some? && NodeKind(hp_c, head).value.CHier?
+            var r := (set hp | hp in hps :: HP(hp.v + [n]));
+            assert forall hp :: hp in r ==> HPHead(hp) == n;
+            assert forall hp :: hp in r ==> HierarchyPathValid(hp_c, HPTail(hp));
+            assert forall hp :: hp in r ==> HierarchyPathValid(c, hp);
+            r
+    }
+
+    ghost function AllValidHierarchyPaths(c: Circuit): (r: set<HierarchyPath>)
+        requires CircuitValid(c)
+        ensures forall hp :: hp in r ==> HierarchyPathValid(c, hp)
+        decreases c.HierLevel, 1
+    {
+        if c.HierLevel == 0 then
+            {HP([])}
+        else
+            var all_subcircuit_nodes := (set n | n in c.NodeKind && c.NodeKind[n].CHier? :: n);
+            AllValidHierarchyPathsInSubcircuits(c, all_subcircuit_nodes)
     }
 
     function HPLength(hp: HierarchyPath): nat
@@ -37,10 +98,10 @@ module CircuitHierarchy {
             //var cref := tail_c.NodeKind(n).value.CRef;
             //tail_c.Subcircuits[cref]
             assert CircuitValid(tail_c);
-            var nk := tail_c.NodeKind(n).value;
+            var nk := NodeKind(tail_c, n).value;
             reveal CircuitValid();
             assert CircuitNodeKindValid(tail_c);
-            assert CNodeKindValid(tail_c.HierLevel, tail_c.PortBound, nk);
+            assert CNodeKindValid(tail_c.HierLevel, nk);
             NodeToSubcircuit(tail_c, n)
     }
 
@@ -92,10 +153,44 @@ module CircuitHierarchy {
     }
 
     function NodeToSubcircuit(c: Circuit, n: CNode): Circuit
-        requires c.NodeKind(n).Some?
-        requires c.NodeKind(n).value.CHier?
+        requires NodeKind(c, n).Some?
+        requires NodeKind(c, n).value.CHier?
     {
-        c.NodeKind(n).value.c
+        NodeKind(c, n).value.c
+    }
+
+    predicate {:opaque} HPNodeValid(c: Circuit, hpn: HPNode)
+        requires CircuitValid(c)
+    {
+        HierarchyPathValid(c, hpn.hp) &&
+        var hp_c := HierarchyPathCircuit(c, hpn.hp);
+        var maybe_nk := NodeKind(hp_c, hpn.n);
+        maybe_nk.Some?
+    }
+
+    ghost function AllValidHPNodesFromHPs(c: Circuit, hps: set<HierarchyPath>): (r: set<HPNode>)
+        requires CircuitValid(c)
+        requires forall hp :: hp in hps ==> HierarchyPathValid(c, hp)
+        ensures forall hpn :: hpn in r ==> HPNodeValid(c, hpn)
+    {
+        if |hps| == 0 then
+            {}
+        else
+            var hp :| hp in hps;
+            var next_hps := hps - {hp};
+            var next_hpns := AllValidHPNodesFromHPs(c, next_hps);
+            var hp_c := HierarchyPathCircuit(c, hp);
+            var this_hpns := (set n | n in hp_c.NodeKind :: HPNode(hp, n));
+            assert forall hpn :: hpn in this_hpns ==> HPNodeValid(c, hpn);
+            this_hpns + next_hpns
+    }
+
+    ghost function AllValidHPNodes(c: Circuit): (r: set<HPNode>)
+        requires CircuitValid(c)
+        ensures forall hpn :: hpn in r ==> HPNodeValid(c, hpn)
+    {
+        var hps := AllValidHierarchyPaths(c);
+        AllValidHPNodesFromHPs(c, hps)
     }
 
     predicate {:opaque} HPNPValidInput(c: Circuit, hpnp: HPNP)
@@ -103,7 +198,7 @@ module CircuitHierarchy {
     {
         HierarchyPathValid(c, hpnp.hpn.hp) &&
         var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
-        var maybe_nk := hp_c.NodeKind(hpnp.hpn.n);
+        var maybe_nk := NodeKind(hp_c, hpnp.hpn.n);
         maybe_nk.Some? &&
         IsIPort(maybe_nk.value, hpnp.p)
     }
@@ -123,7 +218,7 @@ module CircuitHierarchy {
     {
         HierarchyPathValid(c, hpnp.hpn.hp) &&
         var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
-        var maybe_nk := hp_c.NodeKind(hpnp.hpn.n);
+        var maybe_nk := NodeKind(hp_c, hpnp.hpn.n);
         maybe_nk.Some? &&
         IsOPort(maybe_nk.value, hpnp.p)
     }
@@ -138,7 +233,7 @@ module CircuitHierarchy {
         assert HierarchyPathValid(c, hpnp.hpn.hp);
         var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
         HierarchyPathCircuitValid(c, hpnp.hpn.hp);
-        var nk := hp_c.NodeKind(hpnp.hpn.n).value;
+        var nk := NodeKind(hp_c, hpnp.hpn.n).value;
         reveal CircuitValid();
         assert CircuitNodeKindValid(hp_c);
     }
@@ -159,22 +254,22 @@ module CircuitHierarchy {
             reveal HPNPValidOutput();
             var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
             var nk := HPNPtoNK(c, hpnp);
-            CNodeKindValid(hp_c.HierLevel, hp_c.PortBound, nk)
+            CNodeKindValid(hp_c.HierLevel, nk)
     {
         HPNPValidHPValid(c, hpnp);
         var hp_c := HierarchyPathCircuit(c, hpnp.hpn.hp);
         HierarchyPathCircuitValid(c, hpnp.hpn.hp);
         reveal HPNPValidInput();
         reveal HPNPValidOutput();
-        var nk := hp_c.NodeKind(hpnp.hpn.n).value;
+        var nk := NodeKind(hp_c, hpnp.hpn.n).value;
         CircuitValidCNodeKindValid(hp_c, hpnp.hpn.n);
         nk
     }
 
     lemma CircuitValidCNodeKindValid(c: Circuit, n: CNode)
         requires CircuitValid(c)
-        requires c.NodeKind(n).Some?
-        ensures CNodeKindValid(c.HierLevel, c.PortBound, c.NodeKind(n).value)
+        requires NodeKind(c, n).Some?
+        ensures CNodeKindValid(c.HierLevel, NodeKind(c, n).value)
     {
         reveal CircuitValid();
     }
@@ -182,37 +277,76 @@ module CircuitHierarchy {
         requires CircuitValid(c)
         decreases c.HierLevel
     {
-        (forall inp: NP :: NPValidInput(c, inp) ==> c.PortSource(inp).Some?) &&
-        (forall n: CNode :: c.NodeKind(n).Some? && c.NodeKind(n).value.CHier? ==>
-            var subc := c.NodeKind(n).value.c;
+        (forall inp: NP :: NPValidInput(c, inp) ==> PortSource(c, inp).Some?) &&
+        (forall n: CNode :: NodeKind(c, n).Some? && NodeKind(c, n).value.CHier? ==>
+            var subc := NodeKind(c, n).value.c;
             CircuitValid(subc) &&
             (subc.HierLevel < c.HierLevel) &&
             CircuitComplete(subc)
         )
     }
 
-    predicate CNodeIsCHier(c: Circuit, n: CNode)
-        requires CircuitValid(c)
-    {
-        c.NodeKind(n).Some? && c.NodeKind(n).value.CHier?
-    }
-
-    function DirectSubcircuits(c: Circuit): (r: seq<Circuit>)
+    function DirectSubcircuits(c: Circuit): (r: set<Circuit>)
         requires CircuitValid(c)
     {
         reveal CircuitValid();
         assert CircuitNodeKindValid(c);
         assert forall i: CNode ::
-            i < c.NodeBound && c.NodeKind(i).Some? && c.NodeKind(i).value.CHier? ==>
-            var nk := c.NodeKind(i).value;
-            CNodeKindValid(c.HierLevel, c.PortBound, nk);
-        var all_cnodes := seq(c.NodeBound, (i: nat) requires i < c.NodeBound as nat => i as CNode);
-        var all_subcircuit_cnodes := Seq.Filter(n => CNodeIsCHier(c, n), all_cnodes);
-        var all_subcircuits := Seq.Map(
-            i requires CNodeIsCHier(c, i) => c.NodeKind(i).value.c, all_subcircuit_cnodes);
-        all_subcircuits
+            NodeKind(c, i).Some? && NodeKind(c, i).value.CHier? ==>
+            var nk := NodeKind(c, i).value;
+            CNodeKindValid(c.HierLevel, nk);
+        (set n: CNode | n in c.NodeKind && c.NodeKind[n].CHier? :: c.NodeKind[n].c)
     }
 
+    predicate HPNodeInCircuit(c: Circuit, hpn: HPNode)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hpn.hp)
+    {
+        var hpc := HierarchyPathCircuit(c, hpn.hp);
+        HierarchyPathCircuitValid(c, hpn.hp);
+        NodeKind(hpc, hpn.n).Some?
+    }
+
+    function HPNodeToHPNP(c: Circuit, hpn: HPNode): set<HPNP>
+        requires CircuitValid(c)
+        requires HPNodeValid(c, hpn)
+    {
+        reveal HPNodeValid();
+        var hpc := HierarchyPathCircuit(c, hpn.hp);
+        HierarchyPathCircuitValid(c, hpn.hp);
+        var nk := NodeKind(hpc, hpn.n).value;
+        var ports := IPorts(nk) + OPorts(nk);
+        set p: CPort | p in ports :: HPNP(hpn, p)
+    }
+
+    lemma HPLengthBound(c: Circuit, hp: HierarchyPath)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        ensures
+            var hier_c := HierarchyPathCircuit(c, hp);
+            HPLength(hp) <= (c.HierLevel - hier_c.HierLevel)
+        decreases HPLength(hp)
+    {
+        if HPLength(hp) == 0 {
+        } else {
+            var hier_c := HierarchyPathCircuit(c, hp);
+            var (head, tail) := HPHeadTail(hp);
+            var tail_c := HierarchyPathCircuit(c, tail);
+            var nk := NodeKind(tail_c, head).value;
+            assert nk.CHier?;
+            HierarchyPathCircuitValid(c, tail);
+            assert CircuitValid(tail_c);
+            reveal CircuitValid();
+            assert CNodeKindValid(tail_c.HierLevel, nk);
+            assert tail_c.HierLevel > hier_c.HierLevel;
+            HPLengthBound(c, tail);
+        }
+    }
+
+    function SeqCNodeToSeqNat(a: seq<CNode>): seq<nat>
+    {
+        seq(|a|, i requires 0 <= i < |a| => a[i] as nat)
+    }
 
 
 }
