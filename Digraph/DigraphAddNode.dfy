@@ -13,7 +13,7 @@ module DigraphAddNode {
         )
     }
 
-    lemma AddNodeDigraphValid<Node>(g: Digraph, n: Node)
+    lemma AddNodeDigraphValid<Node(!new)>(g: Digraph, n: Node)
         requires DigraphValid(g)
         requires !IsNode(g, n)
         ensures
@@ -21,9 +21,14 @@ module DigraphAddNode {
             DigraphValid(r)
     {
         reveal DigraphValid();
+        reveal IsNode();
+        reveal IsConnected();
+        var r := AddNode(g, n);
+        assert forall n, m: Node :: IsConnected(r, n, m) == IsConnected(g, n, m);
+        assert DigraphValid(r);
     }
 
-    function AddNodeV<Node(==)>(g: Digraph, n: Node): (r: Digraph)
+    function AddNodeV<Node(!new)>(g: Digraph, n: Node): (r: Digraph)
         requires DigraphValid(g)
         requires !IsNode(g, n)
         ensures
@@ -57,6 +62,9 @@ module DigraphAddNode {
         reveal DigraphValid();
         assert forall m: Node :: !IsConnected(g, m, n);
         assert forall m: Node :: !IsConnected(g, n, m);
+        reveal IsConnected();
+        assert forall m: Node :: IsConnected(r, m, n) == IsConnected(g, m, n);
+        assert forall m: Node :: IsConnected(r, n, m) == IsConnected(g, n, m);
         assert forall m: Node :: !IsConnected(r, m, n);
         assert forall m: Node :: !IsConnected(r, n, m);
         if n in p.v {

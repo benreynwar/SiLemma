@@ -98,19 +98,23 @@ module DigraphStepBack {
 
     ghost function StepSetBackInternal<Node(!new)>(g: Digraph, in_ns: set<Node>, out_ns: set<Node>): (r: set<Node>)
         requires DigraphValid(g)
-        ensures forall m :: (m in r <==> exists n :: (n in in_ns && IsConnected(g, n, m)) || (m in out_ns))
+        ensures forall m :: (m in r <==> (exists n :: n in in_ns && IsConnected(g, n, m)) || (m in out_ns))
     {
         if |in_ns| == 0 then
-            out_ns
+            var r := out_ns;
+            r
         else
             var n :| n in in_ns;
             var connected := StepBack(g, n);
+            assert forall m :: (m in connected ==> IsConnected(g, n, m));
             var new_in_ns := in_ns - {n};
             var new_out_ns := out_ns + connected;
-            StepSetBackInternal(g, new_in_ns, new_out_ns)
+            var r := StepSetBackInternal(g, new_in_ns, new_out_ns);
+            r
     }
 
     ghost function StepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>): (r: set<Node>)
+        // Returns a set of all the nodes that there nodes are connected to
         requires DigraphValid(g)
         ensures forall m :: m in r <==> exists n :: (n in in_ns && IsConnected(g, n, m))
     {
@@ -148,7 +152,9 @@ module DigraphStepBack {
         requires DigraphValid(g)
         ensures forall m :: m in r <==> IsConnected(g, n, m)
     {
-        (set m | m in g.Nodes && IsConnected(g, n, m))
+        reveal IsNode();
+        reveal DigraphValid();
+        (set m | m in g.Nodes && IsConnected(g, n, m) :: m)
     }
 
 }

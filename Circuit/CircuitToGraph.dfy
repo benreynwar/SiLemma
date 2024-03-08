@@ -7,29 +7,18 @@ module CircuitToGraph {
     import opened CircuitHierarchy
     import opened CircuitHPNP
     import SeqNatToNat
+    import SetExt
 
     // INP and ONP reference ports on a single level of the hierarchy.
     // The 'n' can point at an internal node, or at a port on the external
     // interface.
 
-    function SetToSeq<T>(s: set<T>): seq<T>
-    {
-        if |s| == 0 then
-            []
-        else
-            var y :| y in s;
-            var r := s - {y};
-            [y] + SetToSeq(r)
-    }
-
-    ghost function AllValidHPNPPairs(c: Circuit): set<(HPNP, HPNP)>
+    ghost function AllValidHPNPPairs(c: Circuit): (r: set<(HPNP, HPNP)>)
+        requires CircuitValid(c)
+        ensures forall a, b : HPNP :: HPNPValid(c, a) && HPNPValid(c, b) <==> (a, b) in r
     {
         var hpnps := AllValidHPNP(c);
-        var as_seq := SetToSeq(hpnps);
-        var pairs := (set n: nat | n < |hpnps|*|hpnps| ::
-            var (x, y) := SeqNatToNat.divmod(n, |hpnps|);
-            (as_seq[x], as_seq[y]));
-        pairs
+        SetExt.SetProduct(hpnps, hpnps)
     }
 
     ghost function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
@@ -39,6 +28,23 @@ module CircuitToGraph {
             (set hpnp: HPNP | hpnp in AllValidHPNP(c) :: hpnp),
             (set n: (HPNP, HPNP) | n in AllValidHPNPPairs(c) && HPNPConnected(c, n.0, n.1):: n)
         )
+    }
+
+    lemma CtoGConnections(c: Circuit)
+        requires CircuitValid(c)
+        ensures 
+            var g := CtoG(c);
+            forall a, b: HPNP :: HPNPConnected(c, a, b) == DG.IsConnected(g, a, b)
+    {
+        reveal CtoG();
+        reveal DG.IsConnected();
+        var g := CtoG(c);
+        forall n: (HPNP, HPNP)
+            ensures DG.IsConnected(g, n.0, n.1) == HPNPConnected(c, n.0, n.1);
+        {
+            reveal HPNPConnected();
+            assert HPNPConnected(c, n.0, n.1) ==> n in AllValidHPNPPairs(c);
+        }
     }
 
     ghost function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
@@ -57,7 +63,6 @@ module CircuitToGraph {
         var hp := hpinp.hpn.hp;
         HPNPValidHPValid(c, hpinp);
         var parent_c := HierarchyPathCircuit(c, hp);
-        HierarchyPathCircuitValid(c, hp);
         assert CircuitValid(parent_c);
         reveal HPNPValidOutput();
         reveal CircuitValid();
@@ -114,27 +119,19 @@ module CircuitToGraph {
     {
         reveal CtoG();
         var g := CtoG(c);
-        //HPNPToNatInjectiveAll();
-        //NatToHPNPInjectiveAll();
         forall n: HPNP, m: HPNP
-            //ensures HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n)
             ensures !HPNPConnected(c, n, n)
             ensures HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m)
-            //ensures (n != m) ==> HPNPToNat(n) != HPNPToNat(m)
-            //ensures NatToHPNP(HPNPToNat(n)) == Some(n)
         {
-            //OutOfBoundInvalid(c, n);
             NoSelfConnections(c, n);
             ConnectedNodesValid(c, n, m);
-            //HPNPToNatToHPNP(n);
         }
-        //assert (forall n: HPNP :: HPNPToNat(n) >= HPNPBound(c) ==> !HPNPValid(c, n));
         assert (forall n: HPNP :: !HPNPConnected(c, n, n));
         assert (forall n: HPNP, m: HPNP :: HPNPConnected(c, n, m) ==> HPNPValid(c, n) && HPNPValid(c, m));
-        //assert (forall n: HPNP, m: HPNP :: n != m ==> HPNPToNat(n) != HPNPToNat(m));
-        //assert (forall n: HPNP :: NatToHPNP(HPNPToNat(n)) == Some(n));
-        //assert Functions.Injective(HPNPToNat) && Functions.Injective(NatToHPNP);
         reveal DG.DigraphValid();
+        reveal DG.IsConnected();
+        reveal DG.IsNode();
+        assert DG.DigraphValid(g);
     }
     
     ghost predicate CircuitNoLoops(c: Circuit)
@@ -173,6 +170,12 @@ module CircuitToGraph {
         requires (|p.v| > 0 ==> HPNPConnected(c, DP.PathEnd(p), n))
         ensures DG.PathValid(CtoGV(c), r)
     {
+        reveal DG.PathValid();
+        reveal DG.IsNode();
+        reveal DG.IsConnected();
+        var g := CtoGV(c);
+        reveal CtoG();
+        assert |p.v| > 0 ==> DG.IsConnected(g, DP.PathEnd(p), n);
         DG.Path(p.v + [n])
         //reveal CtoG();
         //DP.PathAppend(CtoGV(c), p, n)
@@ -193,6 +196,7 @@ module CircuitToGraph {
         reveal CtoG();
         reveal HPNPValidInput();
         reveal HPNPValidOutput();
+        reveal DG.IsNode();
     }
     
 }

@@ -23,7 +23,7 @@ module DigraphBase {
 
     ghost predicate {:opaque} DigraphValid<Node(!new)>(g: Digraph)
     {
-        (forall n: Node :: IsConnected(g, n, n)) && // No self-connections
+        (forall n: Node :: !IsConnected(g, n, n)) && // No self-connections
         (forall n: Node, m: Node :: IsConnected(g, n, m) ==> IsNode(g, n) && IsNode(g, m))
     }
     

@@ -1,6 +1,7 @@
 module SeqExt {
     import Seq = Std.Collections.Seq
     import Functions = Std.Functions
+    import Std.Math
 
     lemma LemmaToSetAdds<X>(xs: seq<X>, ys: seq<X>)
         ensures Seq.ToSet(xs) + Seq.ToSet(ys) == Seq.ToSet(xs + ys)
@@ -33,4 +34,5 @@ module SeqExt {
     {
         reveal Seq.Map();
     }
+
 }

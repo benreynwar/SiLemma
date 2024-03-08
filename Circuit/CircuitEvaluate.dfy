@@ -21,6 +21,8 @@ module CircuitEvaluate {
     {
         var inp := DP.PathEnd(p);
         var onp := INPtoONP(c, inp);
+        INPtoONPConnected(c, inp);
+        assert HPNPConnected(c, inp, onp);
         assert HPNPValidOutput(c, onp);
         var new_p := PathAppend(c, p, onp);
         NoLoopsMeansNotInPath(c, p, onp);
@@ -50,6 +52,8 @@ module CircuitEvaluate {
             // If it's an input inside a hier node, then it connects to
             // the input port on the hier node on the next level up.
             var inp := CInputONPtoINP(c, onp);
+            CInputONPtoINPConnected(c, onp);
+            assert HPNPConnected(c, onp, inp);
             var new_p := PathAppend(c, p, inp);
             NumberOfRemainingNodesDecreases(c , p, inp);
             EvaluateINP(c, isigs, new_p)
@@ -68,6 +72,7 @@ module CircuitEvaluate {
     {
         var onp := DP.PathEnd(p);
         var inp := CHierONPtoINP(c, onp);
+        CHierONPtoINPConnected(c, onp);
         var new_p := PathAppend(c, p, inp);
         NumberOfRemainingNodesDecreases(c, p, inp);
         EvaluateINP(c, isigs, new_p)
@@ -100,7 +105,7 @@ module CircuitEvaluate {
         HPNPValidHPValid(c, onp);
         var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
         reveal HPNPValidOutput();
-        var nk := hp_c.NodeKind(onp.hpn.n).value;
+        var nk := NodeKind(hp_c, onp.hpn.n).value;
         match nk
         case CInput() => EvaluateONPCInput(c, isigs, p)
         case CHier(_) => EvaluateONPCHier(c, isigs, p)

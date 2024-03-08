@@ -608,61 +608,61 @@ module SeqNatToNat {
     ArbLenNatsToNat(bound_ns)
   }
 
-  lemma {:vcs_split_on_every_assert} BoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
-    requires la > 0
-    requires lb > la
-    ensures NatsToNatBound(la, bound) < NatsToNatBound(lb, bound)
-  {
-    // Show how each element contributes to the bound.
-    // Show that each element increases.
-  }
+  //lemma {:vcs_split_on_every_assert} BoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
+  //  requires la > 0
+  //  requires lb > la
+  //  ensures NatsToNatBound(la, bound) < NatsToNatBound(lb, bound)
+  //{
+  //  // Show how each element contributes to the bound.
+  //  // Show that each element increases.
+  //}
 
-  lemma {:vcs_split_on_every_assert} BoundIncreasesWithBound(l: nat, bounda: nat, boundb: nat)
-    requires l > 0
-    requires boundb > bounda
-    ensures NatsToNatBound(l, bounda) < NatsToNatBound(l, boundb)
-  {
-  }
+  //lemma {:vcs_split_on_every_assert} BoundIncreasesWithBound(l: nat, bounda: nat, boundb: nat)
+  //  requires l > 0
+  //  requires boundb > bounda
+  //  ensures NatsToNatBound(l, bounda) < NatsToNatBound(l, boundb)
+  //{
+  //}
 
-  lemma BoundIncreasesWithLengthBound(la: nat, lb: nat, bounda: nat, boundb: nat)
-    requires la > 0
-    requires lb > la
-    requires boundb > bounda
-    ensures NatsToNatBound(la, bounda) < NatsToNatBound(lb, boundb)
-  {
-    BoundIncreasesWithLength(la, lb, bounda);
-    BoundIncreasesWithBound(lb, bounda, boundb);
-  }
+  //lemma BoundIncreasesWithLengthBound(la: nat, lb: nat, bounda: nat, boundb: nat)
+  //  requires la > 0
+  //  requires lb > la
+  //  requires boundb > bounda
+  //  ensures NatsToNatBound(la, bounda) < NatsToNatBound(lb, boundb)
+  //{
+  //  BoundIncreasesWithLength(la, lb, bounda);
+  //  BoundIncreasesWithBound(lb, bounda, boundb);
+  //}
 
-  lemma {:vcs_split_on_every_assert} ArbLenBoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
-    requires la > 0
-    requires lb > la
-    ensures ArbLenNatsToNatBound(la, bound) < ArbLenNatsToNatBound(lb, bound)
-  {
-    // Show how each element contributes to the bound.
-    // Show that each element increases.
-  }
+  //lemma {:vcs_split_on_every_assert} ArbLenBoundIncreasesWithLength(la: nat, lb: nat, bound: nat)
+  //  requires la > 0
+  //  requires lb > la
+  //  ensures ArbLenNatsToNatBound(la, bound) < ArbLenNatsToNatBound(lb, bound)
+  //{
+  //  // Show how each element contributes to the bound.
+  //  // Show that each element increases.
+  //}
 
-  lemma {:vcs_split_on_every_assert} ArbLenNatsToNatBounded(a: seq<nat>, max_length: nat, bound: nat)
-    requires |a| > 0
-    requires |a| <= max_length
-    requires forall i : nat :: i < |a| ==> a[i] < bound
-    ensures ArbLenNatsToNat(a) < ArbLenNatsToNatBound(max_length, bound)
-  {
-    // Show how each element contributes to the bound.
-    // Show that each element increases.
-  }
+  //lemma {:vcs_split_on_every_assert} ArbLenNatsToNatBounded(a: seq<nat>, max_length: nat, bound: nat)
+  //  requires |a| > 0
+  //  requires |a| <= max_length
+  //  requires forall i : nat :: i < |a| ==> a[i] < bound
+  //  ensures ArbLenNatsToNat(a) < ArbLenNatsToNatBound(max_length, bound)
+  //{
+  //  // Show how each element contributes to the bound.
+  //  // Show that each element increases.
+  //}
 
-  lemma ArbLenNatsToNatOutOfBoundElementOutOfBound(a: seq<nat>, max_length: nat, bound: nat)
-    requires |a| > 0
-    requires |a| <= max_length
-    requires ArbLenNatsToNat(a) >= ArbLenNatsToNatBound(max_length, bound)
-    ensures exists i: nat :: i < |a| && a[i] >= bound
-  {
-    if !exists i: nat :: i < |a| && a[i] >= bound {
-      assert forall i: nat :: i< |a| ==> a[i] < bound;
-      ArbLenNatsToNatBounded(a, max_length, bound);
-    } else {
-    }
-  }
+  //lemma ArbLenNatsToNatOutOfBoundElementOutOfBound(a: seq<nat>, max_length: nat, bound: nat)
+  //  requires |a| > 0
+  //  requires |a| <= max_length
+  //  requires ArbLenNatsToNat(a) >= ArbLenNatsToNatBound(max_length, bound)
+  //  ensures exists i: nat :: i < |a| && a[i] >= bound
+  //{
+  //  if !exists i: nat :: i < |a| && a[i] >= bound {
+  //    assert forall i: nat :: i< |a| ==> a[i] < bound;
+  //    ArbLenNatsToNatBounded(a, max_length, bound);
+  //  } else {
+  //  }
+  //}
 }

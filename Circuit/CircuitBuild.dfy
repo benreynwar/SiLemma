@@ -1,5 +1,6 @@
 module CircuitBuild {
 
+    import Std.Collections.Seq
     import opened Std.Wrappers
     import opened CircuitHPNP
     import opened CircuitBase
@@ -9,6 +10,8 @@ module CircuitBuild {
     import DP = DigraphPaths
     import DSB = DigraphStepBack
     import DC = DigraphCombine
+    import SetExt
+    import SeqExt
 
     // Proove that there are no loops in a small circuit.
     // Take a set of HPNP.
@@ -87,6 +90,8 @@ module CircuitBuild {
         reveal HPNPOtoIConnected();
         StepBackMatchesHPNPConnected(c, n);
         assert forall m :: m in DSB.StepBack(g, n) ==> DG.IsConnected(g, n, m);
+        reveal DG.IsConnected();
+        reveal DG.IsNode();
         assert forall m :: m in StepBack(c, n) ==> DG.IsConnected(g, n, m);
     }
 
@@ -183,8 +188,10 @@ module CircuitBuild {
         reveal CtoG();
         assert DG.DigraphValid(g);
         assert forall n: HPNP :: !HPNPValid(c, n);
+        reveal DG.IsNode();
         assert forall n: HPNP :: !DG.IsNode(g, n);
         EmptyCircuitHasNoHPNPConnected();
+        reveal DG.IsConnected();
         assert forall n, m: HPNP :: !DG.IsConnected(g, n, m);
         reveal DP.DigraphLoop();
         reveal DG.PathValid();
@@ -207,66 +214,6 @@ module CircuitBuild {
         c
     }
 
-    //function NodeKindElementBound(c: Circuit, nk: CNodeKind, n: CNode): nat
-    //    requires CircuitValid(c)
-    //    requires !nk.CHier?
-    //{
-    //    var max_index := HPNPElementBound(c);
-    //    var port_bound := NKPortBound(nk) as nat;
-    //    var new_max_index_intermed := if port_bound > max_index then port_bound else max_index;
-    //    var new_max_index := if (n as nat)+1 > new_max_index_intermed then (n as nat)+1 else new_max_index_intermed;
-    //    new_max_index
-    //}
-
-    //function NodeKindBound(c: Circuit, nk: CNodeKind, n: CNode): nat
-    //    requires CircuitValid(c)
-    //    requires !nk.CHier?
-    //{
-    //    var element_bound := NodeKindElementBound(c, nk, n);
-    //    var ns := Seq.Repeat(element_bound, c.HierLevel+2);
-    //    SeqNatToNat.ArbLenNatsToNat(ns)
-    //}
-
-    //lemma NodeKindBoundBinds(c: Circuit, nk: CNodeKind, hpn: HPNode)
-    //    requires CircuitValid(c)
-    //    requires HierarchyPathValid(c, hpn.hp)
-    //    requires !nk.CHier?
-    //    ensures
-    //        var g := NodeKindToGraph(c, nk, hpn);
-    //        var bound := NodeKindBound(c, nk, hpn.n);
-    //        forall n: HPNP :: g.IsNode(n) ==> g.NodeMap(n) < bound
-    //{
-    //    var g := NodeKindToGraph(c, nk, hpn);
-    //    var bound := NodeKindBound(c, nk, hpn.n);
-    //    assert g.NodeBound == bound;
-    //    assert forall hpnp :: g.IsNode(hpnp) ==> hpnp.hpn == hpn;
-
-    //    var element_bound := NodeKindElementBound(c, nk, hpn.n);
-    //    var ns := Seq.Repeat(element_bound, c.HierLevel+2);
-    //    assert bound == SeqNatToNat.ArbLenNatsToNat(ns);
-
-    //    HPElementsInBound(c, hpn.hp);
-    //    assert forall n: CNode :: (n in hpn.hp.v) ==> n as nat < element_bound;
-    //    assert forall e: nat :: e in SeqCNodeToSeqNat(hpn.hp.v) ==> e < element_bound;
-    //    assert hpn.n as nat < element_bound;
-
-    //    forall hpnp | g.IsNode(hpnp)
-    //        ensures HPNPToNat(hpnp) < bound
-    //    {
-    //        assert hpnp.hpn == hpn;
-    //        var hpnp_as_seqnat := HPNPToSeqNat(hpnp);
-    //        assert |hpnp_as_seqnat| == |hpnp.hpn.hp.v| + 2;
-    //        HPLengthBound(c, hpnp.hpn.hp);
-    //        assert |hpnp.hpn.hp.v| <= c.HierLevel;
-    //        assert |hpnp_as_seqnat| <= c.HierLevel + 2;
-    //        assert hpnp.p as nat < element_bound;
-    //        var as_nat := HPNPToSeqNat(hpnp);
-    //        assert forall n: nat :: n in as_nat ==> n < element_bound;
-    //        SeqNatToNat.ArbLenNatsToNatBounded(as_nat, c.HierLevel+2, element_bound);
-    //        assert HPNPToNat(hpnp) < bound;
-    //    }
-    //}
-
     lemma {:vcs_split_on_every_assert} NodeKindToGraphNoLoop(c: Circuit, nk: CNodeKind, hpn: HPNode)
         requires CircuitValid(c)
         requires CNodeKindSomewhatValid(nk)
@@ -275,6 +222,7 @@ module CircuitBuild {
         ensures !DP.DigraphLoop(NodeKindToGraph(c, nk, hpn))
     {
         var g := NodeKindToGraph(c, nk, hpn);
+        reveal DG.IsConnected();
         if nk.CComb? {
             forall p: DG.Path<HPNP> | DG.PathValid(g, p)
                 ensures !DP.PathLoop(p)
@@ -325,27 +273,12 @@ module CircuitBuild {
         ensures DG.DigraphValid(NodeKindToGraph(c, nk, hpn))
     {
         var g := NodeKindToGraph(c, nk, hpn);
-        //var bound := NodeKindBound(c, nk, hpn.n);
-        //assert g.NodeBound == bound;
-        //NodeKindBoundBinds(c, nk, hpn);
-        //assert forall n: HPNP :: g.IsNode(n) ==> g.NodeMap(n) < bound;
-        //var max_index := HPNPElementBound(c);
-        //assert g.NodeBound == NodeKindBound(c, nk, hpn.n);
-        //assert (forall n: HPNP :: g.NodeMap(n) >= g.NodeBound ==> !g.IsNode(n));
         if nk.CComb? {
             CNodeKindNoSelfPaths(nk);
         }
         reveal DG.IsConnected();
         assert (forall n: HPNP :: !DG.IsConnected(g, n, n));
         assert (forall n: HPNP, m: HPNP :: DG.IsConnected(g, n, m) ==> DG.IsNode(g, n) && DG.IsNode(g, m));
-        //HPNPToNatInjectiveAll();
-        //NatToHPNPInjectiveAll();
-        //forall hpnp: HPNP {
-        //    HPNPToNatToHPNP(hpnp);
-        //}
-        //assert (forall n: HPNP, m: HPNP :: n != m ==> g.NodeMap(n) != g.NodeMap(m));
-        //assert (forall n: HPNP :: g.InvNodeMap(g.NodeMap(n)) == Some(n));
-        //assert Functions.Injective(g.NodeMap) && Functions.Injective(g.InvNodeMap);
         reveal DG.DigraphValid();
         assert DG.DigraphValid(g);
     }
@@ -375,9 +308,51 @@ module CircuitBuild {
         )
     }
 
-    function NewNode(c: Circuit): CNode
+    lemma NewNodeAttemptHelper(m: set<CNode>)
+        requires forall x: CNode :: x < (|m| as CNode) ==> x in m
+        ensures forall x: CNode :: x >= (|m| as CNode) ==> x !in m
     {
-        0
+        if |m| == 0 {
+            assert (|m| as CNode) !in m;
+        } else {
+            assert |m|-1 < |m|;
+            assert (|m|-1) as CNode in m;
+            var new_m: set<CNode> := m - {(|m|-1) as CNode};
+            assert |new_m| == |m| - 1;
+            NewNodeAttemptHelper(new_m);
+            assert forall x: CNode :: x >= (|m|-1) as CNode ==> x !in new_m;
+            assert m == new_m + {(|m|-1) as CNode};
+            assert forall x: CNode :: x >= (|m| as CNode) ==> x !in m;
+        }
+    }
+
+    function NewNodeAttempt(c: Circuit, n: CNode): (r: CNode)
+        requires forall m :: m < n ==> NodeKind(c, m).Some?
+        ensures NodeKind(c, r).None?
+        requires n <= |c.NodeKind| as CNode
+        decreases |c.NodeKind| - (n as nat)
+    {
+        if n as nat == |c.NodeKind| then
+            // Show that this CNode must be available if everything smaller is
+            // already in use.
+            assert forall m: CNode :: m < (|c.NodeKind| as CNode) ==> NodeKind(c, m).Some?;
+            assert forall m: CNode :: NodeKind(c, m).Some? ==> m in c.NodeKind;
+            assert forall m: CNode :: m < (|c.NodeKind| as CNode) ==> m in c.NodeKind;
+            NewNodeAttemptHelper(c.NodeKind.Keys);
+            assert forall m: CNode :: m >= (|c.NodeKind| as CNode) ==> m !in c.NodeKind;
+            assert n !in c.NodeKind;
+            n
+        else
+            if n in c.NodeKind then
+                NewNodeAttempt(c, n+1)
+            else
+                n
+    }
+
+    function NewNode(c: Circuit): (r: CNode)
+        ensures NodeKind(c, r).None?
+    {
+        NewNodeAttempt(c, 0)
     }
 
     lemma AddNodeNoInputsAddDGNode(c: Circuit, nk: CNodeKind)
@@ -417,6 +392,7 @@ module CircuitBuild {
         HPNodeNotInCircuitHPNPNotInGraph(c, hpn);
         reveal DC.DigraphsCompatible();
         reveal CtoG();
+        reveal DG.IsNode();
         assert DC.DigraphsCompatible(g, sg);
         CtoGValid(c);
         var new_g := DC.Combine(g, sg);

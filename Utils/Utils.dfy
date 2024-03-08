@@ -197,4 +197,13 @@ module Utils {
     //}
 
 
+            //assert x < |hpnps|;
+            //assert x + y*|hpnps| == n;
+            //assert x + y*|hpnps| < |hpnps|*|hpnps|;
+            //assert |hpnps| + y*|hpnps| <= |hpnps|*|hpnps|;
+            //assert (1+y)*|hpnps| <= |hpnps|*|hpnps|;
+            //assert (1+y) <= |hpnps|;
+            //assert y < |hpnps|;
+
+
 }
