@@ -9,7 +9,7 @@ module CircuitTest {
     import opened CircuitHierarchy
     import opened CircuitToGraph
     import opened CircuitBuild
-    import DG = DigraphBase
+    import DG = DigraphBase`Body
     import P = Primitives
     // Make a circuit with a single XOR gate.
 

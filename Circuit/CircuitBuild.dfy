@@ -6,10 +6,10 @@ module CircuitBuild {
     import opened CircuitBase
     import opened CircuitHierarchy
     import opened CircuitToGraph
-    import DG = DigraphBase
-    import DP = DigraphPaths
+    import DG = DigraphBase`Body
+    import DP = DigraphPaths`Body
     import DSB = DigraphStepBack
-    import DC = DigraphCombine
+    import DC = DigraphCombine`Body
     import SetExt
     import SeqExt
 

@@ -1,11 +1,48 @@
 module DigraphPaths {
 
     import Std.Collections.Seq
-
+    import Std.Collections.Set
     import Utils
-    import opened DigraphBase
+    import opened DigraphBase`Body
+    import opened DBS = DigraphBase`Spec
 
-    ghost predicate {:opaque} DigraphLoop<Node(!new)>(g: Digraph)
+    export Spec
+        provides DBS
+        provides DigraphLoop
+        provides PathFindIndex
+        provides PathLoop
+        provides GetLoopPath
+        provides PathExists, PathFromTo
+        reveals PathStart, PathEnd
+
+    export Body
+        provides DBS
+        reveals DigraphLoop
+        reveals PathLoop
+        reveals PathExists
+        reveals PathFromTo, ShortPathFromTo
+        reveals PathStart, PathEnd
+        reveals PathSegment
+        reveals AddPaths
+        reveals PathNoRepeats
+        // Shouldn't need to know what's happening inside
+        provides GetLoopPath
+        provides PathFindIndex
+        // Kind reveal without revealing too much other stuff
+        provides NumberOfRemainingNodesPath
+        // functions shouldn't be used elsewhere
+        provides DigraphLoop2
+        // Do we even need this
+        provides PathRemoveLoops
+        // lemmas 
+        provides PathExistsByExample, PathExistsAdd
+        provides PathSegmentValid
+        provides NoLoopsMeansNoRepeats
+        provides RemoveLoopsFromToSame
+        provides AddPathsValid, AddPathsFromTo
+        provides DigraphLoopEquiv
+
+    ghost predicate {:opaque} DigraphLoop<Node(!new)>(g: DBS.Digraph)
         // There's a loop in the digraph.
         // (there exists a path that is a loop).
     {
@@ -46,6 +83,8 @@ module DigraphPaths {
     ghost function GetLoopPath<Node(!new)>(g: Digraph): (r: Path<Node>)
         // Returns a loop from a digraph that has a loop.
         requires DigraphLoop(g)
+        ensures PathValid(g, r)
+        ensures PathLoop(r)
     {
         reveal DigraphLoop();
         DigraphLoopEquiv(g);

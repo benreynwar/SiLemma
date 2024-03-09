@@ -1,7 +1,12 @@
 module DigraphConnectNodes {
 
-    import opened DigraphBase
-    import opened DigraphPaths
+    export Spec
+        provides DBS
+        provides ConnectNodes
+
+    import DBS = DigraphBase`Spec
+    import opened DigraphBase`Body
+    import opened DigraphPaths`Body
 
     function ConnectNodes<Node(==)>(g: Digraph, n: Node, m: Node): (r: Digraph)
         requires IsNode(g, n)

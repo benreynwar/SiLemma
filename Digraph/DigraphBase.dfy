@@ -4,9 +4,19 @@ module DigraphBase {
     import Std.Functions
     import Std.Collections.Set
 
+    export Spec
+        reveals Path, PathValid
+        provides Digraph, DigraphValid, IsNode, IsConnected
+        provides AllNodes
+
+    export Body
+        reveals Path, PathValid
+        reveals Digraph, DigraphValid, IsNode, IsConnected
+        reveals AllNodes
+
     datatype Path<Node> = Path(v: seq<Node>)
 
-    datatype Digraph<!Node> = Digraph(
+    datatype Digraph<Node(==)> = Digraph(
         Nodes: set<Node>,
         Connections: set<(Node, Node)>
     )

@@ -1,7 +1,7 @@
 module CircuitToGraph {
 
-    import DG = DigraphBase
-    import DP = DigraphPaths
+    import DG = DigraphBase`Body
+    import DP = DigraphPaths`Body
     import opened Std.Wrappers
     import opened CircuitBase
     import opened CircuitHierarchy
@@ -40,7 +40,7 @@ module CircuitToGraph {
         reveal DG.IsConnected();
         var g := CtoG(c);
         forall n: (HPNP, HPNP)
-            ensures DG.IsConnected(g, n.0, n.1) == HPNPConnected(c, n.0, n.1);
+            ensures DG.IsConnected(g, n.0, n.1) == HPNPConnected(c, n.0, n.1)
         {
             reveal HPNPConnected();
             assert HPNPConnected(c, n.0, n.1) ==> n in AllValidHPNPPairs(c);

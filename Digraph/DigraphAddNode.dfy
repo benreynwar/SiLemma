@@ -1,7 +1,12 @@
 module DigraphAddNode {
 
-    import opened DigraphBase
-    import opened DigraphPaths
+    export Body
+        provides DBS
+        provides AddNode
+
+    import DBS = DigraphBase`Spec
+    import opened DigraphBase`Body
+    import opened DigraphPaths`Body
     // Adding nodes
 
     function AddNode<Node(==)>(g: Digraph, n: Node): (r: Digraph)
@@ -70,6 +75,7 @@ module DigraphAddNode {
         if n in p.v {
             assert !PathValid(g, p);
             if |p.v| == 1 {
+                reveal IsNode();
                 assert PathValid(r, p);
             } else {
                 if p.v[0] == n {
@@ -85,6 +91,7 @@ module DigraphAddNode {
                 assert !PathValid(r, p);
             }
         } else {
+            reveal IsNode();
         }
     }
 

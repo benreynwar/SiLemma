@@ -6,7 +6,7 @@ module CircuitEvaluate {
     import opened CircuitHPNP
     import opened CircuitHierarchy
     import opened CircuitToGraph
-    import DG = DigraphBase
+    import DG = DigraphBase`Spec
     import DP = DigraphPaths
 
     function {:vcs_split_on_every_assert} EvaluateINP(
@@ -48,6 +48,7 @@ module CircuitEvaluate {
         else
             var (hier_n, parent_hp) := HPHeadTail(onp.hpn.hp);
             HPNPValidHPValid(c, onp);
+            HPTailValid(c, onp.hpn.hp);
             assert HierarchyPathValid(c, parent_hp);
             // If it's an input inside a hier node, then it connects to
             // the input port on the hier node on the next level up.

@@ -1,9 +1,14 @@
 module DigraphStepBack {
 
+    export Body
+        provides DBS
+        reveals StepBack
+
     import opened Std.Wrappers
 
-    import opened DigraphBase
-    import opened DigraphPaths
+    import DBS=DigraphBase`Spec
+    import opened DigraphBase`Body
+    import opened DigraphPaths`Body
 
     lemma NoPathLengthXNoPathsLonger<Node>(g: Digraph, length: nat)
         requires !exists p: Path<Node> :: |p.v| == length && PathValid(g, p)
