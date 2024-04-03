@@ -24,10 +24,19 @@ module SetExt {
             [y] + ToSeq(r)
     }
 
+    lemma SetRemoval<T>(s: set<T>, x: T)
+        requires x in s
+        ensures
+            var new_s := s - {x};
+            s == new_s + {x}
+    {
+    }
+
     lemma {:vcs_split_on_every_assert} ThereIsAMinimum<T(!new)>(s: set<T>, R: (T, T)->bool)
         requires Relations.TotalOrdering(R)
         requires s != {}
         ensures exists x :: x in s && forall y :: y in s ==> R(x, y)
+        decreases |s|
     {
         var x :| x in s;
         var goal := exists x :: x in s && forall y :: y in s ==> R(x, y);
@@ -35,8 +44,12 @@ module SetExt {
             assert forall y:: y in s ==> y == x;
             assert goal;
         } else {
+            assert x in s;
             var new_s := s - {x};
+            SetRemoval(s, x);
             assert s == new_s + {x};
+            assert |new_s| < |s|;
+            assert new_s != {};
             ThereIsAMinimum(new_s, R);
             var z :| z in new_s && forall y :: y in new_s ==> R(z, y);
             assert forall y :: y in s ==> y in new_s || y == x;
