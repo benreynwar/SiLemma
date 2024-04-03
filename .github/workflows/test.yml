@@ -21,4 +21,4 @@ jobs:
       - name: Set DAFNY_HOME
         run: echo "DAFNY_HOME=$(dirname $(which dafny))" >> $GITHUB_ENV
       - name: Verify
-        run: dafny verify dfyconfig.toml
+        run: dafny verify dfyconfig.toml --verification-time-limit 30
