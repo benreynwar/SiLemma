@@ -112,7 +112,7 @@ module Utils {
         (forall a: T, b: T :: ge(a, b) || ge(b, a))
     }
 
-    function Max<T>(ge: (T, T)->bool, a: T, b: T): (r: T)
+    function Max<T(!new)>(ge: (T, T)->bool, a: T, b: T): (r: T)
         requires GEValid(ge)
         ensures ge(r, a)
         ensures ge(r, b)
@@ -120,12 +120,11 @@ module Utils {
         if ge(a, b) then a else b
     }
 
-    ghost function MaxInSet<T>(ge: (T, T)->bool, s: set<T>): (r: T)
+    ghost function MaxInSet<T(!new)>(ge: (T, T)->bool, s: set<T>): (r: T)
         requires GEValid(ge)
         requires |s| > 0
         decreases |s|
-        ensures
-            forall x :: x in s ==> ge(r, x)
+        ensures forall x :: x in s ==> ge(r, x)
     {
         var x :| x in s;
         if |s| == 1 then
@@ -205,5 +204,41 @@ module Utils {
             //assert (1+y) <= |hpnps|;
             //assert y < |hpnps|;
 
+    datatype Mapping<T, U> =
+        Mapping(
+            a: seq<T>,
+            b: seq<U>
+        )
 
+    predicate MappingValid<T(==), U(==)>(m: Mapping)
+    {
+        |m.a| == |m.b| &&
+        (forall i: nat, j: nat :: i < |m.a| && j < |m.b| && i != j ==> m.a[i] != m.a[j] && m.b[i] != m.b[j])
+    }
+
+    function MapForward<T(==), U>(m: Mapping<T, U>, key: T): U
+        requires MappingValid(m)
+        requires key in m.a
+    {
+        var index := Seq.IndexOf(m.a, key);
+        m.b[index]
+    }
+
+    function MapBackward<T, U(==)>(m: Mapping<T, U>, key: U): T
+        requires MappingValid(m)
+        requires key in m.b
+    {
+        var index := Seq.IndexOf(m.b, key);
+        m.a[index]
+    }
+
+    predicate MappingForwardKey<T(==), U>(m: Mapping, k: T)
+    {
+        k in m.a
+    }
+
+    predicate MappingBackwardKey<T, U(==)>(m: Mapping, k: U)
+    {
+        k in m.b
+    }
 }

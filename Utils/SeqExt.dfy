@@ -10,7 +10,7 @@ module SeqExt {
         assert forall x :: x in (xs + ys) <==> (x in xs) || (x in ys);
     }
 
-    lemma MapConservesNoDuplicates<X, Y>(f: X -> Y, xs: seq<X>)
+    lemma MapConservesNoDuplicates<X(!new), Y>(f: X -> Y, xs: seq<X>)
         requires Seq.HasNoDuplicates(xs)
         requires Functions.Injective(f)
         ensures Seq.HasNoDuplicates(Seq.Map(f, xs))
@@ -33,6 +33,21 @@ module SeqExt {
         ensures f(x) in Seq.Map(f, xs)
     {
         reveal Seq.Map();
+    }
+
+    function SetConcat<X>(a: seq<X>, b: seq<X>): (r: seq<X>)
+        requires Seq.HasNoDuplicates(a)
+        requires Seq.HasNoDuplicates(b)
+        ensures Seq.HasNoDuplicates(r)
+        decreases |b|
+    {
+        if |b| == 0 then
+            a
+        else
+            var x := b[0];
+            var new_b := b[1..];
+            var new_a := a + [x];
+            SetConcat(new_a, new_b)
     }
 
 }

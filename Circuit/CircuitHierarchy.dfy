@@ -312,6 +312,16 @@ module CircuitHierarchy {
         maybe_nk.Some?
     }
 
+    ghost function AllValidHPNodesFromHP(c: Circuit, hp: HierarchyPath): (r: set<HPNode>)
+        requires CircuitValid(c)
+        requires HierarchyPathValid(c, hp)
+        ensures forall hpn :: hpn in r <==> HPNodeValid(c, hpn) && (hpn.hp == hp)
+    {
+        reveal HPNodeValid();
+        var hp_c := HierarchyPathCircuit(c, hp);
+        (set n | n in hp_c.NodeKind :: HPNode(hp, n))
+    }
+
     ghost function AllValidHPNodesFromHPs(c: Circuit, hps: set<HierarchyPath>): (r: set<HPNode>)
         requires CircuitValid(c)
         requires forall hp :: hp in hps ==> HierarchyPathValid(c, hp)
@@ -323,8 +333,7 @@ module CircuitHierarchy {
             var hp :| hp in hps;
             var next_hps := hps - {hp};
             var next_hpns := AllValidHPNodesFromHPs(c, next_hps);
-            var hp_c := HierarchyPathCircuit(c, hp);
-            var this_hpns := (set n | n in hp_c.NodeKind :: HPNode(hp, n));
+            var this_hpns := AllValidHPNodesFromHP(c, hp);
             reveal HPNodeValid();
             assert forall hpn :: hpn in this_hpns ==> HPNodeValid(c, hpn);
             this_hpns + next_hpns

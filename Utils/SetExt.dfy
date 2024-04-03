@@ -1,5 +1,7 @@
 module SetExt {
 
+    import Std.Relations
+
   ///* Returns the maximum integer value in a non-empty set of integers. */
   //function {:opaque} Max(xs: set<int>): int
   //  requires 0 < |xs|
@@ -20,6 +22,14 @@ module SetExt {
             var y :| y in s;
             var r := s - {y};
             [y] + ToSeq(r)
+    }
+
+    function GetMin<T>(s: set<T>, R: (T, T) -> bool): (r: T)
+        requires Relations.TotalOrdering(R)
+        ensures r in s
+    {
+        var x :| x in s && forall y :: y in s ==> R(x, y);
+        x
     }
 
     lemma ToSeqStillContains<T>(s: set<T>, x: T)

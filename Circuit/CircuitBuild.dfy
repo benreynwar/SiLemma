@@ -8,10 +8,11 @@ module CircuitBuild {
     import opened CircuitToGraph
     import DG = DigraphBase`Body
     import DP = DigraphPaths`Body
-    import DSB = DigraphStepBack
+    import DSB = DigraphStepBack`Body
     import DC = DigraphCombine`Body
     import SetExt
     import SeqExt
+    import MapExt
 
     // Proove that there are no loops in a small circuit.
     // Take a set of HPNP.
@@ -154,11 +155,12 @@ module CircuitBuild {
         ensures CircuitValid(r)
     {
         reveal CircuitValid();
+        reveal CircuitPortNamesValid();
         var c := Circuit(
             NodeKind := map[],
             PortSource := map[],
             HierLevel := 0,
-            PortNames := map[]
+            PortMap := PortMapping([], [], [], [])
         );
         c
     }
@@ -198,20 +200,120 @@ module CircuitBuild {
         assert !DP.DigraphLoop(g);
     }
 
-    function AddIPort(g: Circuit): (r: (Circuit, NP))
-        requires CircuitValid(g)
+    function AddIPort(c: Circuit, l: string): (r: (Circuit, NP))
+        requires CircuitValid(c)
+        requires l !in c.PortMap.inames
+        requires l !in c.PortMap.onames
         ensures CircuitValid(r.0)
     {
-        var (c, n) := AddNode(g, CInput, map[]);
-        (c, NP(n, 0))
+        reveal CircuitValid();
+        reveal CircuitPortNamesValid();
+        var new_node := NewNode(c);
+        var new_c := Circuit(
+            NodeKind := c.NodeKind[new_node := CInput],
+            PortSource := c.PortSource,
+            HierLevel := c.HierLevel,
+            PortMap := PortMappingAddIPort(c.PortMap, l, new_node as CPort)
+        );
+        assert CircuitNodeKindValid(c);
+        assert CircuitNodeKindValid(new_c);
+        assert CircuitPortSourceValid(new_c);
+        reveal CircuitPortNamesValid();
+        //MapExt.ExtendedMapValues(c.IPortNames, l, new_node);
+        assert CircuitPortNamesValid(new_c);
+        assert CircuitValid(new_c);
+        (new_c, NP(new_node, OUTPUT_PORT))
     }
 
-    function AddOPort(g: Circuit, onp: NP): (r: Circuit)
-        requires CircuitValid(g)
+    function GetInputPort(c: Circuit, n: CNode, l: string): (r: NP)
+        requires CircuitValid(c)
+        requires n in c.NodeKind
+        requires
+            var nk := c.NodeKind[n];
+            var pm := PortMap(nk);
+            l in pm.inames
+        ensures NPValidInput(c, r)
+    {
+        reveal CircuitValid();
+        assert CircuitNodeKindValid(c);
+        var nk := c.NodeKind[n];
+        assert CNodeKindSomewhatValid(nk);
+        var pm := PortMap(nk);
+        var p := INameToPort(pm, l);
+        NP(n, p)
+    }
+
+    function GetOutputPort(c: Circuit, n: CNode, l: string): (r: NP)
+        requires CircuitValid(c)
+        requires n in c.NodeKind
+        requires
+            var nk := c.NodeKind[n];
+            var pm := PortMap(nk);
+            l in pm.onames
+        ensures NPValidOutput(c, r)
+    {
+        reveal CircuitValid();
+        assert CircuitNodeKindValid(c);
+        var nk := c.NodeKind[n];
+        assert CNodeKindSomewhatValid(nk);
+        var pm := PortMap(nk);
+        var p := ONameToPort(pm, l);
+        NP(n, p)
+    }
+
+
+    function AddOPortAndConnect(c: Circuit, onp: NP, l: string): (r: Circuit)
+        requires CircuitValid(c)
+        requires NPValidOutput(c, onp)
+        requires l !in c.PortMap.inames
+        requires l !in c.PortMap.onames
         ensures CircuitValid(r)
     {
-        var (c, n) := AddNode(g, COutput, map[0 := onp]);
-        c
+        var (new_c, n) := AddOPort(c, l);
+        assert CircuitValid(new_c);
+        reveal CircuitValid();
+        var inp := GetInputPort(new_c, n, "i");
+        assert CircuitPortSourceValid(new_c);
+        var final_c := Circuit(
+            NodeKind := new_c.NodeKind,
+            PortSource := new_c.PortSource[inp := onp],
+            HierLevel := new_c.HierLevel,
+            PortMap := new_c.PortMap
+        );
+        CircuitUpdatedCircuitNodeKindValid(new_c, final_c);
+        reveal CircuitPortNamesValid();
+        assert CircuitPortNamesValid(final_c);
+        assert CircuitPortSourceValid(final_c);
+        assert CircuitValid(final_c);
+        final_c
+    }
+
+    function AddOPort(c: Circuit, l: string): (r: (Circuit, CNode))
+        requires CircuitValid(c)
+        requires l !in c.PortMap.inames
+        requires l !in c.PortMap.onames
+        ensures CircuitValid(r.0)
+    {
+        reveal CircuitValid();
+        reveal CircuitPortNamesValid();
+        var new_node := NewNode(c);
+        var new_c := Circuit(
+            NodeKind := c.NodeKind[new_node := COutput],
+            PortSource := c.PortSource,
+            HierLevel := c.HierLevel,
+            PortMap := PortMappingAddOPort(c.PortMap, l, new_node as CPort)
+        );
+        assert forall n: CNode :: (NodeKind(new_c, n) == (if (n == new_node) then
+            Some(COutput) else NodeKind(c, n))) ;
+        assert CircuitNodeKindValid(c);
+        assert CircuitPortSourceValid(c);
+        reveal CircuitPortNamesValid();
+        //MapExt.ExtendedMapValues(c.OPortNames, l, new_node);
+        assert CircuitNodeKindValid(new_c);
+        assert CircuitPortSourceValid(new_c);
+        assert CircuitPortNamesValid(new_c);
+        assert CircuitValid(new_c);
+        (new_c, new_node)
     }
 
     lemma {:vcs_split_on_every_assert} NodeKindToGraphNoLoop(c: Circuit, nk: CNodeKind, hpn: HPNode)
@@ -230,9 +332,9 @@ module CircuitBuild {
                 reveal DG.PathValid();
                 if |p.v| > 2 {
                     assert DG.IsConnected(g, p.v[0], p.v[1]);
-                    assert p.v[0].p in nk.OPorts;
-                    assert p.v[1].p in nk.IPorts;
-                    assert p.v[1].p !in nk.OPorts;
+                    //assert p.v[0].p in nk.OPorts;
+                    //assert p.v[1].p in nk.IPorts;
+                    //assert p.v[1].p !in nk.OPorts;
                     assert DG.IsConnected(g, p.v[1], p.v[2]);
                     assert false;
                 } else if |p.v| == 2 {
@@ -355,111 +457,303 @@ module CircuitBuild {
         NewNodeAttempt(c, 0)
     }
 
-    lemma AddNodeNoInputsAddDGNode(c: Circuit, nk: CNodeKind)
-        // This is equivalent to adding many nodes to the digraph.
-        // One node for each port (if it's not hierarchical)
-
-        // Assume it's not Hierarchical.
-        // Show that the CNode creates a subgraph.
-        // Show that the subgraph contains no loops.
-        // Show that the combining the subgraphs does not
-        // introduce loops.
+    ghost function ToDigraphThenAddNKGraph(c: Circuit, nk: CNodeKind, n: CNode): (r: DG.Digraph<HPNP>)
         requires CNodeKindSomewhatValid(nk)
         requires CircuitValid(c)
         requires CircuitNoLoops(c)
         requires !nk.CHier?
-        ensures
-            var (new_c, n) := AddNodeNoInputs(c, nk);
-            var g := CtoG(c);
-            var new_g := CtoG(new_c);
-            DG.DigraphValid(g) &&
-            !DP.DigraphLoop(g) &&
-            true
-            //DG.DigraphValid(new_g) &&
-            //!DP.DigraphLoop(new_g)
+        requires NodeKind(c, n).None?
+        ensures DG.DigraphValid(r)
+        ensures !DP.DigraphLoop(r)
     {
-        var new_node := NewNode(c);
-        var g := CtoG(c);
-        assert !DP.DigraphLoop(g);
-        var hpn := HPNode(HP([]), new_node);
+        var g := CtoGV(c);
+        var hpn := HPNode(HP([]), n);
         var sg := NodeKindToGraph(c, nk, hpn);
         reveal CircuitValid();
         assert CircuitNodeKindValid(c);
         NodeKindToGraphValid(c, nk, hpn);
         NodeKindToGraphNoLoop(c, nk, hpn);
+        assert DG.DigraphValid(g);
         assert DG.DigraphValid(sg);
-        assert !DP.DigraphLoop(sg);
-        HPNodeNotInCircuitHPNPNotInGraph(c, hpn);
-        reveal DC.DigraphsCompatible();
         reveal CtoG();
+        reveal DC.DigraphsCompatible();
         reveal DG.IsNode();
         assert DC.DigraphsCompatible(g, sg);
-        CtoGValid(c);
-        var new_g := DC.Combine(g, sg);
         DC.CombineValid(g, sg);
+        assert !DP.DigraphLoop(g);
+        assert !DP.DigraphLoop(sg);
         DC.CombineNoLoops(g, sg);
-        assert DG.DigraphValid(new_g);
-        assert !DP.DigraphLoop(new_g);
-
-        var (new_c, n) := AddNodeNoInputs(c, nk);
-        var new_g2 := CtoG(new_c);
+        DC.Combine(g, sg)
     }
 
-    function AddNodeNoInputs(c: Circuit, nk: CNodeKind): (r: (Circuit, CNode))
+    lemma AddNodeAllHPs(c: Circuit, nk: CNodeKind, new_node: CNode)
+        requires CNodeKindSomewhatValid(nk)
+        requires CircuitValid(c)
+        requires CircuitNoLoops(c)
+        requires !nk.CHier?
+        requires !nk.CInput?
+        requires !nk.COutput?
+        requires NodeKind(c, new_node).None?
+        ensures 
+            var new_c := AddNodeInternal(c, nk, new_node);
+            var hps := AllValidHierarchyPaths(c);
+            var new_hps := AllValidHierarchyPaths(new_c);
+            hps == new_hps
+        {
+        }
+
+    //lemma {:vcs_split_on_every_assert} AddNodeAllHPNodes(c: Circuit, nk: CNodeKind, new_node: CNode)
+    //    requires CNodeKindSomewhatValid(nk)
+    //    requires CircuitValid(c)
+    //    requires CircuitNoLoops(c)
+    //    requires !nk.CHier?
+    //    requires !nk.CInput?
+    //    requires !nk.COutput?
+    //    requires NodeKind(c, new_node).None?
+    //    ensures 
+    //        var new_c := AddNodeInternal(c, nk, new_node);
+    //        var hpns := AllValidHPNodes(c);
+    //        var new_hpns := AllValidHPNodes(new_c);
+    //        hpns + {HPNode(HP([]), new_node)} == new_hpns
+    //    {
+    //        var new_c := AddNodeInternal(c, nk, new_node);
+    //        var hps := AllValidHierarchyPaths(c);
+    //        AddNodeAllHPs(c, nk, new_node);
+    //        var new_hpnode := HPNode(HP([]), new_node);
+    //        forall hp | hp in hps
+    //            ensures (AllValidHPNodesFromHP(new_c, hp) == AllValidHPNodesFromHP(c, hp) +
+    //                if hp == HP([]) then {new_hpnode} else {})
+    //        {
+    //            if hp == HP([]) {
+    //                assert AllValidHPNodesFromHP(new_c, hp) == AllValidHPNodesFromHP(c, hp)
+    //                 + {new_hpnode};
+    //            } else {
+    //                var hp_c := HierarchyPathCircuit(c, hp);
+    //                var new_hp_c := HierarchyPathCircuit(new_c, hp);
+    //                assert hp_c == new_hp_c;
+    //                assert AllValidHPNodesFromHP(new_c, hp) == AllValidHPNodesFromHP(c, hp);
+    //            }
+    //        }
+    //        assert AllValidHPNodes(new_c) == AllValidHPNodes(c)+ {new_hpnode};
+    //    }
+
+    lemma {:vcs_split_on_every_assert} AddNodeHPNPStillValid(c: Circuit, nk: CNodeKind, new_node: CNode)
+        requires CNodeKindSomewhatValid(nk)
         requires CircuitValid(c)
         requires !nk.CHier?
+        requires !nk.CInput?
+        requires !nk.COutput?
+        requires NodeKind(c, new_node).None?
+        ensures
+            var new_c := AddNodeInternal(c, nk, new_node);
+            forall hpnp:: HPNPValid(c, hpnp) ==> HPNPValid(new_c, hpnp)
+    {
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+    }
+            
+    //lemma {:vcs_split_on_every_assert} AddNodeAllHPNPs(c: Circuit, nk: CNodeKind, new_node: CNode)
+    //    requires CNodeKindSomewhatValid(nk)
+    //    requires CircuitValid(c)
+    //    requires CircuitNoLoops(c)
+    //    requires !nk.CHier?
+    //    requires !nk.CInput?
+    //    requires !nk.COutput?
+    //    requires NodeKind(c, new_node).None?
+    //    ensures 
+    //        var new_c := AddNodeInternal(c, nk, new_node);
+    //        var hpnps := AllValidHPNP(c);
+    //        var new_hpnps := AllValidHPNP(new_c);
+    //        var nk_hpnps := NodeKindHPNPs(c, nk, HPNode(HP([]), new_node));
+    //        //hpnps + nk_hpnps == new_hpnps &&
+    //        true
+    //    {
+    //        var new_c := AddNodeInternal(c, nk, new_node);
+    //        var hpns := AllValidHPNodes(c);
+    //        var new_hpns := AllValidHPNodes(new_c);
+    //        var added_hpn := HPNode(HP([]), new_node);
+    //        AddNodeAllHPNodes(c, nk, new_node);
+    //        assert hpns + {added_hpn} == new_hpns;
+    //    //var r := AllValidHPNPFromHPNs(c, hpns);
+    //        assert AllValidHPNP(c) == AllValidHPNPFromHPNs(c, hpns);
+    //        assert AllValidHPNP(new_c) == AllValidHPNPFromHPNs(new_c, new_hpns);
+    //        assert AllValidHPNPFromHPNs(new_c, new_hpns) ==
+    //            AllValidHPNPFromHPNs(new_c, hpns) +
+    //            AllValidHPNPFromHPNs(new_c, {added_hpn});
+    //        AddNodeHPNPStillValid(c, nk, new_node);
+    //        assert AllValidHPNPFromHPNs(new_c, hpns) == AllValidHPNPFromHPNs(c, hpns);
+    //        assert AllValidHPNP(new_c) == AllValidHPNP(c) +
+    //            AllValidHPNPFromHPNs(new_c, {added_hpn});
+    //        assert AllValidHPNPFromHPNs(new_c, {added_hpn}) == AllValidHPNPFromHPN(new_c, added_hpn);
+
+    //    }
+
+
+    //lemma AddNodeDigraphEquiv(c: Circuit, nk: CNodeKind, new_node: CNode)
+    //    requires CNodeKindSomewhatValid(nk)
+    //    requires CircuitValid(c)
+    //    requires CircuitNoLoops(c)
+    //    requires !nk.CHier?
+    //    requires NodeKind(c, new_node).None?
+    //    //ensures
+    //    //    var new_c := AddNodeNoInputs(c, nk, new_node);
+    //    //    var new_g1 := CtoG(new_c);
+    //    //    var new_g2 := ToDigraphThenAddNKGraph(c, nk, new_node);
+    //    //    new_g1 == new_g2
+    //{
+    //    var new_g1 := ToDigraphThenAddNKGraph(c, nk, new_node);
+    //    var new_c := AddNodeInternal(c, nk, new_node);
+    //    var g := CtoG(c);
+    //    var new_g2 := CtoG(new_c);
+    //    // Show that for new_g2 the nodes must be in the old circuit or be in the
+    //    // new added node.
+    //    // The only change for new_c is that we've added a node.
+    //    assert new_c.NodeKind == c.NodeKind[new_node:=nk];
+    //    assert new_g2.Nodes == AllValidHPNP(new_c);
+    //    assert g.Nodes == AllValidHPNP(c);
+    //    AddNodeAllHPNodes(c, nk, new_node);
+    //    assert AllValidHPNodes(c) + {HPNode(HP([]), new_node)} == AllValidHPNodes(new_c);
+    //    reveal CtoG();
+    //    assert new_g1.Nodes == new_g2.Nodes;
+    //    //assert new_g1 == new_g2;
+    //}
+
+    //function AddNodeNoInputs(c: Circuit, nk: CNodeKind, new_node: CNode): (r: Circuit)
+    //    requires CircuitValid(c)
+    //    requires !nk.CHier?
+    //    requires !nk.CInput?
+    //    requires !nk.COutput?
+    //    requires CNodeKindSomewhatValid(nk)
+    //    requires NodeKind(c, new_node).None?
+    //    ensures CircuitValid(r)
+    //{
+    //    reveal CircuitValid();
+    //    var new_c := Circuit(
+    //        NodeKind := c.NodeKind[new_node := nk],
+    //        PortSource := c.PortSource,
+    //        HierLevel := c.HierLevel,
+    //        IPortNames := c.IPortNames,
+    //        OPortNames := c.OPortNames
+    //    );
+    //    assert forall n: CNode :: (NodeKind(new_c, n) == (if (n == new_node) then
+    //        Some(nk) else NodeKind(c, n))) ;
+    //    assert CircuitNodeKindValid(c);
+    //    assert CircuitNodeKindValid(new_c);
+    //    assert CircuitPortSourceValid(new_c);
+    //    reveal CircuitPortNamesValid();
+    //    assert CircuitValid(new_c);
+    //    assert CNodeKindValid(new_c.HierLevel, nk);
+    //    new_c
+    //}
+
+    function AddNode(c: Circuit, nk: CNodeKind): (r: (Circuit, CNode))
+        requires CircuitValid(c)
+        requires !nk.CHier?
+        requires !nk.CInput?
+        requires !nk.COutput?
         requires CNodeKindSomewhatValid(nk)
         ensures CircuitValid(r.0)
+        ensures r.1 in r.0.NodeKind
+        ensures r.0.NodeKind[r.1] == nk
+        ensures forall p :: NP(r.1, p) !in r.0.PortSource
+    {
+        var new_node := NewNode(c);
+        (AddNodeInternal(c, nk, new_node), new_node)
+    }
+
+    function AddNodeInternal(c: Circuit, nk: CNodeKind, new_node: CNode): (r: Circuit)
+        requires CircuitValid(c)
+        requires !nk.CHier?
+        requires !nk.CInput?
+        requires !nk.COutput?
+        requires new_node !in c.NodeKind
+        requires CNodeKindSomewhatValid(nk)
+        ensures CircuitValid(r)
+        ensures new_node in r.NodeKind
+        ensures r.NodeKind[new_node] == nk
+        ensures forall p :: NP(new_node, p) !in r.PortSource
     {
         reveal CircuitValid();
-        var new_node := NewNode(c);
         var new_c := Circuit(
             NodeKind := c.NodeKind[new_node := nk],
             PortSource := c.PortSource,
-            //NodeBound := c.NodeBound+1,
-            //PortBound := if nk_port_bound > c.PortBound then nk_port_bound else c.PortBound,
             HierLevel := c.HierLevel,
-            PortNames := c.PortNames
-        );
-        assert forall n: CNode :: (NodeKind(new_c, n) == (if (n == new_node) then
-            Some(nk) else NodeKind(c, n))) ;
-        assert CircuitNodeKindValid(c);
-        assert CircuitNodeKindValid(new_c);
-        assert CircuitPortSourceValid(new_c);
-        assert CircuitValid(new_c);
-        assert CNodeKindValid(new_c.HierLevel, nk);
-        (new_c, new_node)
-    }
-
-    function AddNode(c: Circuit, nk: CNodeKind, ip: map<CPort, NP>): (r: (Circuit, CNode))
-        requires CircuitValid(c)
-        requires !nk.CHier?
-        ensures CircuitValid(r.0)
-    {
-        reveal CircuitValid();
-        var new_node := NewNode(c);
-        var new_c := Circuit(
-            NodeKind := c.NodeKind[new_node := nk],
-            PortSource := c.PortSource, // FIXME: Should update
-            //NodeKind := n => if n == new_node then Some(nk) else c.NodeKind(n),
-            //PortSource := (inp: NP) =>
-            //    if inp.n == new_node then
-            //        if inp.p in ip then
-            //            Some(ip[inp.p])
-            //        else
-            //            None
-            //    else
-            //        c.PortSource(inp),
-            //NodeBound := c.NodeBound+1,
-            //PortBound := c.PortBound,
-            HierLevel := c.HierLevel,
-            PortNames := c.PortNames
+            PortMap := c.PortMap
         );
         assert forall n: CNode :: (NodeKind(new_c, n) == (if (n == new_node) then
             Some(nk) else NodeKind(c, n))) ;
         assert CircuitNodeKindValid(c);
         assert CircuitPortSourceValid(c);
-        (c, new_node)
+        reveal CircuitPortNamesValid();
+        assert CircuitPortNamesValid(new_c);
+        assert CircuitPortSourceValid(new_c);
+        assert CircuitNodeKindValid(new_c);
+        assert CircuitValid(new_c);
+        new_c
+    }
+
+    function ConnectNodes(c: Circuit, onp: NP, inp: NP): (r: Circuit)
+        requires CircuitValid(c)
+        requires NPValidInput(c, inp)
+        requires NPValidOutput(c, onp)
+        requires inp !in c.PortSource
+        ensures r.NodeKind == c.NodeKind
+        ensures r.HierLevel == c.HierLevel
+        ensures r.PortMap == c.PortMap
+        ensures CircuitValid(r)
+    {
+        var new_c := Circuit(
+            NodeKind := c.NodeKind,
+            PortSource := c.PortSource[inp := onp],
+            HierLevel := c.HierLevel,
+            PortMap := c.PortMap
+        );
+        reveal CircuitValid();
+        CircuitUpdatedCircuitNodeKindValid(c, new_c);
+        assert CircuitNodeKindValid(new_c);
+        assert CircuitPortSourceValid(new_c);
+        reveal CircuitPortNamesValid();
+        assert CircuitPortNamesValid(new_c);
+        assert CircuitValid(new_c);
+        new_c
+    }
+    function ConnectNodeINPs(c: Circuit, n: CNode, m: seq<(CPort, NP)>): (r: Circuit)
+        requires CircuitValid(c)
+        requires n in c.NodeKind
+        requires
+            var nk := c.NodeKind[n];
+            (forall p, onp :: (p, onp) in m ==> IsIPort(nk, p) && NPValidOutput(c, onp) && NP(n, p) !in c.PortSource)
+        requires forall i1: nat, i2: nat :: i1 < |m| && i2 < |m| && i1 != i2 ==> m[i1].0 != m[i2].0
+        ensures CircuitValid(r)
+        ensures r.NodeKind == c.NodeKind
+        ensures r.HierLevel == c.HierLevel
+        ensures r.PortMap == c.PortMap
+        decreases m
+    {
+        if |m| == 0 then
+            c
+        else
+            var (p, onp) := m[0];
+            var new_c := ConnectNodes(c, onp, NP(n, p));
+            ConnectNodeINPs(new_c, n, m[1..])
+    }
+
+    function AddNodeAndConnect(c: Circuit, nk: CNodeKind, m: seq<(string, NP)>): (r: (Circuit, CNode))
+        requires CircuitValid(c)
+        requires (forall s: string, onp: NP :: (s, onp) in m ==> s in PortMap(nk).inames && NPValidOutput(c, onp))
+        requires forall i1: nat, i2: nat :: i1 < |m| && i2 < |m| && i1 != i2 ==> m[i1].0 != m[i2].0
+        requires !nk.CHier?
+        requires !nk.CInput?
+        requires !nk.COutput?
+        requires CNodeKindSomewhatValid(nk)
+    {
+        var (new_c, n) := AddNode(c, nk);
+        assert n in new_c.NodeKind;
+        assert forall p :: NP(n, p) !in new_c.PortSource;
+        assert forall i1: nat, i2: nat :: i1 < |m| && i2 < |m| && i1 != i2 ==> m[i1].0 != m[i2].0;
+        var portmap := seq(|m|, (i: nat) requires i < |m| => (PortNameToPort(nk, m[i].0), m[i].1));
+        var final_c := ConnectNodeINPs(new_c, n, portmap);
+        (final_c, n)
     }
 
 }

@@ -4,15 +4,18 @@ module DigraphBase {
     import Std.Functions
     import Std.Collections.Set
 
+    import SetExt
+
     export Spec
         reveals Path, PathValid
         provides Digraph, DigraphValid, IsNode, IsConnected
-        provides AllNodes
+        provides AllNodes, NodeCount
 
     export Body
+        provides SetExt
         reveals Path, PathValid
         reveals Digraph, DigraphValid, IsNode, IsConnected
-        reveals AllNodes
+        reveals AllNodes, NodeCount
 
     datatype Path<Node> = Path(v: seq<Node>)
 
@@ -37,7 +40,7 @@ module DigraphBase {
         (forall n: Node, m: Node :: IsConnected(g, n, m) ==> IsNode(g, n) && IsNode(g, m))
     }
     
-    lemma NotNodeNotConnected<Node>(g: Digraph, n: Node)
+    lemma NotNodeNotConnected<Node(!new)>(g: Digraph, n: Node)
         // If a node is not in the graph
         // then it's not connected to any nodes
         requires DigraphValid(g)
@@ -70,7 +73,7 @@ module DigraphBase {
         (forall n, m: Node :: IsConnected(g, n, m) == IsConnected(h, n, m))
     }
 
-    lemma DigraphsEqualAreEqual<Node>(g: Digraph, h: Digraph)
+    lemma DigraphsEqualAreEqual<Node(!new)>(g: Digraph, h: Digraph)
         requires DigraphsEqual(g, h)
         ensures g == h
     {
@@ -87,6 +90,11 @@ module DigraphBase {
         {
             assert IsConnected(g, n.0, n.1) == IsConnected(h, n.0, n.1);
         }
+    }
+
+    function NodeCount<Node>(g: Digraph): nat
+    {
+        |g.Nodes|
     }
 
 }

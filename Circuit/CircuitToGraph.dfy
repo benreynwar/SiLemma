@@ -6,7 +6,6 @@ module CircuitToGraph {
     import opened CircuitBase
     import opened CircuitHierarchy
     import opened CircuitHPNP
-    import SeqNatToNat
     import SetExt
 
     // INP and ONP reference ports on a single level of the hierarchy.
@@ -25,7 +24,7 @@ module CircuitToGraph {
         requires CircuitValid(c)
     {
         DG.Digraph(
-            (set hpnp: HPNP | hpnp in AllValidHPNP(c) :: hpnp),
+            AllValidHPNP(c),
             (set n: (HPNP, HPNP) | n in AllValidHPNPPairs(c) && HPNPConnected(c, n.0, n.1):: n)
         )
     }
@@ -89,13 +88,19 @@ module CircuitToGraph {
                 Some(hpnp)
     }
 
-    ghost function NumberOfRemainingNodes(c: Circuit, seen_path: DG.Path<HPNP>): nat
+    ghost function NumberOfRemainingNodes(c: Circuit, seen_path: DG.Path<HPNP>): (r: nat)
         requires CircuitValid(c)
         requires CircuitNoLoops(c)
         requires PathValid(c, seen_path)
+        ensures r == |AllValidHPNP(c)| - |seen_path.v|
     {
-        DP.NoLoopsMeansNoRepeats(CtoGV(c));
-        DP.NumberOfRemainingNodesPath(CtoGV(c), seen_path)
+        reveal CtoG();
+        var g := CtoGV(c);
+        assert |g.Nodes| == |AllValidHPNP(c)|;
+        DP.NoLoopsMeansNoRepeats(g);
+        var r := DP.NumberOfRemainingNodesPath(g, seen_path);
+        assert r == DG.NodeCount(g) - |seen_path.v|;
+        r
     }
 
     lemma NumberOfRemainingNodesDecreases(c: Circuit, seen_path: DG.Path<HPNP>, n: HPNP)
@@ -109,8 +114,10 @@ module CircuitToGraph {
             NumberOfRemainingNodes(c, new_p) <
             NumberOfRemainingNodes(c, seen_path)
     {
+        var new_p := PathAppend(c, seen_path, n);
         DP.NoLoopsMeansNoRepeats(CtoGV(c));
         assert DP.PathNoRepeats(seen_path);
+        assert NumberOfRemainingNodes(c, new_p) < NumberOfRemainingNodes(c, seen_path);
     }
 
     lemma {:vcs_split_on_every_assert} CtoGValid(c: Circuit)
@@ -198,5 +205,17 @@ module CircuitToGraph {
         reveal HPNPValidOutput();
         reveal DG.IsNode();
     }
-    
+
+    lemma ValidHPNPIsNode(c: Circuit, hpnp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValid(c, hpnp)
+        ensures DG.IsNode(CtoGV(c), hpnp)
+    {
+        var g := CtoGV(c);
+        reveal CtoG();
+        assert HPNPValid(c, hpnp);
+        assert hpnp in AllValidHPNP(c);
+        reveal DG.IsNode();
+        assert DG.IsNode(g, hpnp);
+    }
 }

@@ -3,11 +3,27 @@ module CircuitHPNP {
     import opened Std.Wrappers
     import Seq = Std.Collections.Seq
     import Functions = Std.Functions
-    import SeqNatToNat
     import SeqExt
     import opened CircuitBase
     import opened CircuitHierarchy
     import Utils
+
+    function AllValidHPNPFromHPN(c: Circuit, hpn: HPNode): (r: set<HPNP>)
+        requires CircuitValid(c)
+        requires HPNodeValid(c, hpn)
+        ensures forall hpnp :: hpnp in r <==> HPNPValid(c, hpnp) && hpnp.hpn == hpn
+    {
+        reveal HPNodeValid();
+        var hp_c := HierarchyPathCircuit(c, hpn.hp);
+        var nk := hp_c.NodeKind[hpn.n];
+        var this_hpnps := (set p | p in IPorts(nk) + OPorts(nk) :: HPNP(hpn, p));
+        reveal Seq.ToSet();
+        assert forall hpnp :: hpnp in this_hpnps ==> IsIPort(nk, hpnp.p) || IsOPort(nk, hpnp.p);
+        reveal HPNPValidInput();
+        reveal HPNPValidOutput();
+        assert forall hpnp :: hpnp in this_hpnps ==> HPNPValid(c, hpnp);
+        this_hpnps
+    }
 
     ghost function {:vcs_split_on_every_assert} AllValidHPNPFromHPNs(c: Circuit, hpns: set<HPNode>): (r: set<HPNP>)
         requires CircuitValid(c)
@@ -18,19 +34,9 @@ module CircuitHPNP {
             {}
         else
             var hpn :| hpn in hpns;
-            assert HPNodeValid(c, hpn);
-            reveal HPNodeValid();
-            assert HierarchyPathValid(c, hpn.hp);
             var next_hpns := hpns - {hpn};
             var next_hpnps := AllValidHPNPFromHPNs(c, next_hpns);
-            var hp_c := HierarchyPathCircuit(c, hpn.hp);
-            var nk := hp_c.NodeKind[hpn.n];
-            var this_hpnps := (set p | p in IPorts(nk) + OPorts(nk) :: HPNP(hpn, p));
-            reveal Seq.ToSet();
-            assert forall hpnp :: hpnp in this_hpnps ==> IsIPort(nk, hpnp.p) || IsOPort(nk, hpnp.p);
-            reveal HPNPValidInput();
-            reveal HPNPValidOutput();
-            assert forall hpnp :: hpnp in this_hpnps ==> HPNPValid(c, hpnp);
+            var this_hpnps := AllValidHPNPFromHPN(c, hpn);
             this_hpnps + next_hpnps
     }
 
@@ -135,7 +141,10 @@ module CircuitHPNP {
         var onp_c := cs[|cs|-1];
         var inp_c := cs[|cs|-2];
         HierCrossHelper(c, onp.hpn.hp, inp_c, onp_c);
+        reveal CircuitValid();
+        reveal CircuitPortNamesValid();
         reveal HPNPValidInput();
+        assert HPNPValidInput(c, inp);
         inp
     }
 
@@ -166,6 +175,8 @@ module CircuitHPNP {
         var inp_c := cs[|cs|-1];
         HierCrossHelper(c, inp_hp, onp_c, inp_c);
         reveal HPNPValidInput();
+        reveal CircuitValid();
+        reveal CircuitPortNamesValid();
         assert HPNPValidInput(c, inp);
         inp
     }
@@ -181,7 +192,7 @@ module CircuitHPNP {
         reveal HPNPValidOutput();
         reveal HPNPValidInput();
         var nk := NodeKind(hp_c, n.hpn.n).value;
-        var inps := set p: CPort | (p in nk.IPorts && nk.PathExists(n.p, p)) :: HPNP(n.hpn, p);
+        var inps := set p: CPort | (p in IPorts(nk) && nk.PathExists(n.p, p)) :: HPNP(n.hpn, p);
         inps
     }
 
@@ -197,7 +208,7 @@ module CircuitHPNP {
         match nk
         case CInput() => if HPLength(onp.hpn.hp) > 0 then {CInputONPtoINP(c, onp)} else {}
         case CHier(_) => {CHierONPtoINP(c, onp)}
-        case CComb(_, _, _, _, _) => CCombONPtoINP(c, onp)
+        case CComb(_, _, _) => CCombONPtoINP(c, onp)
         case CSeq() => {}
         case CConst(v) => {}
     }

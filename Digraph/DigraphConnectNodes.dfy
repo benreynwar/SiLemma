@@ -62,7 +62,7 @@ module DigraphConnectNodes {
         var r := ConnectNodes(g, n, m);
         reveal IsConnected();
         reveal IsNode();
-        assert (forall o, p: Node :: IsConnected(r, o, p) ==
+        assert forall o, p: Node :: (IsConnected(r, o, p) ==
             (IsConnected(g, o, p) || ((o==n) && (p==m))));
     }
 

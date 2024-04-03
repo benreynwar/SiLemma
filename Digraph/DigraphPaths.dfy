@@ -1,11 +1,5 @@
 module DigraphPaths {
 
-    import Std.Collections.Seq
-    import Std.Collections.Set
-    import Utils
-    import opened DigraphBase`Body
-    import opened DBS = DigraphBase`Spec
-
     export Spec
         provides DBS
         provides DigraphLoop
@@ -41,6 +35,12 @@ module DigraphPaths {
         provides RemoveLoopsFromToSame
         provides AddPathsValid, AddPathsFromTo
         provides DigraphLoopEquiv
+
+    import Std.Collections.Seq
+    import Std.Collections.Set
+    import Utils
+    import DBS = DigraphBase`Spec
+    import opened DigraphBase`Body
 
     ghost predicate {:opaque} DigraphLoop<Node(!new)>(g: DBS.Digraph)
         // There's a loop in the digraph.
@@ -226,12 +226,13 @@ module DigraphPaths {
         |g.Nodes| - |visited_nodes|
     }
 
-    function NumberOfRemainingNodesPath<Node(==)>(g: Digraph, p: Path<Node>): nat
+    function NumberOfRemainingNodesPath<Node(==)>(g: Digraph, p: Path<Node>): (r: nat)
         // This is useful when we want to show that something that walks the
         // graph will terminate.
         requires DigraphValid(g)
         requires PathValid(g, p)
         requires PathNoRepeats(p)
+        ensures r == NodeCount(g) - |p.v|
     {
         NoRepeatsPathSetSize(p);
         var s := PathSet(p);

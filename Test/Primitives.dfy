@@ -21,17 +21,20 @@ module Primitives {
     }
 
     const nk_xor := C.CComb(
-        IPorts := [0, 1],
-        OPorts := [2],
         PathExists := (a: C.CPort, b: C.CPort) => (
             match (a, b)
             case (2, 0) => true
             case (2, 1) => true
-            case _ => false
+            case (_, _) => false
         ),
         Behav := XorBehav,
-        PortNames := PortNames2to1
+        PortMap := C.PortMapping(["i0", "i1"], [0, 1], ["o"], [2])
     )
+
+    lemma NKXorValid()
+        ensures C.CNodeKindSomewhatValid(nk_and)
+    {
+    }
 
     const xor_port_bound: C.CPort := 3
 
@@ -40,26 +43,15 @@ module Primitives {
     {
     }
 
-    predicate BinaryPathExists(p: C.CPort, q: C.CPort)
-    {
-        (p in {0, 1}) && (q == 0)
-    }
-
-    function PortNames2to1(name: string): Option<C.CPort>
-    {
-        match name
-        case "i0" => Some(0 as C.CPort)
-        case "i1" => Some(1 as C.CPort)
-        case "o" => Some(2 as C.CPort)
-        case _ => None
-    }
-
     const nk_and: C.CNodeKind := C.CComb(
-        IPorts := [0 as C.CPort, 1 as C.CPort],
-        OPorts := [2 as C.CPort],
-        PathExists := BinaryPathExists,
+        PathExists := (a: C.CPort, b: C.CPort) => (
+            match (a, b)
+            case (2, 0) => true
+            case (2, 1) => true
+            case (_, _) => false
+        ),
         Behav := AndBehav,
-        PortNames := PortNames2to1
+        PortMap := C.PortMapping(["i0", "i1"], [0, 1], ["o"], [2])
     )
 
 }
