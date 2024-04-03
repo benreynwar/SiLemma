@@ -25,7 +25,7 @@ module CircuitHPNP {
         this_hpnps
     }
 
-    ghost function {:vcs_split_on_every_assert} AllValidHPNPFromHPNs(c: Circuit, hpns: set<HPNode>): (r: set<HPNP>)
+    function {:vcs_split_on_every_assert} AllValidHPNPFromHPNs(c: Circuit, hpns: set<HPNode>): (r: set<HPNP>)
         requires CircuitValid(c)
         requires forall hpn :: hpn in hpns ==> HPNodeValid(c, hpn)
         ensures forall hpnp :: hpnp in r <==> HPNPValid(c, hpnp) && hpnp.hpn in hpns
@@ -40,7 +40,7 @@ module CircuitHPNP {
             this_hpnps + next_hpnps
     }
 
-    ghost function AllValidHPNP(c: Circuit): (r: set<HPNP>)
+    function AllValidHPNP(c: Circuit): (r: set<HPNP>)
         requires CircuitValid(c)
         ensures forall hpnp :: hpnp in r <==> HPNPValid(c, hpnp)
     {

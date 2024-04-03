@@ -53,7 +53,7 @@ module DigraphAddNode {
     
     // There is only one path that becomes valid when we add a node.
     // It is the path containing just that node.
-    lemma AddNodePathValid<Node>(g: Digraph, n: Node, p: Path<Node>)
+    lemma AddNodePathValid<Node(!new)>(g: Digraph, n: Node, p: Path<Node>)
         requires DigraphValid(g)
         requires !IsNode(g, n)
         ensures

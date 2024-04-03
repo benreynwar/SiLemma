@@ -20,7 +20,7 @@ module DigraphConnectNodes {
         )
     }
 
-    lemma ConnectNodesDigraphValid<Node>(g: Digraph, n: Node, m: Node)
+    lemma ConnectNodesDigraphValid<Node(!new)>(g: Digraph, n: Node, m: Node)
         requires IsNode(g, n)
         requires IsNode(g, m)
         requires n != m
@@ -39,7 +39,7 @@ module DigraphConnectNodes {
         assert forall n: Node, m: Node :: (IsConnected(r, n, m) ==> IsNode(r, n) && IsNode(r, m));
     }
 
-    function ConnectNodesV<Node(==)>(g: Digraph, n: Node, m: Node): (r: Digraph)
+    function ConnectNodesV<Node(==)(!new)>(g: Digraph, n: Node, m: Node): (r: Digraph)
         requires IsNode(g, n)
         requires IsNode(g, m)
         requires n != m

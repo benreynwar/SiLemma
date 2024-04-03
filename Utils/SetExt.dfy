@@ -24,11 +24,39 @@ module SetExt {
             [y] + ToSeq(r)
     }
 
-    function GetMin<T>(s: set<T>, R: (T, T) -> bool): (r: T)
+    lemma {:vcs_split_on_every_assert} ThereIsAMinimum<T(!new)>(s: set<T>, R: (T, T)->bool)
         requires Relations.TotalOrdering(R)
+        requires s != {}
+        ensures exists x :: x in s && forall y :: y in s ==> R(x, y)
+    {
+        var x :| x in s;
+        var goal := exists x :: x in s && forall y :: y in s ==> R(x, y);
+        if s == {x} {
+            assert forall y:: y in s ==> y == x;
+            assert goal;
+        } else {
+            var new_s := s - {x};
+            assert s == new_s + {x};
+            ThereIsAMinimum(new_s, R);
+            var z :| z in new_s && forall y :: y in new_s ==> R(z, y);
+            assert forall y :: y in s ==> y in new_s || y == x;
+            if R(z, x) {
+                assert goal;
+            } else {
+                assert goal;
+            }
+        }
+        assert goal;
+    }
+
+    function GetMin<T(!new)>(s: set<T>, R: (T, T) -> bool): (r: T)
+        requires Relations.TotalOrdering(R)
+        requires s != {}
         ensures r in s
     {
+        ThereIsAMinimum(s, R);
         var x :| x in s && forall y :: y in s ==> R(x, y);
+        assert x in s;
         x
     }
 

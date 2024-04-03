@@ -137,7 +137,7 @@ module CircuitHierarchy {
     }
 
 
-    ghost function AllValidHierarchyPathsThroughSubcircuitInternal(c: Circuit, n: CNode): (r: set<HierarchyPath>)
+    function AllValidHierarchyPathsThroughSubcircuitInternal(c: Circuit, n: CNode): (r: set<HierarchyPath>)
         requires CircuitValid(c)
         requires NodeKind(c, n).Some? && NodeKind(c, n).value.CHier?
         decreases c.HierLevel, 0
@@ -148,7 +148,7 @@ module CircuitHierarchy {
         this_hps
     }
 
-    ghost function AllValidHierarchyPathsThroughSubcircuit(c: Circuit, n: CNode): (r: set<HierarchyPath>)
+    function AllValidHierarchyPathsThroughSubcircuit(c: Circuit, n: CNode): (r: set<HierarchyPath>)
         requires CircuitValid(c)
         requires NodeKind(c, n).Some? && NodeKind(c, n).value.CHier?
         ensures forall hp :: HierarchyPathValid(c, hp) && HPLength(hp) > 0 && (hp.v[0] == n) <==> hp in r
@@ -158,7 +158,7 @@ module CircuitHierarchy {
         AllValidHierarchyPathsThroughSubcircuitInternal(c, n)
     }
 
-    ghost function AllValidHierarchyPathsInSubcircuits(
+    function AllValidHierarchyPathsInSubcircuits(
             c: Circuit, nodes: set<CNode>): (r: set<HierarchyPath>)
         requires CircuitValid(c)
         requires forall n :: n in nodes ==>
@@ -183,7 +183,7 @@ module CircuitHierarchy {
             r
     }
 
-    ghost function {:vcs_split_on_every_assert} AllValidHierarchyPaths(c: Circuit): (r: set<HierarchyPath>)
+    function {:vcs_split_on_every_assert} AllValidHierarchyPaths(c: Circuit): (r: set<HierarchyPath>)
         requires CircuitValid(c)
         ensures forall hp :: hp in r ==> HierarchyPathValid(c, hp)
         ensures forall hp :: HierarchyPathValid(c, hp) ==> hp in r
@@ -312,7 +312,7 @@ module CircuitHierarchy {
         maybe_nk.Some?
     }
 
-    ghost function AllValidHPNodesFromHP(c: Circuit, hp: HierarchyPath): (r: set<HPNode>)
+    function AllValidHPNodesFromHP(c: Circuit, hp: HierarchyPath): (r: set<HPNode>)
         requires CircuitValid(c)
         requires HierarchyPathValid(c, hp)
         ensures forall hpn :: hpn in r <==> HPNodeValid(c, hpn) && (hpn.hp == hp)
@@ -322,7 +322,7 @@ module CircuitHierarchy {
         (set n | n in hp_c.NodeKind :: HPNode(hp, n))
     }
 
-    ghost function AllValidHPNodesFromHPs(c: Circuit, hps: set<HierarchyPath>): (r: set<HPNode>)
+    function AllValidHPNodesFromHPs(c: Circuit, hps: set<HierarchyPath>): (r: set<HPNode>)
         requires CircuitValid(c)
         requires forall hp :: hp in hps ==> HierarchyPathValid(c, hp)
         ensures forall hpn :: hpn in r <==> HPNodeValid(c, hpn) && (hpn.hp in hps)
@@ -339,7 +339,7 @@ module CircuitHierarchy {
             this_hpns + next_hpns
     }
 
-    ghost function AllValidHPNodes(c: Circuit): (r: set<HPNode>)
+    function AllValidHPNodes(c: Circuit): (r: set<HPNode>)
         requires CircuitValid(c)
         ensures forall hpn :: hpn in r <==> HPNodeValid(c, hpn)
     {

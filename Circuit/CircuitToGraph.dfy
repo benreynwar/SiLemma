@@ -12,7 +12,7 @@ module CircuitToGraph {
     // The 'n' can point at an internal node, or at a port on the external
     // interface.
 
-    ghost function AllValidHPNPPairs(c: Circuit): (r: set<(HPNP, HPNP)>)
+    function AllValidHPNPPairs(c: Circuit): (r: set<(HPNP, HPNP)>)
         requires CircuitValid(c)
         ensures forall a, b : HPNP :: HPNPValid(c, a) && HPNPValid(c, b) <==> (a, b) in r
     {
@@ -20,7 +20,7 @@ module CircuitToGraph {
         SetExt.SetProduct(hpnps, hpnps)
     }
 
-    ghost function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
+    function {:opaque} CtoG(c: Circuit): (g: DG.Digraph<HPNP>)
         requires CircuitValid(c)
     {
         DG.Digraph(
@@ -46,7 +46,7 @@ module CircuitToGraph {
         }
     }
 
-    ghost function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
+    function CtoGV(c: Circuit): (g: DG.Digraph<HPNP>)
         requires CircuitValid(c)
         ensures DG.DigraphValid(g)
     {
@@ -169,7 +169,7 @@ module CircuitToGraph {
         }
     }
 
-    function PathAppend(c: Circuit, p: DG.Path<HPNP>, n: HPNP): (r: DG.Path<HPNP>)
+    function {:vcs_split_on_every_assert} PathAppend(c: Circuit, p: DG.Path<HPNP>, n: HPNP): (r: DG.Path<HPNP>)
         // Just a PathAppend with more friendly requirements for a circuit.
         requires CircuitValid(c)
         requires DG.PathValid(CtoGV(c), p)
@@ -184,8 +184,6 @@ module CircuitToGraph {
         reveal CtoG();
         assert |p.v| > 0 ==> DG.IsConnected(g, DP.PathEnd(p), n);
         DG.Path(p.v + [n])
-        //reveal CtoG();
-        //DP.PathAppend(CtoGV(c), p, n)
     }
 
     ghost predicate PathValid(c: Circuit, seen_path: DG.Path<HPNP>)

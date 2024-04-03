@@ -35,7 +35,7 @@ module SeqExt {
         reveal Seq.Map();
     }
 
-    function SetConcat<X>(a: seq<X>, b: seq<X>): (r: seq<X>)
+    function SetConcat<X(==)>(a: seq<X>, b: seq<X>): (r: seq<X>)
         requires Seq.HasNoDuplicates(a)
         requires Seq.HasNoDuplicates(b)
         ensures Seq.HasNoDuplicates(r)
@@ -46,7 +46,10 @@ module SeqExt {
         else
             var x := b[0];
             var new_b := b[1..];
-            var new_a := a + [x];
+            var new_a := if x !in a then a + [x] else a;
+            reveal Seq.HasNoDuplicates();
+            assert Seq.HasNoDuplicates(new_a);
+            assert Seq.HasNoDuplicates(new_b);
             SetConcat(new_a, new_b)
     }
 

@@ -56,7 +56,7 @@ module DigraphPaths {
         exists n: Node :: PathExists(g, n, n)
     }
 
-    lemma PathExistsToDigraphLoop2<Node>(g: Digraph, n: Node)
+    lemma PathExistsToDigraphLoop2<Node(!new)>(g: Digraph, n: Node)
         requires PathExists(g, n, n)
         ensures DigraphLoop2(g)
     {
@@ -173,7 +173,7 @@ module DigraphPaths {
         reveal PathValid();
     }
 
-    lemma PathExistsByExample<Node>(g: Digraph, p: Path<Node>, a: Node, b: Node)
+    lemma PathExistsByExample<Node(!new)>(g: Digraph, p: Path<Node>, a: Node, b: Node)
         requires PathFromTo(g, p, a, b)
         ensures PathExists(g, a, b)
     {
@@ -215,7 +215,7 @@ module DigraphPaths {
         assert PathFromTo(g, pq, a, c);
     }
 
-    function NumberOfRemainingNodes<Node>(g: Digraph, visited_nodes: set<Node>): nat
+    function NumberOfRemainingNodes<Node(!new)>(g: Digraph, visited_nodes: set<Node>): nat
         // This is useful when we want to show that something that walks the
         // graph will terminate.
         requires DigraphValid(g)
@@ -226,7 +226,7 @@ module DigraphPaths {
         |g.Nodes| - |visited_nodes|
     }
 
-    function NumberOfRemainingNodesPath<Node(==)>(g: Digraph, p: Path<Node>): (r: nat)
+    function NumberOfRemainingNodesPath<Node(==)(!new)>(g: Digraph, p: Path<Node>): (r: nat)
         // This is useful when we want to show that something that walks the
         // graph will terminate.
         requires DigraphValid(g)
@@ -243,7 +243,7 @@ module DigraphPaths {
         |g.Nodes| - |p.v|
     }
 
-    lemma NumberOfRemainingNodesDecreases<Node>(
+    lemma NumberOfRemainingNodesDecreases<Node(!new)>(
         g: Digraph, visited_nodes: set<Node>, n: Node, new_visited_nodes: set<Node>)
         requires DigraphValid(g)
         requires forall m :: m in visited_nodes ==> IsNode(g, m)
@@ -256,7 +256,7 @@ module DigraphPaths {
     {
     }
 
-    lemma NodeSetSize<Node>(g: Digraph, nodes: set<Node>)
+    lemma NodeSetSize<Node(!new)>(g: Digraph, nodes: set<Node>)
         // Lets us set an upper bound on the number of nodes in a graph.
         requires DigraphValid(g)
         requires forall n: Node :: n in nodes ==> IsNode(g, n)

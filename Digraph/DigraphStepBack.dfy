@@ -8,12 +8,17 @@ module DigraphStepBack {
 
     import DBB=DigraphBase`Body
     import DBS=DigraphBase`Spec
+    import DPB=DigraphPaths`Body
+    import DPS=DigraphPaths`Spec
     import opened DigraphBase`Body
     import opened DigraphPaths`Body
 
     export Body
+    provides Relations
         provides DBB // FIXME: Can we avoid providing the body.
+        provides DPS
         reveals MultipleStepSetBack
+        provides MultipleStepSetEmptyGivesNoLoop
         reveals StepSetBack
         reveals StepSetBackInternal
         reveals StepBack
@@ -30,7 +35,7 @@ module DigraphStepBack {
         }
     }
 
-    function RepeatLoopUntilLength(g: Digraph, p: Path, loop: Path, length: nat): (r: Path)
+    function RepeatLoopUntilLength<Node(!new)>(g: Digraph, p: Path, loop: Path, length: nat): (r: Path)
         requires DigraphValid(g)
         requires PathValid(g, p)
         requires PathValid(g, loop) && PathLoop(loop)
@@ -52,6 +57,7 @@ module DigraphStepBack {
 
     lemma MultipleStepSetEmptyGivesNoLoop<Node(!new)>(g: Digraph, count: nat, NodeOrdering: (Node, Node) -> bool)
         requires DigraphValid(g)
+        requires Relations.TotalOrdering(NodeOrdering)
         requires MultipleStepSetBack(g, AllNodes(g), count, NodeOrdering) == {}
         ensures !DigraphLoop(g)
     {
@@ -64,7 +70,9 @@ module DigraphStepBack {
         }
     }
 
-    lemma {:vcs_split_on_every_assert} MultipleStepSetBackGivesMaxPathLength<Node(!new)>(g: Digraph, count: nat, NodeOrdering: (Node, Node) -> bool)
+    lemma {:vcs_split_on_every_assert} MultipleStepSetBackGivesMaxPathLength<Node(!new)>(
+        g: Digraph, count: nat, NodeOrdering: (Node, Node) -> bool)
+        requires Relations.TotalOrdering(NodeOrdering)
         requires DigraphValid(g)
         requires MultipleStepSetBack(g, AllNodes(g), count, NodeOrdering) == {}
         ensures forall p : Path<Node> :: PathValid(g, p) ==> |p.v| <= count
@@ -97,7 +105,10 @@ module DigraphStepBack {
         }
     }
 
-    function MultipleStepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>, count: nat, NodeOrdering: (Node, Node) -> bool): (r: set<Node>)
+    function MultipleStepSetBack<Node(!new)>(
+            g: Digraph, in_ns: set<Node>, count: nat, NodeOrdering: (Node, Node) -> bool):
+            (r: set<Node>)
+        requires Relations.TotalOrdering(NodeOrdering)
         requires DigraphValid(g)
         decreases count
     {
@@ -108,7 +119,10 @@ module DigraphStepBack {
             MultipleStepSetBack(g, s, count-1, NodeOrdering)
     }
 
-    function StepSetBackInternal<Node(!new)>(g: Digraph, in_ns: set<Node>, out_ns: set<Node>, NodeOrdering: (Node, Node) -> bool): (r: set<Node>)
+    function StepSetBackInternal<Node(!new)>(
+            g: Digraph, in_ns: set<Node>, out_ns: set<Node>, NodeOrdering: (Node, Node) -> bool
+            ): (r: set<Node>)
+        requires Relations.TotalOrdering(NodeOrdering)
         requires DigraphValid(g)
         ensures forall m :: (m in r <==> (exists n :: n in in_ns && IsConnected(g, n, m)) || (m in out_ns))
     {
@@ -125,9 +139,11 @@ module DigraphStepBack {
             r
     }
 
-    function StepSetBack<Node(!new)>(g: Digraph, in_ns: set<Node>, NodeOrdering: (Node, Node)->bool): (r: set<Node>)
+    function StepSetBack<Node(!new)>(
+            g: Digraph, in_ns: set<Node>, NodeOrdering: (Node, Node)->bool): (r: set<Node>)
         // Returns a set of all the nodes that there nodes are connected to
         requires DigraphValid(g)
+        requires Relations.TotalOrdering(NodeOrdering)
         ensures forall m :: m in r <==> exists n :: (n in in_ns && IsConnected(g, n, m))
     {
         StepSetBackInternal(g, in_ns, {}, NodeOrdering)
