@@ -60,7 +60,7 @@ module CircuitBase {
       | CHier(c: Circuit)
         // A node representing combinatorial logic.
       | CComb(
-          PathExists: (CPort, CPort) -> bool,
+          PathExists: set<(CPort, CPort)>,
           Behav: map<CPort, bool> -> Option<map<CPort, bool>>,
           PortMap: PortMapping
         )
@@ -171,14 +171,12 @@ module CircuitBase {
         //case CSeq() => p == OUTPUT_PORT as CPort
     }
 
-    ghost predicate CNodeKindSomewhatValid(nk: CNodeKind)
+    predicate CNodeKindSomewhatValid(nk: CNodeKind)
     {
         (
         match nk
         case CComb(path_exists, behav, pm) =>
-          (forall a: CPort, b: CPort ::
-              (a !in pm.oports ==> !nk.PathExists(a, b)) &&
-              (b !in pm.iports ==> !nk.PathExists(a, b)))
+            forall pair | pair in nk.PathExists :: pair.0 in pm.oports && pair.1 in pm.iports
         case _ => true
         ) &&
         PortMappingValid(PortMap(nk))
@@ -187,19 +185,21 @@ module CircuitBase {
     lemma CNodeKindNoSelfPaths(nk: CNodeKind)
         requires CNodeKindSomewhatValid(nk)
         requires nk.CComb?
-        ensures forall p: CPort :: !nk.PathExists(p, p)
+        ensures forall p: CPort :: (p, p) !in nk.PathExists
     {
-        forall p: CPort
-            ensures !nk.PathExists(p, p)
+        forall a: CPort, b: CPort | (a, b) in nk.PathExists
+            ensures a != b
         {
             var pm := PortMap(nk);
             assert PortMappingValid(nk.PortMap);
-            assert !(p in pm.iports && p in pm.oports);
-            assert !(IsIPort(nk, p) && IsOPort(nk, p));
+            assert a in pm.oports;
+            assert b in pm.iports;
+            assert a !in pm.iports;
+            assert a != b;
         }
     }
 
-    ghost predicate CNodeKindValid(
+    predicate CNodeKindValid(
         hier_level: nat, nk: CNodeKind)
         decreases hier_level, 0
     {
@@ -213,7 +213,7 @@ module CircuitBase {
         )
     }
 
-    ghost predicate {:opaque} CircuitValid(c: Circuit)
+    predicate {:opaque} CircuitValid(c: Circuit)
         decreases  c.HierLevel, 2
     {
         CircuitNodeKindValid(c) &&
@@ -221,10 +221,12 @@ module CircuitBase {
         CircuitPortNamesValid(c)
     }
 
-    ghost predicate {:opaque} CircuitPortNamesValid(c: Circuit)
+    predicate {:opaque} CircuitPortNamesValid(c: Circuit)
     {
-        (forall s :: s in c.PortMap.iports <==> CNodeIsCInput(c, s as CNode)) &&
-        (forall s :: s in c.PortMap.oports <==> CNodeIsCOutput(c, s as CNode)) &&
+        (forall s :: s in c.PortMap.iports ==> s as CNode in AllCInputs(c)) &&
+        (forall s :: s in AllCInputs(c) ==> s as CPort in c.PortMap.iports) &&
+        (forall s :: s in c.PortMap.oports ==> s as CNode in AllCOutputs(c)) &&
+        (forall s :: s in AllCOutputs(c) ==> s as CPort in c.PortMap.oports) &&
         PortMappingValid(c.PortMap)
     }
 
@@ -237,35 +239,19 @@ module CircuitBase {
         reveal CircuitValid();
     }
 
-    ghost predicate CircuitNodeKindValid(c: Circuit)
+    predicate CircuitNodeKindValid(c: Circuit)
         decreases  c.HierLevel, 1
     {
-        forall n: CNode ::
-            if n !in c.NodeKind then
-                true
-            else
-                CNodeKindValid(c.HierLevel, c.NodeKind[n])
+        forall n: CNode | n in c.NodeKind ::
+            CNodeKindValid(c.HierLevel, c.NodeKind[n])
     }
 
-    ghost predicate CircuitPortSourceValid(c: Circuit)
+    predicate CircuitPortSourceValid(c: Circuit)
     {
-        // For all possible ports.
-        // If the port is not a valid output port then PortSource should give None.0
-        // If the port is a valid output port then it should lead to a valid input
-        // port.
-        forall n: CNode, p: CPort ::
-            var inp := NP(n, p);
-            if NPValidInput(c, inp) then
-                if inp in c.PortSource then
-                    var onp := c.PortSource[inp];
-                    NPValidOutput(c, onp)
-                else
-                    // It's ok if it doesn't connect to anything.
-                    // We consider that a valid circuit, but not a complete circuit.
-                    // That way we can build a circuit but it is still valid.
-                    true
-            else
-                inp !in c.PortSource
+        forall inp | inp in c.PortSource ::
+            NPValidInput(c, inp) &&
+            var onp := c.PortSource[inp];
+            NPValidOutput(c, onp)
     }
 
     ghost predicate NPValid(c: Circuit, np: NP)
@@ -273,7 +259,7 @@ module CircuitBase {
         NPValidInput(c, np) || NPValidOutput(c, np)
     }
 
-    ghost predicate NPValidInput(c: Circuit, np: NP)
+    predicate NPValidInput(c: Circuit, np: NP)
     {
         match NodeKind(c, np.n)
         // The node doesn't exist.
@@ -281,11 +267,21 @@ module CircuitBase {
         case Some(nk) => IsIPort(nk, np.p)
     }
 
-    ghost predicate NPValidOutput(c: Circuit, np: NP)
+    function AllValidINP(c: Circuit): set<NP>
+    {
+        set n, p | n in c.NodeKind && p in PortMap(c.NodeKind[n]).iports :: NP(n, p)
+    }
+
+    predicate NPValidOutput(c: Circuit, np: NP)
     {
         match NodeKind(c, np.n)
         case None => false
         case Some(nk) => IsOPort(nk, np.p)
+    }
+
+    function AllValidONP(c: Circuit): set<NP>
+    {
+        set n, p | n in c.NodeKind && p in PortMap(c.NodeKind[n]).oports :: NP(n, p)
     }
 
     predicate CNodeIsCHier(c: Circuit, n: CNode)
@@ -298,9 +294,19 @@ module CircuitBase {
         NodeKind(c, n).Some? && NodeKind(c, n).value.CInput?
     }
 
+    function AllCInputs(c: Circuit): set<CNode>
+    {
+        set n | n in c.NodeKind && CNodeIsCInput(c, n)
+    }
+
     predicate CNodeIsCOutput(c: Circuit, n: CNode)
     {
         NodeKind(c, n).Some? && NodeKind(c, n).value.COutput?
+    }
+
+    function AllCOutputs(c: Circuit): set<CNode>
+    {
+        set n | n in c.NodeKind && CNodeIsCOutput(c, n)
     }
 
     datatype PortMapping =

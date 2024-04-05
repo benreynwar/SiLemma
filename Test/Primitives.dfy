@@ -21,12 +21,7 @@ module Primitives {
     }
 
     const nk_xor := C.CComb(
-        PathExists := (a: C.CPort, b: C.CPort) => (
-            match (a, b)
-            case (2, 0) => true
-            case (2, 1) => true
-            case (_, _) => false
-        ),
+        PathExists := {(2, 0), (2, 1)},
         Behav := XorBehav,
         PortMap := C.PortMapping(["i0", "i1"], [0, 1], ["o"], [2])
     )
@@ -44,12 +39,7 @@ module Primitives {
     }
 
     const nk_and: C.CNodeKind := C.CComb(
-        PathExists := (a: C.CPort, b: C.CPort) => (
-            match (a, b)
-            case (2, 0) => true
-            case (2, 1) => true
-            case (_, _) => false
-        ),
+        PathExists := {(2, 0), (2, 1)},
         Behav := AndBehav,
         PortMap := C.PortMapping(["i0", "i1"], [0, 1], ["o"], [2])
     )

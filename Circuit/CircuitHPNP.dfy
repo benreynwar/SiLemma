@@ -123,6 +123,38 @@ module CircuitHPNP {
         assert HierarchyPathCircuit(c, hp_to_parent) == parent_c;
     }
 
+    lemma COutputInOPorts(c: Circuit, inp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValidInput(c, inp)
+        requires HPNPtoNK(c, inp).COutput?
+        ensures
+            HierarchyPathValid(c, inp.hpn.hp) &&
+            var hp_c := HierarchyPathCircuit(c, inp.hpn.hp);
+            inp.hpn.n as CPort in hp_c.PortMap.oports
+    {
+        reveal HPNPValidInput();
+        reveal CircuitPortNamesValid();
+        reveal CircuitValid();
+        var hp_c := HierarchyPathCircuit(c, inp.hpn.hp);
+        assert inp.hpn.n in AllCOutputs(hp_c);
+    }
+
+    lemma CInputInIPorts(c: Circuit, onp: HPNP)
+        requires CircuitValid(c)
+        requires HPNPValidOutput(c, onp)
+        requires HPNPtoNK(c, onp).CInput?
+        ensures
+            HierarchyPathValid(c, onp.hpn.hp) &&
+            var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
+            onp.hpn.n as CPort in hp_c.PortMap.iports
+    {
+        reveal HPNPValidOutput();
+        reveal CircuitPortNamesValid();
+        reveal CircuitValid();
+        var hp_c := HierarchyPathCircuit(c, onp.hpn.hp);
+        assert onp.hpn.n in AllCInputs(hp_c);
+    }
+
     function {:opaque} {:vcs_split_on_every_assert} CInputONPtoINP(c: Circuit, onp: HPNP): (r: HPNP)
         // This takes an output from a CInput node, and connects it to
         // the input into a CHier node in the next level up in the hierarchy.
@@ -133,6 +165,9 @@ module CircuitHPNP {
         ensures HPNPValidInput(c, r)
     {
         reveal HPNPValidOutput();
+        var onp_c := HierarchyPathCircuit(c, onp.hpn.hp);
+        CInputInIPorts(c, onp);
+        assert onp.hpn.n as CPort in onp_c.PortMap.iports;
         var parent_hpn := HPToHPNode(c, onp.hpn.hp);
         // If it's an input inside a hier node, then it connects to
         // the input port on the hier node on the next level up.
@@ -192,7 +227,8 @@ module CircuitHPNP {
         reveal HPNPValidOutput();
         reveal HPNPValidInput();
         var nk := NodeKind(hp_c, n.hpn.n).value;
-        var inps := set p: CPort | (p in IPorts(nk) && nk.PathExists(n.p, p)) :: HPNP(n.hpn, p);
+        var inps := set p: CPort | (p in IPorts(nk) && ((n.p, p) in nk.PathExists)) ::
+                    HPNP(n.hpn, p);
         inps
     }
 

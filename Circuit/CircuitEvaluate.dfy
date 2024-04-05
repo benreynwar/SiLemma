@@ -143,7 +143,8 @@ module CircuitEvaluate {
         reveal CircuitValid();
         reveal CircuitPortNamesValid();
         INameToPortCovers(c.PortMap);
-        assert forall p :: (p in c.PortMap.iports <==> CNodeIsCInput(c, p as CNode));
+        assert forall p :: (p in c.PortMap.iports ==> p as CNode in AllCInputs(c));
+        assert forall p :: (p as CNode in AllCInputs(c) ==> p in c.PortMap.iports);
         var iports := (set k | k in c.PortMap.inames :: INameToPort(c.PortMap, k) as CNode);
         assert forall p :: p in iports <==> p as CPort in c.PortMap.iports;
         assert forall p :: p in iports ==> CNodeIsCInput(c, p);

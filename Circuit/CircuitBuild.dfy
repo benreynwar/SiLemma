@@ -219,7 +219,9 @@ module CircuitBuild {
         assert CircuitNodeKindValid(new_c);
         assert CircuitPortSourceValid(new_c);
         reveal CircuitPortNamesValid();
-        //MapExt.ExtendedMapValues(c.IPortNames, l, new_node);
+        assert new_c.PortMap.iports == c.PortMap.iports + [new_node as CPort];
+        assert AllCInputs(new_c) == AllCInputs(c) + {new_node};
+        assert AllCOutputs(new_c) == AllCOutputs(c);
         assert CircuitPortNamesValid(new_c);
         assert CircuitValid(new_c);
         (new_c, NP(new_node, OUTPUT_PORT))
@@ -282,6 +284,8 @@ module CircuitBuild {
         );
         CircuitUpdatedCircuitNodeKindValid(new_c, final_c);
         reveal CircuitPortNamesValid();
+        assert AllCOutputs(new_c) == AllCOutputs(final_c);
+        assert AllCInputs(new_c) == AllCInputs(final_c);
         assert CircuitPortNamesValid(final_c);
         assert CircuitPortSourceValid(final_c);
         assert CircuitValid(final_c);
@@ -308,9 +312,11 @@ module CircuitBuild {
         assert CircuitNodeKindValid(c);
         assert CircuitPortSourceValid(c);
         reveal CircuitPortNamesValid();
-        //MapExt.ExtendedMapValues(c.OPortNames, l, new_node);
         assert CircuitNodeKindValid(new_c);
         assert CircuitPortSourceValid(new_c);
+        assert new_c.PortMap.oports == c.PortMap.oports + [new_node as CPort];
+        assert AllCOutputs(new_c) == AllCOutputs(c) + {new_node};
+        assert AllCInputs(new_c) == AllCInputs(c);
         assert CircuitPortNamesValid(new_c);
         assert CircuitValid(new_c);
         (new_c, new_node)
@@ -685,6 +691,8 @@ module CircuitBuild {
         assert CircuitNodeKindValid(c);
         assert CircuitPortSourceValid(c);
         reveal CircuitPortNamesValid();
+        assert AllCOutputs(new_c) == AllCOutputs(c);
+        assert AllCInputs(new_c) == AllCInputs(c);
         assert CircuitPortNamesValid(new_c);
         assert CircuitPortSourceValid(new_c);
         assert CircuitNodeKindValid(new_c);
@@ -713,6 +721,8 @@ module CircuitBuild {
         assert CircuitNodeKindValid(new_c);
         assert CircuitPortSourceValid(new_c);
         reveal CircuitPortNamesValid();
+        assert AllCOutputs(new_c) == AllCOutputs(c);
+        assert AllCInputs(new_c) == AllCInputs(c);
         assert CircuitPortNamesValid(new_c);
         assert CircuitValid(new_c);
         new_c
