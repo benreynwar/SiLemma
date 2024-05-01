@@ -73,6 +73,19 @@ module Circ {
       case CSeq() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
   }
 
+  function AllNPFromNodes(c: Circuit, nodes: set<CNode>): (r: set<NP>)
+    requires forall n :: n in nodes ==> NodeValid(c, n)
+    ensures forall np :: np in r ==> (INPValid(c, np) || ONPValid(c, np)) && np.n in nodes
+    ensures forall np :: (INPValid(c, np) || ONPValid(c, np)) && (np.n in nodes) ==> np in r
+  {
+    if |nodes| == 0 then
+      {}
+    else
+      var node :| node in nodes;
+      var new_nodes := nodes - {node};
+      AllNPfromNode(c, node) + AllNPFromNodes(c, new_nodes)
+  }
+
   function AllNPInternal(c: Circuit, nodes: set<CNode>, nps: set<NP>): (r: set<NP>)
     requires forall n :: n in nodes ==> NodeValid(c, n)
     requires forall np :: np in nps ==> INPValid(c, np) || ONPValid(c, np)
@@ -96,6 +109,11 @@ module Circ {
     AllNPInternal(c, all_nodes, {})
   }
 
+  function AllNodes(c: Circuit): set<CNode>
+  {
+    (set n | n in c.NodeKind)
+  }
+
   predicate PathValid(c: Circuit, p: seq<NP>)
   {
     forall np :: np in p ==> INPValid(c, np) || ONPValid(c, np)
@@ -113,6 +131,17 @@ module Circ {
   datatype EvalResult =
     | EvalOk(bool)
     | EvalError(missing: set<NP>, loops: set<seq<NP>>)
+
+  datatype SimpleEvalResult =
+    | SimpleEvalOk(bool)
+    | SimpleEvalError
+
+  function Simpl(er: EvalResult): (r: SimpleEvalResult)
+  {
+    match er
+    case EvalOk(b) => SimpleEvalOk(b)
+    case EvalError(missings, loops) => SimpleEvalError
+  }
 
   predicate OutputPortValid(nk: CNodeKind, p: CPort)
   {
@@ -164,6 +193,7 @@ module Circ {
   {
     reveal Seq.HasNoDuplicates();
   }
+
   function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
     requires CircuitValid(c)
     requires INPValid(c, inp)
@@ -188,37 +218,6 @@ module Circ {
       var new_x := x[np := np_val];
       f(new_x)
   }
-
-  //lemma ConnectHelper(
-  //    c: Circuit,
-  //    o: NP,
-  //    // Stuff that o depends on.
-  //    o_deps: set<NP>,
-  //    m: NP,
-  //    // Stuff that m depends on.
-  //    m_deps: set<NP>,
-  //    // f maps the o_deps to o
-  //    o_f: map<NP, bool> -> bool,
-  //    // g maps the m_deps to m
-  //    m_f: map<NP, bool> -> bool
-  //    )
-  //  requires CircuitValid(c)
-  //  requires INPValid(c, o) || ONPValid(c, o)
-  //  requires INPValid(c, m) || ONPValid(c, m)
-  //  requires forall np :: np in o_deps ==> INPValid(c, np) || ONPValid(c, np)
-  //  requires forall np :: np in m_deps ==> INPValid(c, np) || ONPValid(c, np)
-  //  requires m in o_deps
-  //  requires o !in m_deps
-  //  requires m !in m_deps
-  //  requires o !in o_deps
-  //  requires Equiv(c, o, o_deps, o_f)
-  //  requires Equiv(c, m, m_deps, m_f)
-  //  ensures
-  //    var new_o_f := Replace(m, o_f, m_f);
-  //    var new_o_deps := o_deps - {m} + m_deps;
-  //    Equiv(c, o, new_o_deps, new_o_f)
-  //{
-  //}
 
   //lemma InsertAndConversEquiv(c: Circuit, np: NP, input_nps: set<NP>, f: map<NP, bool> --> bool)
   //  requires CircuitValid(c)

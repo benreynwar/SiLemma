@@ -2,11 +2,35 @@ module Build {
 
   import opened Circ
   import opened Eval
+  import opened ConservedSubcircuit
+  import opened Compose
+  import opened ComposeEval
+  import opened Utils
+  import opened MapFunction
 
-  function InsertAndImpl(c: Circuit): (r: (Circuit, (NP, NP), NP, Subcircuit, map<NP,bool> --> bool))
-    {
+  datatype AndPorts = AndPorts(
+    i_0: NP,
+    i_1: NP,
+    o: NP
+    )
+
+  function AndBehav(p: AndPorts, knowns: map<NP, bool>): (r: map<NP, bool>)
+    requires knowns.Keys == {p.i_0, p.i_1}
+    ensures r.Keys == {p.o}
+  {
+    map[p.o := knowns[p.i_0] && knowns[p.i_1]]
+  }
+
+  function InsertAndImpl(c: Circuit): (r: (Circuit, AndPorts, Equiv))
+    requires CircuitValid(c)
+    ensures CircuitValid(r.0)
+    ensures EquivValid(r.0, r.2)
+  {
+    reveal EquivValid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
+    //assert forall np: NP :: np in c.PortSource.Keys ==> np.n != new_node;
+    //assert forall np: NP :: np in c.PortSource.Values ==> np.n != new_node;
     var new_c := Circuit(
       NodeKind := c.NodeKind[new_node := CAnd],
       PortSource := c.PortSource
@@ -14,150 +38,174 @@ module Build {
     var i_0 := NP(new_node, INPUT_0);
     var i_1 := NP(new_node, INPUT_1);
     var o_0 := NP(new_node, OUTPUT_0);
-    var f: map<NP, bool> --> bool := x requires i_0 in x && i_1 in x => x[i_0] && x[i_1];
-    var sc := Subcircuit({new_node}, {i_0, i_1});
-    (new_c, (i_0, i_1), o_0, sc, f)
-  }
-
-  function GetBoundary(c: Circuit): set<NP>
-  {
-    (set np: NP | 
-      np in AllNP(c) &&
-      var nk := c.NodeKind[np.n];
-      ((nk.CInput? && ONPValid(c, np)) || (nk.CSeq? && ONPValid(c, np)) ||
-       (INPValid(c, np) && (np !in c.PortSource)))
-      :: np
-    )
-  }
-
-  function GetFullSubcircuit(c: Circuit): Subcircuit
-  {
-    Subcircuit(
-      nodes := c.NodeKind.Keys,
-      boundary := GetBoundary(c)
-    )
+    var inputs := {i_0, i_1};
+    var outputs := {o_0};
+    var m := AndPorts(i_0, i_1, o_0);
+    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == inputs =>
+      AndBehav(m, x);
+    var e := Equiv({new_node}, inputs, outputs, f);
+    //assert ScOutputBoundary(new_c, e.sc) == {};
+    (new_c, m, e)
   }
 
   lemma InsertAndCorrect(c: Circuit)
     requires CircuitValid(c)
     ensures
-      var (new_c, (i_0, i_1), o_0, sc, f) := InsertAndImpl(c);
-      Equiv(new_c, o_0, sc.boundary, f)
+      var (new_c, m, e) := InsertAndImpl(c);
+      EquivTrue(new_c, e)
   {
-    var (new_c, (i_0, i_1), o_0, sc, f) := InsertAndImpl(c);
-    var path := [o_0];
+    var (new_c, m, e) := InsertAndImpl(c);
+    var path := [m.o];
     LengthOneNoDuplicates(path);
     assert CircuitValid(new_c);
-    forall knowns: map<NP, bool> | knowns.Keys == {i_0, i_1}
+    forall knowns: map<NP, bool> | knowns.Keys == e.inputs
       ensures
-        var iv_0 := knowns[i_0];
-        var iv_1 := knowns[i_1];
-        EvaluateONP(new_c, o_0, knowns) == EvalOk(iv_0 && iv_1)
+        var iv_0 := knowns[m.i_0];
+        var iv_1 := knowns[m.i_1];
+        EvaluateONP(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1)
     {
-      var iv_0 := knowns[i_0];
-      var iv_1 := knowns[i_1];
+      var iv_0 := knowns[m.i_0];
+      var iv_1 := knowns[m.i_1];
       assert Seq.HasNoDuplicates(path);
-      assert EvaluateONP(new_c, o_0, knowns) == EvaluateONPBinary(new_c, [o_0], knowns);
+      assert EvaluateONP(new_c, m.o, knowns) == EvaluateONPBinary(new_c, [m.o], knowns);
       reveal Seq.HasNoDuplicates();
-      assert EvaluateINPInner(new_c, [o_0, i_0], knowns) == EvalOk(iv_0);
-      assert EvaluateINPInner(new_c, [o_0, i_1], knowns) == EvalOk(iv_1);
-      assert EvaluateONPBinary(new_c, [o_0], knowns) == EvalOk(iv_0 && iv_1);
-      assert EvaluateONPInner(new_c, [o_0], knowns) == EvalOk(iv_0 && iv_1);
-      assert EvaluateONP(new_c, o_0, knowns) == EvalOk(iv_0 && iv_1);
-      assert Evaluate(new_c, o_0, knowns) == EvalOk(iv_0 && iv_1);
-      assert Evaluate(new_c, o_0, knowns) == EvalOk(f(knowns));
+      assert EvaluateINPInner(new_c, [m.o, m.i_0], knowns) == EvalOk(iv_0);
+      assert EvaluateINPInner(new_c, [m.o, m.i_1], knowns) == EvalOk(iv_1);
+      assert EvaluateONPBinary(new_c, [m.o], knowns) == EvalOk(iv_0 && iv_1);
+      assert EvaluateONPInner(new_c, [m.o], knowns) == EvalOk(iv_0 && iv_1);
+      assert EvaluateONP(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1);
+      assert Evaluate(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1);
+      assert Evaluate(new_c, m.o, knowns) == EvalOk(e.f(knowns)[m.o]);
     }
-    assert Equiv(new_c, o_0, {i_0, i_1}, f);
+    assert EquivTrue(new_c, e);
   }
 
-  function InsertAnd(c: Circuit): (r: (Circuit, (NP, NP), NP, Subcircuit, map<NP,bool> --> bool))
+  function InsertAnd(c: Circuit): (r: (Circuit, AndPorts, Equiv))
     requires CircuitValid(c)
     ensures
-      var (new_c, (i_0, i_1), o_0, sc, f) := r;
+      var (new_c, m, e) := r;
       r == InsertAndImpl(c) &&
-      Equiv(new_c, o_0, {i_0, i_1}, f)
+      EquivTrue(new_c, e)
   {
     InsertAndCorrect(c);
     InsertAndImpl(c)
   }
 
-  function InsertThreeAndImpl(c: Circuit): (r: (Circuit, (NP, NP, NP), NP, map<NP, bool> --> bool))
+  datatype And3Ports = And3Ports(
+    i_0: NP,
+    i_1: NP,
+    i_2: NP,
+    o: NP,
+    o_extra: NP
+    )
+
+  function And3Behav(p: And3Ports, knowns: map<NP, bool>): (r: map<NP, bool>)
+    requires knowns.Keys == {p.i_0, p.i_1, p.i_2}
+    ensures r.Keys == {p.o, p.o_extra}
+  {
+    map[p.o := knowns[p.i_0] && knowns[p.i_1] &&knowns[p.i_2], p.o_extra := knowns[p.i_0] && knowns[p.i_1]]
+  }
+
+  lemma And3BehavIsComposition(p1: AndPorts, p2: AndPorts, knowns: map<NP, bool>)
+    requires knowns.Keys == {p1.i_0, p1.i_1, p2.i_0}
+    requires SetsNoIntersection({p1.i_0, p1.i_1}, {p1.o})
+    requires SetsNoIntersection({p2.i_0, p2.i_1}, {p2.o})
+    requires p2.i_0 != p2.i_1
+    requires SetsNoIntersection({p1.i_0, p1.i_1, p1.o}, {p2.i_0, p2.i_1, p2.o})
+    ensures 
+      var p := And3Ports(p1.i_0, p1.i_1, p2.i_0, p2.o, p1.o);
+      var o_base := And3Behav(p, knowns);
+      var input_keys_1 := {p1.i_0, p1.i_1};
+      var input_keys_2 := {p2.i_0, p2.i_1};
+      var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
+      var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2=> AndBehav(p2, x));
+      var connection := map[p2.i_1 := p1.o];
+      var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
+      o_base == o_compose
+  {
+    var p := And3Ports(p1.i_0, p1.i_1, p2.i_0, p2.o, p1.o);
+    var o_base := And3Behav(p, knowns);
+    var input_keys_1 := {p1.i_0, p1.i_1};
+    var input_keys_2 := {p2.i_0, p2.i_1};
+    var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
+    var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2=> AndBehav(p2, x));
+    var connection := map[p2.i_1 := p1.o];
+    var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
+    assert o_base == o_compose;
+  }
+
+  function {:vcs_split_on_every_assert} InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Equiv))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
+    ensures EquivValid(r.0, r.2)
   {
-    var (c, (ai_0, ai_1), ao_0, a_sc, a_f) := InsertAnd(c);
-    var (c, (bi_0, bi_1), bo_0, b_sc, b_f) := InsertAnd(c);
-    var c := Connect(c, bi_1, ao_0);
-    var f: map<NP, bool> --> bool := x requires ai_0 in x && ai_1 in x && bi_0 in x => x[ai_0] && x[ai_1] && x[bi_0];
-    (c, (ai_0, ai_1, bi_0), bo_0, f)
+    var (c1, a, e1) := InsertAnd(c);
+    reveal EquivValid();
+    var (c2, b, e2) := InsertAnd(c1);
+    EquivConserved(c1, c2, e1);
+    reveal ComposedValid();
+    assert SetsNoIntersection(e1.sc, e2.sc);
+    assert ScValid(c2, e1.sc);
+    assert ScValid(c2, e2.sc);
+    assert (NPBetweenSubcircuits(c2, e1.sc, e2.sc) == {});
+    var c3 := Connect(c2, b.i_1, a.o);
+    EquivConserved(c2, c3, e1);
+    EquivConserved(c2, c3, e2);
+    var e := ComposeEquiv(c3, e1, e2);
+    var combined_input_keys := ComposeEquivInputs(c3, e1, e2);
+    var ports := And3Ports(a.i_0, a.i_1, b.i_0, b.o, a.o);
+    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == combined_input_keys =>
+      And3Behav(ports, x);
+    var new_e := SwapEquivF(c3, e, f);
+    assert EquivValid(c3, new_e);
+    (c3, ports, new_e)
   }
 
-  // Want to prove that when you insert something everything else is unchanged.
-
-  // Want to prove that when you make a connection an Equiv cannot change.
-
-  function UpdateMap<T, U>(m: map<T, U>, old_keys: set<T>, new_keys: set<T>, x: T, y: T): (r: map<T, U>)
-    requires y !in old_keys
-    requires y in new_keys
-    requires x in old_keys
-    requires m.Keys == old_keys
-    requires x != y
-    requires (new_keys == old_keys - {x} + {y}) || (new_keys == old_keys + {y})
-    ensures r.Keys == new_keys
-    ensures r[y] == m[x]
-  {
-    var n := m[y := m[x]];
-    assert n[y] == m[x];
-    if x in new_keys then
-      n
-    else
-      var o := n - {x};
-      assert o[y] == m[x];
-      o
-  }
-
-
-  lemma ShiftEquivBoundary(c: Circuit, e: Equiv2, orig_input: NP, upstream_input: NP)
-    requires orig_input in e.inputs
-    requires orig_input in c.PortSource
-    requires c.PortSource[orig_input] == upstream_input
-    requires orig_input != upstream_input
-    requires CircuitValid(c)
-    requires EquivValid(c, e)
-    requires EquivTrue(c, e)
+  lemma InsertAnd3CorrectHelper(c: Circuit, e1: Equiv, e2: Equiv, knowns: map<NP, bool>)
+    requires ComposedValid(c, e1, e2)
+    requires
+      var combined_input_keys := ComposeEquivInputs(c, e1, e2);
+      knowns.Keys == combined_input_keys
     ensures
-      var new_inputs := e.inputs - {orig_input} + {upstream_input};
-      var new_f := (x: map<NP, bool>) requires x.Keys == new_inputs =>
-        assert upstream_input in x;
-        assert orig_input !in x;
-        e.f(UpdateMap(x, new_inputs, e.inputs, upstream_input, orig_input));
-      EquivTrue(c, Equiv2(e.output, new_inputs, new_f))
+      var e := ComposeEquiv(c, e1, e2);
+      (e.f(knowns) == ComposeEquivF(c, e1, e2, knowns))
   {
+    reveal ComposedValid();
+    reveal EquivValid();
+    var combined_input_keys := ComposeEquivInputs(c, e1, e2);
+    var e := ComposeEquiv(c, e1, e2);
+    assert (e.f(knowns) == ComposeEquivF(c, e1, e2, knowns));
   }
 
-  lemma InsertThreeAndCorrect(c: Circuit)
+  lemma {:vcs_split_on_every_assert} InsertAnd3Correct(c: Circuit)
     requires CircuitValid(c)
     ensures
-      var (new_c, (i_0, i_1, i_2), o_0, f) := InsertThreeAndImpl(c);
-      Equiv(new_c, o_0, {i_0, i_1, i_2}, f)
+      var (new_c, ports, e) := InsertAnd3Impl(c);
+      EquivTrue(new_c, e)
   {
-    var (new_c, (i_0, i_1, i_2), o_0, f) := InsertThreeAndImpl(c);
-    var (c_1, (ai_0, ai_1), ao_0, a_sc, a_f) := InsertAnd(c);
-    var (c_2, (bi_0, bi_1), bo_0, b_sc, b_f) := InsertAnd(c_1);
-    EquivConserved(c_1, c_2, a_sc, ao_0, a_f);
-    assert Equiv(c_2, ao_0, {ai_0, ai_1}, a_f);
-    assert Equiv(c_2, bo_0, {bi_0, bi_1}, b_f);
-    var c_3 := Connect(c_2, bi_1, ao_0);
-    EquivConserved(c_2, c_3, a_sc, ao_0, a_f);
-    EquivConserved(c_2, c_3, b_sc, bo_0, b_f);
-    assert c_3 == new_c;
-    assert Equiv(new_c, ao_0, {ai_0, ai_1}, a_f);
-    assert Equiv(new_c, bo_0, {bi_0, bi_1}, b_f);
-    assert new_c.PortSource[bi_1] == ao_0;
-    var new_b_f: map<NP, bool> --> bool := (x: map<NP, bool>) requires x.Keys == {bi_0, ao_0} =>
-      b_f(x[bi_1 := x[ao_0]]);
-    assert Equiv(new_c, bo_0, {bi_0, ao_0}, new_b_f);
-    //var f: map<NP, bool> --> bool := x requires ai_0 in x && ai_1 in x && bi_0 in x => x[ai_0] && x[ai_1] && x[bi_0];
+    var (new_c, ports, e) := InsertAnd3Impl(c);
+    reveal EquivValid();
+    var (c1, a, e1) := InsertAnd(c);
+    var (c2, b, e2) := InsertAnd(c1);
+    var p := And3Ports(a.i_0, a.i_1, b.i_0, b.o, a.o);
+    var c3 := Connect(c2, b.i_1, a.o);
+    reveal ComposedValid();
+    EquivConserved(c1, c2, e1);
+    EquivConserved(c2, c3, e1);
+    EquivConserved(c2, c3, e2);
+    var e_alt := ComposeEquiv(c3, e1, e2);
+    ComposeEquivCorrect(c3, e1, e2);
+    assert EquivTrue(c3, e_alt);
+    var combined_input_keys := ComposeEquivInputs(c3, e1, e2);
+    forall knowns: map<NP, bool> | knowns.Keys == combined_input_keys
+      ensures e_alt.f(knowns) == e.f(knowns)
+    {
+      And3BehavIsComposition(a, b, knowns);
+      assert e_alt.f(knowns) == ComposeEquivF(c3, e1, e2, knowns);
+      assert e.f(knowns) == And3Behav(p, knowns);
+      assert e_alt.f(knowns) == e.f(knowns);
+    }
+    assert EquivTrue(c3, e);
   }
 
 }

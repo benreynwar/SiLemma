@@ -1,20 +1,25 @@
 module Eval {
 
   import opened Circ
+  import opened Utils
+  import opened MapFunction
+
+  ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  {
+    CircuitValid(c) &&
+    (|path| > 0) &&
+    INPValid(c, path[|path|-1]) &&
+    PathValid(c, path) &&
+    Seq.HasNoDuplicates(path)
+  }
 
   function EvaluateINPInner(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires CircuitValid(c)
-    requires |path| > 0
-    requires INPValid(c, path[|path|-1])
-    requires PathValid(c, path)
-    requires Seq.HasNoDuplicates(path)
+    requires EvaluateINPInnerRequirements(c, path, knowns)
     decreases |NodesNotInPath(c, path)|, 2
   {
     var head := path[|path|-1];
     var tail := path[..|path|-1];
-    if head in tail then
-      EvalError({}, {path})
-    else if head in knowns then
+    if head in knowns then
       EvalOk(knowns[head])
     else
       if head in c.PortSource then
@@ -44,6 +49,18 @@ module Eval {
     var new_nodes_in_path := Seq.ToSet(new_p);
     reveal Seq.ToSet();
     assert new_nodes_in_path == nodes_in_path + {np};
+  }
+
+  ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  {
+    CircuitValid(c) &&
+    (|path| > 0) &&
+    ONPValid(c, path[|path|-1]) &&
+    path[|path|-1] !in knowns &&
+    var nk := c.NodeKind[path[|path|-1].n];
+    (nk.CXor? || nk.CAnd?) &&
+    PathValid(c, path) &&
+    Seq.HasNoDuplicates(path)
   }
 
   function EvaluateONPBinary(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
@@ -99,14 +116,19 @@ module Eval {
         )
   }
 
+  ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  {
+    CircuitValid(c) &&
+    (|path| > 0) &&
+    ONPValid(c, path[|path|-1]) &&
+    path[|path|-1] !in knowns &&
+    c.NodeKind[path[|path|-1].n].CInv? &&
+    PathValid(c, path) &&
+    Seq.HasNoDuplicates(path)
+  }
+
   function EvaluateONPUnary(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires CircuitValid(c)
-    requires |path| > 0
-    requires ONPValid(c, path[|path|-1])
-    requires path[|path|-1] !in knowns
-    requires c.NodeKind[path[|path|-1].n].CInv?
-    requires PathValid(c, path)
-    requires Seq.HasNoDuplicates(path)
+    requires EvaluateONPUnaryRequirements(c, path, knowns)
     decreases |NodesNotInPath(c, path)|, 3
   {
     var head := path[|path|-1];
@@ -126,12 +148,17 @@ module Eval {
           EvalOk(!b0)
   }
 
+  ghost predicate EvaluateONPInnerRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  {
+    CircuitValid(c) &&
+    (|path| > 0) &&
+    ONPValid(c, path[|path|-1]) &&
+    PathValid(c, path) &&
+    Seq.HasNoDuplicates(path)
+  }
+
   function EvaluateONPInner(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires CircuitValid(c)
-    requires |path| > 0
-    requires ONPValid(c, path[|path|-1])
-    requires PathValid(c, path)
-    requires Seq.HasNoDuplicates(path)
+    requires EvaluateONPInnerRequirements(c, path, knowns)
     decreases |NodesNotInPath(c, path)|, 4
   {
     var head := path[|path|-1];
@@ -183,249 +210,131 @@ module Eval {
       EvaluateINP(c, np, knowns)
   }
 
-  // To show that the rest of the graph is unchanged I need to show that
-  // there is a set of nodes which have the same n.
-  // There are no connections from those nodes to anything new without getting blocked by a known.
-  // The result of an Evaluate should be the same.
+  predicate SourceNotInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+    requires INPValid(c, np)
+  {
+    np !in c.PortSource || c.PortSource[np].n !in sc
+  }
 
-  // We define a subgraph as all the nodes in the subgraph together with all the INPs that form the
-  // upper boundary (not really necessary, can probably simplify in the future)
-  datatype Subcircuit = Subcircuit(
-    nodes: set<CNode>,
-    boundary: set<NP>
+  predicate SourceInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+    requires INPValid(c, np)
+  {
+    np !in c.PortSource || c.PortSource[np].n in sc
+  }
+
+  function SubcircuitComplement(c: Circuit, sc: set<CNode>): set<CNode>
+  {
+    var all_nodes := AllNodes(c);
+    all_nodes - sc
+  }
+
+  function NPBetweenSubcircuits(c: Circuit, sc1: set<CNode>, sc2: set<CNode>): set<NP>
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+  {
+    (set np: NP | np.n in sc1 && np in c.PortSource && c.PortSource[np].n in sc2 :: np)
+  }
+
+  function NPBetweenSubcircuitsComplement(c: Circuit, sc1: set<CNode>, sc2: set<CNode>): set<NP>
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+  {
+    (set np: NP | np.n in sc1 && np in c.PortSource && c.PortSource[np].n !in sc2 :: np)
+  }
+
+  function UnconnectedINPs(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    var nps := AllNPFromNodes(c, sc);
+    (set np | np in nps && INPValid(c, np) && np !in c.PortSource)
+  }
+
+  function InternalInputs(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    var nps := AllNPFromNodes(c, sc);
+    (set np | np in nps && ONPValid(c, np) &&
+      var nk := c.NodeKind[np.n];
+      nk.CInput? || nk.CSeq? :: np)
+  }
+
+  predicate ScValid(c: Circuit, sc: set<CNode>)
+  {
+    forall n :: n in sc ==> NodeValid(c, n)
+  }
+
+  function ScInputBoundary(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    NPBetweenSubcircuitsComplement(c, sc, sc) + UnconnectedINPs(c, sc) + InternalInputs(c, sc)
+  }
+
+  lemma AllINPsConnectedInternallyOrInBoundary(c: Circuit, sc: set<CNode>)
+    requires CircuitValid(c)
+    requires ScValid(c, sc)
+    ensures
+      var nps := AllNPFromNodes(c, sc);
+      var all_inps := (set np | np in nps && INPValid(c, np) :: np);
+      forall np :: np in all_inps ==> ((np in c.PortSource) && (c.PortSource[np].n in sc)) || (np in ScInputBoundary(c, sc))
+  {
+  }
+
+  function ScOutputBoundary(c: Circuit, sc: set<CNode>): set<NP>
+  {
+    (set np: NP | (np.n !in sc) && np in c.PortSource && c.PortSource[np].n in sc :: c.PortSource[np])
+  }
+
+  // An equivalence maps a subcircuit and a node in that subcircuit to a function.
+  datatype Equiv = Equiv(
+    sc: set<CNode>,
+    inputs: set<NP>,
+    outputs: set<NP>,
+    f: map<NP, bool> --> map<NP, bool>
   )
 
-  predicate SubcircuitValid(c: Circuit, sc: Subcircuit)
+  function EtoMf(e: Equiv): (r: MapFunction)
   {
-    (forall np :: np in sc.boundary ==> INPValid(c, np) || ONPValid(c, np)) &&
-    (forall n :: n in sc.nodes ==> n in c.NodeKind) &&
-    (forall np :: np in sc.boundary ==> np.n in sc.nodes) &&
-    (forall np: NP :: np.n in sc.nodes && np in c.PortSource && np !in sc.boundary ==>
-      c.PortSource[np].n in sc.nodes)
+    MapFunction(e.inputs, e.outputs, e.f)
   }
 
-  ghost predicate SubcircuitConserved(ca: Circuit, cb: Circuit, sc: Subcircuit)
-    requires SubcircuitValid(ca, sc)
-    requires SubcircuitValid(cb, sc)
+  lemma EValidMfValid(c: Circuit, e: Equiv)
+    requires EquivValid(c, e)
+    ensures MapFunctionValid(EtoMf(e))
   {
-    (forall n :: n in sc.nodes ==> ca.NodeKind[n] == cb.NodeKind[n]) &&
-    (forall np: NP :: np.n in sc.nodes ==> ((np in ca.PortSource) == (np in cb.PortSource)) || np in sc.boundary) &&
-    (forall np: NP :: np.n in sc.nodes && np in ca.PortSource && np !in sc.boundary ==>
-      ca.PortSource[np] == cb.PortSource[np])
+    reveal EquivValid();
   }
 
-  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, sc: Subcircuit, known: map<NP, bool>)
+  function SwapEquivF(c: Circuit, e: Equiv, f: map<NP, bool> --> map<NP, bool>): (r: Equiv)
+    requires EquivValid(c, e)
+    requires (forall knowns: map<NP, bool> :: (knowns.Keys == e.inputs) ==> f.requires(knowns))
+    requires (forall knowns: map<NP, bool> :: (knowns.Keys == e.inputs) ==> f(knowns).Keys == e.outputs)
+    ensures EquivValid(c, r)
   {
-    CircuitValid(ca) && CircuitValid(cb) &&
-    SubcircuitValid(ca, sc) && SubcircuitValid(cb, sc) &&
-    SubcircuitConserved(ca, cb, sc) &&
-    (forall np :: np in sc.boundary ==> np in known) &&
-    (forall np :: np in known ==> np.n in sc.nodes)
+    reveal EquivValid();
+    Equiv(e.sc, e.inputs, e.outputs, f)
   }
 
-  lemma EvaluateINPInnerConserved(
-    ca: Circuit, cb: Circuit, sc: Subcircuit, path: seq<NP>, knowns: map<NP, bool>)
-    requires ConservedValid(ca, cb, sc, knowns)
-    requires |path| > 0
-    requires forall np :: np in path ==> np.n in sc.nodes
-    requires PathValid(ca, path)
-    requires Seq.HasNoDuplicates(path)
-    requires INPValid(ca, path[|path|-1])
-    ensures
-      EvaluateINPInner(ca, path, knowns) == EvaluateINPInner(cb, path, knowns)
-    decreases |NodesNotInPath(ca, path)|, 2
+  ghost opaque predicate EquivValid(c: Circuit, e: Equiv)
   {
-    var head := path[|path|-1];
-    var tail := path[..|path|-1];
-    if head in tail {
-    } else if head in knowns {
-    } else {
-      if head in ca.PortSource {
-        var onp := ca.PortSource[head];
-        if onp in path {
-        } else {
-          NodesNotInPathDecreases(ca, path, onp);
-          StillHasNoDuplicates(path, onp);
-          EvaluateONPInnerConserved(ca, cb, sc, path + [onp], knowns);
-        }
-      } else {
-      }
-    }
+    ScValid(c, e.sc) &&
+    (ScInputBoundary(c, e.sc) == e.inputs) &&
+    SetsNoIntersection(e.inputs, e.outputs) &&
+    (forall np :: np in e.outputs ==> (INPValid(c, np) || ONPValid(c, np)) && np.n in e.sc) &&
+    (forall knowns: map<NP, bool> :: (knowns.Keys == e.inputs) ==> e.f.requires(knowns)) &&
+    (forall knowns: map<NP, bool> :: (knowns.Keys == e.inputs) ==> e.f(knowns).Keys == e.outputs) &&
+    // But it is possible to have outputs that are not on output boundary (i.e. we plan to connect them in the future)
+    (forall np :: np in ScOutputBoundary(c, e.sc) ==> np in e.outputs)
   }
 
-  lemma EvaluateONPBinaryConserved(
-      ca: Circuit, cb: Circuit, sc: Subcircuit, path: seq<NP>, knowns: map<NP, bool>)
-    requires ConservedValid(ca, cb, sc, knowns)
-    requires |path| > 0
-    requires ONPValid(ca, path[|path|-1])
-    requires path[|path|-1] !in knowns
-    requires forall np :: np in path ==> np.n in sc.nodes
-    requires
-      var nk := ca.NodeKind[path[|path|-1].n];
-      nk.CXor? || nk.CAnd?
-    requires PathValid(ca, path)
-    requires Seq.HasNoDuplicates(path)
-    ensures EvaluateONPBinary(ca, path, knowns) == EvaluateONPBinary(cb, path, knowns)
-    decreases |NodesNotInPath(ca, path)|, 3
-  {
-    var nk := ca.NodeKind[path[|path|-1].n];
-    var head := path[|path|-1];
-    assert NodeValid(ca, head.n);
-    var inp_0 := NP(head.n, INPUT_0);
-    var inp_1 := NP(head.n, INPUT_1);
-    if inp_0 in path {
-    } else if inp_1 in path {
-    } else {
-      NodesNotInPathDecreases(ca, path, inp_0);
-      NodesNotInPathDecreases(ca, path, inp_1);
-      StillHasNoDuplicates(path, inp_0);
-      StillHasNoDuplicates(path, inp_1);
-      EvaluateINPInnerConserved(ca, cb, sc, path + [inp_0], knowns);
-      EvaluateINPInnerConserved(ca, cb, sc, path + [inp_1], knowns);
-    }
-  }
-
-  lemma EvaluateONPUnaryConserved(
-      ca: Circuit, cb: Circuit, sc: Subcircuit, path: seq<NP>, knowns: map<NP, bool>)
-    requires ConservedValid(ca, cb, sc, knowns)
-    requires |path| > 0
-    requires ONPValid(ca, path[|path|-1])
-    requires path[|path|-1] !in knowns
-    requires ca.NodeKind[path[|path|-1].n].CInv?
-    requires PathValid(ca, path)
-    requires forall np :: np in path ==> np.n in sc.nodes
-    requires Seq.HasNoDuplicates(path)
-    ensures EvaluateONPUnary(ca, path, knowns) == EvaluateONPUnary(cb, path, knowns)
-    decreases |NodesNotInPath(ca, path)|, 3
-  {
-    var head := path[|path|-1];
-    var inp_0 := NP(head.n, INPUT_0);
-    if inp_0 in path {
-    } else {
-      NodesNotInPathDecreases(ca, path, inp_0);
-      StillHasNoDuplicates(path, inp_0);
-      EvaluateINPInnerConserved(ca, cb, sc, path + [inp_0], knowns);
-    }
-  }
-
-
-  lemma EvaluateONPInnerConserved(
-      ca: Circuit, cb: Circuit, sc: Subcircuit, path: seq<NP>, knowns: map<NP, bool>)
-    requires ConservedValid(ca, cb, sc, knowns)
-    requires forall np :: np in path ==> np.n in sc.nodes
-    requires |path| > 0
-    requires ONPValid(ca, path[|path|-1])
-    requires PathValid(ca, path)
-    requires Seq.HasNoDuplicates(path)
-    ensures EvaluateONPInner(ca, path, knowns) == EvaluateONPInner(cb, path, knowns)
-    decreases |NodesNotInPath(ca, path)|, 4
-  {
-    var head := path[|path|-1];
-    if head in knowns {
-    } else {
-      var nk := ca.NodeKind[head.n];
-      match nk
-        case CXor() => EvaluateONPBinaryConserved(ca, cb, sc, path, knowns);
-        case CAnd() => EvaluateONPBinaryConserved(ca, cb, sc, path, knowns);
-        case CInv() => EvaluateONPUnaryConserved(ca, cb, sc, path, knowns);
-        case CConst(b) => {}//EvalOk(b)
-        case CInput() => {}//EvalError({head}, {})
-        case CSeq() => {}//EvalError({head}, {})
-    }
-  }
-
-  lemma EvaluateConserved(ca: Circuit, cb: Circuit, sc: Subcircuit, o: NP, known: map<NP, bool>)
-    requires ConservedValid(ca, cb, sc, known)
-    requires o.n in sc.nodes
-    requires INPValid(ca, o) || ONPValid(ca, o)
-    ensures Evaluate(ca, o, known) == Evaluate(cb, o, known)
-  {
-    assert PathValid(ca, [o]);
-    LengthOneNoDuplicates([o]);
-    if INPValid(ca, o) {
-      EvaluateINPInnerConserved(ca, cb, sc, [o], known);
-    } else {
-      EvaluateONPInnerConserved(ca, cb, sc, [o], known);
-    }
-  }
-
-  lemma EquivConserved(ca: Circuit, cb: Circuit, sc: Subcircuit, np: NP, f: map<NP, bool> --> bool)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
-    requires SubcircuitValid(ca, sc)
-    requires SubcircuitValid(cb, sc)
-    requires SubcircuitConserved(ca, cb, sc)
-    requires forall knowns: map<NP, bool> :: knowns.Keys == sc.boundary ==> f.requires(knowns)
-    requires INPValid(ca, np) || ONPValid(ca, np)
-    requires np.n in sc.nodes
-    requires Equiv(ca, np, sc.boundary, f)
-    ensures Equiv(cb, np, sc.boundary, f)
-  {
-    forall knowns: map<NP, bool> | knowns.Keys == sc.boundary
-      ensures Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns)
-    {
-      EvaluateConserved(ca, cb, sc, np, knowns);
-      assert Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns);
-    }
-  }
-
-  ghost predicate Equiv(c: Circuit, o: NP, input_nps: set<NP>, f: map<NP, bool> --> bool)
-    requires CircuitValid(c)
-    requires ONPValid(c, o) || INPValid(c, o)
-    requires forall np :: np in input_nps ==> ONPValid(c, np) || INPValid(c, np)
-    requires forall knowns: map<NP, bool> :: knowns.Keys == input_nps ==> f.requires(knowns)
-  {
-    forall knowns: map<NP, bool> :: knowns.Keys == input_nps ==>
-      (forall np :: np in input_nps ==> np in knowns) &&
-      Evaluate(c, o, knowns) == EvalOk(f(knowns))
-  }
-
-  ghost predicate EquivValid(c: Circuit, e: Equiv2)
-    requires CircuitValid(c)
-  {
-    (ONPValid(c, e.output) || INPValid(c, e.output)) &&
-    (forall np :: np in e.inputs ==> ONPValid(c, np) || INPValid(c, np)) &&
-    (forall knowns: map<NP, bool> :: knowns.Keys == e.inputs ==> e.f.requires(knowns))
-  }
-
-  ghost predicate EquivTrue(c: Circuit, e: Equiv2)
+  ghost predicate EquivTrue(c: Circuit, e: Equiv)
     requires CircuitValid(c)
     requires EquivValid(c, e)
   {
-    forall knowns: map<NP, bool> :: knowns.Keys == e.inputs ==>
-      (forall np :: np in e.inputs ==> np in knowns) &&
-      Evaluate(c, e.output, knowns) == EvalOk(e.f(knowns))
+    reveal EquivValid();
+    forall knowns: map<NP, bool> :: (knowns.Keys == e.inputs) ==>
+      forall np :: np in e.outputs ==>
+        Evaluate(c, np, knowns) == EvalOk(e.f(knowns)[np])
   }
 
-  datatype Equiv2 = Equiv2(
-    output: NP,
-    inputs: set<NP>,
-    f: map<NP, bool> --> bool
-  )
-
-  //lemma ConnectConservesEquiv(c: Circuit, inp: NP, onp: NP, e: Equiv2)
-  //  requires CircuitValid(c)
-  //  requires INPValid(c, inp)
-  //  requires ONPValid(c, onp)
-  //  requires EquivValid(c, e)
-  //  requires EquivTrue(c, e)
-  //  ensures
-  //    var r := Connect(c, inp, onp);
-  //    CircuitValid(r) &&
-  //    EquivValid(r, e) &&
-  //    EquivTrue(r, e)
-  //{
-  //  // This is true because we know that when we Evaluate we get EvalOK.
-  //  // This mean we never tried to move back from a unconnected node.
-  //  // So adding a connection can't affect anything.
-  //  var new_c := Circuit(
-  //    c.NodeKind,
-  //    c.PortSource[inp := onp]
-  //  );
-  //  assert forall np :: np in new_c.PortSource.Keys ==> (np in c.PortSource.Keys) || np == inp;
-  //  assert forall np :: np in new_c.PortSource.Keys ==> INPValid(new_c, np);
-  //  assert forall np :: np in new_c.PortSource.Values ==> (np in c.PortSource.Values) || np == onp;
-  //  assert CircuitValid(new_c);
-  //}
 
 }
