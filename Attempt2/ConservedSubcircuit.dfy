@@ -2,6 +2,7 @@ module ConservedSubcircuit {
 
   import opened Circ
   import opened Eval
+  import opened Equiv
 
   // To show that the rest of the graph is unchanged I need to show that
   // there is a set of nodes which have the same n.
@@ -26,8 +27,7 @@ module ConservedSubcircuit {
 
   ghost predicate SubcircuitConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
   {
-    (forall n :: n in sc ==> n in  ca.NodeKind && n in cb.NodeKind) &&
-    (forall n :: n in sc ==> ca.NodeKind[n] == cb.NodeKind[n]) &&
+    (forall n :: n in sc ==> n in ca.NodeKind && n in cb.NodeKind) &&
     (forall n :: n in sc ==> ca.NodeKind[n] == cb.NodeKind[n]) &&
     (forall np: NP :: (np in ScInputBoundary(ca, sc)) == (np in ScInputBoundary(cb, sc))) &&
     (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc ==> (np in ca.PortSource) == (np in cb.PortSource)) &&

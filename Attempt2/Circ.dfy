@@ -196,6 +196,7 @@ module Circ {
 
   function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
     requires CircuitValid(c)
+    requires inp !in c.PortSource
     requires INPValid(c, inp)
     requires ONPValid(c, onp)
     ensures CircuitValid(r)
@@ -219,59 +220,78 @@ module Circ {
       f(new_x)
   }
 
-  //lemma InsertAndConversEquiv(c: Circuit, np: NP, input_nps: set<NP>, f: map<NP, bool> --> bool)
-  //  requires CircuitValid(c)
-  //  requires INPValid(c, np) || ONPValid(c, np)
-  //  requires forall np :: np in input_nps ==> INPValid(c, np) || ONPValid(c, np)
-  //  requires forall x: map<NP, bool> :: x.Keys == input_nps ==> f.requires(x)
-  //  requires Equiv(c, np, input_nps, f)
-  //  ensures
-  //    var (new_c, (i_0, i_1), o_0, f) := InsertAnd(c);
-  //    Equiv(new_c, np, input_nps, f)
-  //{
-  //  var (new_c, (i_0, i_1), o_0, f) := InsertAnd(c);
-  //  forall knowns: map<NP, bool> | knowns.Keys == input_nps
-  //    ensures Evaluate(new_c, np, knowns) == Evaluate(new_c, np, knowns);
-  //  {
-  //    assert Evaluate(new_c, np, knowns) == Evaluate(c, np, knowns);
-  //  }
-  //  assert Equiv(new_c, np, input_nps, f);
-  //}
+  predicate SourceNotInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+    requires INPValid(c, np)
+  {
+    np !in c.PortSource || c.PortSource[np].n !in sc
+  }
 
-  //lemma InsertThreeAndCorrect(c: Circuit)
-  //  requires CircuitValid(c)
-  //  ensures
-  //    var (new_c, (i_0, i_1, i_2), o_0) := InsertThreeAnd(c);
-  //    var f: map<NP, bool> --> bool :=
-  //      knowns requires (i_0 in knowns) && (i_1 in knowns) && (i_2 in knowns) =>
-  //      knowns[i_0] && knowns[i_1] && knowns[i_2];
-  //{
-  //  var (new_c, (i_0, i_1, i_2), o_0) := InsertThreeAnd(c);
-  //  var (c_1, (ai_0, ai_1), ao_0, a_f) := InsertAnd(c);
-  //  var (c_2, (bi_0, bi_1), bo_0, b_f) := InsertAnd(c_1);
-  //  assert Equiv(c_2, ao_0, {ai_0, ai_1}, a_f);
-  //  assert Equiv(c_2, bo_0, {bi_0, bi_1}, b_f);
-  //  var c_3 := Connect(c_2, bi_1, ao_0);
-  //  assert (new_c, (i_0, i_1, i_2), o_0) == (c_3, (ai_0, ai_1, bi_0), bo_0);
+  predicate SourceInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+    requires INPValid(c, np)
+  {
+    np !in c.PortSource || c.PortSource[np].n in sc
+  }
 
-  //  ////var path := [o_0];
+  function SubcircuitComplement(c: Circuit, sc: set<CNode>): set<CNode>
+  {
+    var all_nodes := AllNodes(c);
+    all_nodes - sc
+  }
 
-  //  ////LengthOneNoDuplicates(path);
-  //  ////assert CircuitValid(new_c);
-  //  //forall iv_0: bool, iv_1: bool, iv_2: bool
-  //  //  ensures EvaluateONP(new_c, o_0, map[i_0 := iv_0, i_1 := iv_1, i_2 := iv_2])
-  //  //    == EvalOk(iv_0 && iv_1 && iv_2)
-  //  //{
-  //  //  var knowns := map[i_0 := iv_0, i_1 := iv_1, i_2 := iv_2];
-  //  //  assert Seq.HasNoDuplicates(path);
-  //  //  assert EvaluateONP(new_c, o_0, knowns) == EvaluateONPAnd(new_c, [o_0], knowns);
-  //  //  reveal Seq.HasNoDuplicates();
-  //  //  assert EvaluateINPInner(new_c, [o_0, i_0], knowns) == EvalOk(iv_0);
-  //  //  assert EvaluateINPInner(new_c, [o_0, i_1], knowns) == EvalOk(iv_1);
-  //  //  assert EvaluateINPInner(new_c, [o_0, i_2], knowns) == EvalOk(iv_2);
-  //  //  assert EvaluateONPAnd(new_c, [o_0], knowns) == EvalOk(iv_0 && iv_1);
-  //  //  assert EvaluateONPInner(new_c, [o_0], knowns) == EvalOk(iv_0 && iv_1);
-  //  //}
-  //}
+  function NPBetweenSubcircuits(c: Circuit, sc1: set<CNode>, sc2: set<CNode>): set<NP>
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+  {
+    (set np: NP | np.n in sc1 && np in c.PortSource && c.PortSource[np].n in sc2 :: np)
+  }
+
+  function NPBetweenSubcircuitsComplement(c: Circuit, sc1: set<CNode>, sc2: set<CNode>): set<NP>
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+  {
+    (set np: NP | np.n in sc1 && np in c.PortSource && c.PortSource[np].n !in sc2 :: np)
+  }
+
+  function UnconnectedINPs(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    var nps := AllNPFromNodes(c, sc);
+    (set np | np in nps && INPValid(c, np) && np !in c.PortSource)
+  }
+
+  function InternalInputs(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    var nps := AllNPFromNodes(c, sc);
+    (set np | np in nps && ONPValid(c, np) &&
+      var nk := c.NodeKind[np.n];
+      nk.CInput? || nk.CSeq? :: np)
+  }
+
+  predicate ScValid(c: Circuit, sc: set<CNode>)
+  {
+    forall n :: n in sc ==> NodeValid(c, n)
+  }
+
+  function ScInputBoundary(c: Circuit, sc: set<CNode>): set<NP>
+    requires ScValid(c, sc)
+  {
+    NPBetweenSubcircuitsComplement(c, sc, sc) + UnconnectedINPs(c, sc) + InternalInputs(c, sc)
+  }
+
+  lemma AllINPsConnectedInternallyOrInBoundary(c: Circuit, sc: set<CNode>)
+    requires CircuitValid(c)
+    requires ScValid(c, sc)
+    ensures
+      var nps := AllNPFromNodes(c, sc);
+      var all_inps := (set np | np in nps && INPValid(c, np) :: np);
+      forall np :: np in all_inps ==> ((np in c.PortSource) && (c.PortSource[np].n in sc)) || (np in ScInputBoundary(c, sc))
+  {
+  }
+
+  function ScOutputBoundary(c: Circuit, sc: set<CNode>): set<NP>
+  {
+    (set np: NP | (np.n !in sc) && np in c.PortSource && c.PortSource[np].n in sc :: c.PortSource[np])
+  }
 
 }

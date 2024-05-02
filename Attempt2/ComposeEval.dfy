@@ -7,6 +7,7 @@ module ComposeEval {
   import opened Compose
   import opened Utils
   import opened MapFunction
+  import opened Equiv
 
   lemma NPNotInPathHelper(np: NP, sc1: set<CNode>, sc2: set<CNode>, prepath: seq<NP>, path: seq<NP>)
     requires np.n in sc1
@@ -432,19 +433,6 @@ module ComposeEval {
 
     var knowns_1 := ExtractMap(knowns, e1.inputs);
     var knowns_2 := CalculateE2Inputs(c, e1, e2, knowns);
-
-
-    //assert forall np :: np in e1.inputs + e1.outputs ==> np.n in e1.sc;
-    //assert forall np :: np in e2.inputs + e2.outputs ==> np.n in e2.sc;
-    //assert SetsNoIntersection(e1.inputs+e1.outputs, e2.inputs+e2.outputs);
-
-    //var mf1 := EtoMf(e1);
-    //var mf2 := EtoMf(e2);
-    //EValidMfValid(c, e1);
-    //EValidMfValid(c, e2);
-    //var e2_inputs_from_e1_keys := NPBetweenSubcircuits(c, e2.sc, e1.sc);
-    //var e2_inputs_from_e1 := (map np | np in e2_inputs_from_e1_keys :: np := c.PortSource[np]);
-    //assert e.f(knowns) == ComposeMapFunction(mf1, mf2, e2_inputs_from_e1, knowns);
 
     if np in e1.outputs {
       {

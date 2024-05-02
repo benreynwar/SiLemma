@@ -1,9 +1,10 @@
 module Compose {
 
   import opened Circ
-  import opened Eval
+  //import opened Eval
   import opened Utils
   import opened MapFunction
+  import opened Equiv
 
   ghost opaque predicate ComposedValid(c: Circuit, e1: Equiv, e2: Equiv) {
     CircuitValid(c) &&
