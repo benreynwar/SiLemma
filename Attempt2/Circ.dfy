@@ -29,7 +29,7 @@ module Circ {
     PortSource: map<NP, NP>
   )
 
-  predicate CircuitValid(c: Circuit)
+  opaque predicate CircuitValid(c: Circuit)
   {
     (forall np :: np in c.PortSource.Values ==> ONPValid(c, np)) &&
     (forall np :: np in c.PortSource.Keys ==> INPValid(c, np))
@@ -60,7 +60,7 @@ module Circ {
 
   function AllNPfromNode(c: Circuit, node: CNode): (r: set<NP>)
     requires NodeValid(c, node)
-    ensures forall np :: (INPValid(c, np) || ONPValid(c, np)) && np.n == node ==> np in r
+    ensures forall np :: NPValid(c, np) && np.n == node ==> np in r
   {
     var nk := c.NodeKind[node];
     match nk
@@ -75,8 +75,8 @@ module Circ {
 
   function AllNPFromNodes(c: Circuit, nodes: set<CNode>): (r: set<NP>)
     requires forall n :: n in nodes ==> NodeValid(c, n)
-    ensures forall np :: np in r ==> (INPValid(c, np) || ONPValid(c, np)) && np.n in nodes
-    ensures forall np :: (INPValid(c, np) || ONPValid(c, np)) && (np.n in nodes) ==> np in r
+    ensures forall np :: np in r ==> NPValid(c, np) && np.n in nodes
+    ensures forall np :: NPValid(c, np) && (np.n in nodes) ==> np in r
   {
     if |nodes| == 0 then
       {}
@@ -88,10 +88,9 @@ module Circ {
 
   function AllNPInternal(c: Circuit, nodes: set<CNode>, nps: set<NP>): (r: set<NP>)
     requires forall n :: n in nodes ==> NodeValid(c, n)
-    requires forall np :: np in nps ==> INPValid(c, np) || ONPValid(c, np)
-    requires forall np :: (INPValid(c, np) || ONPValid(c, np)) && np.n !in nodes ==> np in nps
-    ensures forall np :: np in r ==> INPValid(c, np) || ONPValid(c, np)
-    ensures forall np :: INPValid(c, np) || ONPValid(c, np) ==> np in r
+    requires forall np :: np in nps ==> NPValid(c, np)
+    requires forall np :: NPValid(c, np) && np.n !in nodes ==> np in nps
+    ensures forall np :: np in r <==> NPValid(c, np)
   {
     if |nodes| == 0 then
       nps
@@ -102,8 +101,7 @@ module Circ {
   }
 
   function AllNP(c: Circuit): set<NP>
-    ensures forall np :: np in AllNP(c) ==> INPValid(c, np) || ONPValid(c, np)
-    ensures forall np :: INPValid(c, np) || ONPValid(c, np) ==> np in AllNP(c)
+    ensures forall np :: np in AllNP(c) <==> NPValid(c, np)
   {
     var all_nodes := (set n | n in c.NodeKind);
     AllNPInternal(c, all_nodes, {})
@@ -114,9 +112,17 @@ module Circ {
     (set n | n in c.NodeKind)
   }
 
-  predicate PathValid(c: Circuit, p: seq<NP>)
+  opaque predicate PathValid(c: Circuit, p: seq<NP>)
   {
-    forall np :: np in p ==> INPValid(c, np) || ONPValid(c, np)
+    forall np :: np in p ==> NPValid(c, np)
+  }
+
+  lemma AppendPathValid(c: Circuit, p: seq<NP>, np: NP)
+    requires PathValid(c, p)
+    requires NPValid(c, np)
+    ensures PathValid(c, p + [np])
+  {
+    reveal PathValid();
   }
 
   ghost function NodesNotInPath(c: Circuit, p: seq<NP>): set<NP>
@@ -181,17 +187,9 @@ module Circ {
     InputPortValid(nk, np.p)
   }
 
-  function Xor(a: bool, b: bool): bool
+  predicate NPValid(c: Circuit, np: NP)
   {
-    (a && !b) || (!a && b)
-  }
-
-  lemma StillHasNoDuplicates<X>(s: seq<X>, x: X)
-    requires Seq.HasNoDuplicates(s)
-    requires x !in s
-    ensures Seq.HasNoDuplicates(s + [x])
-  {
-    reveal Seq.HasNoDuplicates();
+    INPValid(c, np) || ONPValid(c, np)
   }
 
   function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
@@ -201,6 +199,7 @@ module Circ {
     requires ONPValid(c, onp)
     ensures CircuitValid(r)
   {
+    reveal CircuitValid();
     var new_c := Circuit(
       c.NodeKind,
       c.PortSource[inp := onp]
@@ -255,6 +254,7 @@ module Circ {
   function UnconnectedINPs(c: Circuit, sc: set<CNode>): set<NP>
     requires ScValid(c, sc)
   {
+    reveal ScValid();
     var nps := AllNPFromNodes(c, sc);
     (set np | np in nps && INPValid(c, np) && np !in c.PortSource)
   }
@@ -262,13 +262,14 @@ module Circ {
   function InternalInputs(c: Circuit, sc: set<CNode>): set<NP>
     requires ScValid(c, sc)
   {
+    reveal ScValid();
     var nps := AllNPFromNodes(c, sc);
     (set np | np in nps && ONPValid(c, np) &&
       var nk := c.NodeKind[np.n];
       nk.CInput? || nk.CSeq? :: np)
   }
 
-  predicate ScValid(c: Circuit, sc: set<CNode>)
+  opaque predicate ScValid(c: Circuit, sc: set<CNode>)
   {
     forall n :: n in sc ==> NodeValid(c, n)
   }
@@ -283,6 +284,7 @@ module Circ {
     requires CircuitValid(c)
     requires ScValid(c, sc)
     ensures
+      reveal ScValid();
       var nps := AllNPFromNodes(c, sc);
       var all_inps := (set np | np in nps && INPValid(c, np) :: np);
       forall np :: np in all_inps ==> ((np in c.PortSource) && (c.PortSource[np].n in sc)) || (np in ScInputBoundary(c, sc))

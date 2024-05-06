@@ -1,8 +1,44 @@
 module Utils {
 
+  import Std.Collections.Seq
+  import Std.Collections.Map
+
   predicate SetsNoIntersection<T>(a: set<T>, b: set<T>)
   {
-    forall x :: !(x in a && x in b)
+    a * b == {}
+  }
+
+  lemma NotInBoth<T>(x: T, a: set<T>, b: set<T>)
+    requires SetsNoIntersection(a, b)
+    ensures !((x in a) && (x in b))
+  {
+    if (x in a) && (x in b) {
+      assert x in (a * b);
+      assert false;
+    }
+  }
+
+  lemma InThisNotInThat<T>(x: T, a: set<T>, b: set<T>)
+    requires x in a
+    requires SetsNoIntersection(a, b)
+    ensures x !in b
+  {
+    if x in b {
+      assert x in (a * b);
+      assert false;
+    }
+  }
+
+  lemma ManyInThisNotInThat<T>(xs: set<T>, a: set<T>, b: set<T>)
+    requires forall x :: x in xs ==> x in a
+    requires SetsNoIntersection(a, b)
+    ensures forall x :: x in xs ==> x !in b
+  {
+    forall x | x in xs
+      ensures x !in b
+    {
+      InThisNotInThat(x, a, b);
+    }
   }
     
   function ExtractMap<T, U>(a: map<T, U>, k: set<T>): (r: map<T, U>)
@@ -19,20 +55,49 @@ module Utils {
     sc1 + sc2
   }
 
+  lemma AddMapsCorrect<T, U>(a: map<T, U>, b: map<T, U>)
+    requires SetsNoIntersection(a.Keys, b.Keys)
+    ensures
+      var r := AddMapsImpl(a, b);
+      && r.Keys == a.Keys + b.Keys
+      && Map.IsSubset(a, r)
+      && Map.IsSubset(b, r)
+  {
+    forall x: T
+      ensures !((x in a) && (x in b))
+    {
+      NotInBoth(x, a.Keys, b.Keys);
+    }
+  }
+
+  function AddMapsImpl<T, U>(a: map<T, U>, b: map<T, U>): (r: map<T, U>)
+    requires SetsNoIntersection(a.Keys, b.Keys)
+    ensures r.Keys == a.Keys + b.Keys
+  {
+    a + b
+  }
+
   function AddMaps<T, U>(a: map<T, U>, b: map<T, U>): (r: map<T, U>)
     requires SetsNoIntersection(a.Keys, b.Keys)
     ensures r.Keys == a.Keys + b.Keys
-    ensures forall x :: x in a ==> r[x] == a[x]
-    ensures forall x :: x in b ==> r[x] == b[x]
-    decreases |b|
+    ensures Map.IsSubset(a, r)
+    ensures Map.IsSubset(b, r)
   {
-    if |b| == 0 then
-      a
-    else
-      var x :| x in b;
-      var new_a := a[x := b[x]];
-      var new_b := b - {x};
-      AddMaps(new_a, new_b)
+    AddMapsCorrect(a, b);
+    AddMapsImpl(a, b)
+  }
+
+  lemma StillHasNoDuplicates<X>(s: seq<X>, x: X)
+    requires Seq.HasNoDuplicates(s)
+    requires x !in s
+    ensures Seq.HasNoDuplicates(s + [x])
+  {
+    reveal Seq.HasNoDuplicates();
+  }
+
+  function Xor(a: bool, b: bool): bool
+  {
+    (a && !b) || (!a && b)
   }
 
 

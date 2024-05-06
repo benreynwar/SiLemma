@@ -11,7 +11,7 @@ module MapFunction {
     f: map<NP, bool> --> map<NP, bool>
   )
 
-  ghost predicate MapFunctionValid(mf: MapFunction)
+  ghost opaque predicate MapFunctionValid(mf: MapFunction)
   {
     (forall x: map<NP, bool> :: x.Keys == mf.inputs ==> mf.f.requires(x)) &&
     (forall x: map<NP, bool> :: x.Keys == mf.inputs ==> mf.f(x).Keys == mf.outputs) &&
@@ -29,8 +29,10 @@ module MapFunction {
         var b: set<NP> := (mf1.inputs + mf2.inputs - connection.Keys);
         knowns.Keys == b
   {
+    reveal MapFunctionValid();
     var inputs := mf1.inputs + mf2.inputs - connection.Keys;
     var outputs := mf1.outputs + mf2.outputs;
+    assert forall np :: np in mf1.inputs ==> np in knowns;
     var inputs_1 := ExtractMap(knowns, mf1.inputs);
     var outputs_1 := mf1.f(inputs_1);
     assert outputs_1.Keys == mf1.outputs;
@@ -42,7 +44,7 @@ module MapFunction {
     inputs_2
   }
 
-  function {:vcs_split_on_every_assert} ComposeMapFunction(
+  function ComposeMapFunction(
       mf1: MapFunction, mf2: MapFunction, connection: map<NP, NP>, knowns: map<NP, bool>): map<NP, bool>
     requires MapFunctionValid(mf1)
     requires MapFunctionValid(mf2)
@@ -53,6 +55,11 @@ module MapFunction {
         var b: set<NP> := (mf1.inputs + mf2.inputs - connection.Keys);
         knowns.Keys == b
   {
+    reveal MapFunctionValid();
+    assert knowns.Keys == mf1.inputs + mf2.inputs - connection.Keys;
+    ManyInThisNotInThat(connection.Keys, mf2.inputs + mf2.outputs, mf1.inputs + mf1.outputs);
+    assert forall np :: np in connection.Keys ==> np !in mf1.inputs;
+    assert forall np :: np in mf1.inputs ==> np in knowns;
     var inputs_1 := ExtractMap(knowns, mf1.inputs);
     var outputs_1 := mf1.f(inputs_1);
     var inputs_2 := GetInputs2(mf1, mf2, connection, knowns);

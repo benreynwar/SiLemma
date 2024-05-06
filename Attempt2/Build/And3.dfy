@@ -39,7 +39,10 @@ module Build.And3 {
       var input_keys_1 := {p1.i_0, p1.i_1};
       var input_keys_2 := {p2.i_0, p2.i_1};
       var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
-      var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2=> AndBehav(p2, x));
+      var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2 => AndBehav(p2, x));
+      assert MapFunctionValid(mf1) && MapFunctionValid(mf2) by {
+        reveal MapFunctionValid();
+      }
       var connection := map[p2.i_1 := p1.o];
       var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
       o_base == o_compose - {p1.o}
@@ -49,36 +52,46 @@ module Build.And3 {
     var input_keys_1 := {p1.i_0, p1.i_1};
     var input_keys_2 := {p2.i_0, p2.i_1};
     var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
-    var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2=> AndBehav(p2, x));
+    var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2 => AndBehav(p2, x));
+    assert MapFunctionValid(mf1) && MapFunctionValid(mf2) by {
+      reveal MapFunctionValid();
+    }
     var connection := map[p2.i_1 := p1.o];
     var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
     assert o_base == o_compose - {p1.o};
   }
 
-  function {:vcs_split_on_every_assert} InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Equiv))
+  function InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Equiv))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
     ensures EquivValid(r.0, r.2)
   {
     var (c1, a, e1) := InsertAnd(c);
-    reveal EquivValid();
+    assert e1.sc == {a.o.n};
+    assert EquivValid(c1, e1) && EquivTrue(c1, e1);
+
     var (c2, b, e2) := InsertAnd(c1);
-    EquivConserved(c1, c2, e1);
-    reveal ComposedValid();
-    assert SetsNoIntersection(e1.sc, e2.sc);
+    assert e2.sc == {b.o.n};
+    EquivConserved2(c1, c2, e1);
+    assert EquivValid(c2, e1) && EquivTrue(c2, e1);
+    assert EquivValid(c2, e2) && EquivTrue(c2, e2);
+    reveal ScValid();
     assert ScValid(c2, e1.sc);
     assert ScValid(c2, e2.sc);
+    reveal CircuitValid();
     assert (NPBetweenSubcircuits(c2, e1.sc, e2.sc) == {});
-    var c3 := Connect(c2, b.i_1, a.o);
-    EquivConserved(c2, c3, e1);
-    EquivConserved(c2, c3, e2);
-    var e := ComposeEquiv(c3, e1, e2);
-    assert forall np: NP :: np.n in e.sc ==> np !in c.PortSource.Values;
-    var combined_input_keys := ComposeEquivInputs(c3, e1, e2);
+    var connection := map[b.i_1 := a.o];
+    var (c3, e) := ConnectEquivs(c2, e1, e2, connection);
+    assert e.inputs == {a.i_0, a.i_1, b.i_0};
+    assert e.outputs == {a.o, b.o};
+    assert ScOutputBoundary(c3, e.sc) == {};
     var ports := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
-    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == combined_input_keys =>
+    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == e.inputs =>
       And3Behav(ports, x);
     var e_h := EquivHideOutput(c3, e, {a.o});
+    assert MapFunctionValid(MapFunction(e_h.inputs, e_h.outputs, f)) by {
+      reveal MapFunctionValid();
+    }
     var e_s := SwapEquivF(c3, e_h, f);
     assert EquivValid(c3, e_s);
     (c3, ports, e_s)
@@ -107,19 +120,18 @@ module Build.And3 {
       EquivTrue(new_c, e)
   {
     var (new_c, ports, e) := InsertAnd3Impl(c);
-    reveal EquivValid();
     var (c1, a, e1) := InsertAnd(c);
     var (c2, b, e2) := InsertAnd(c1);
     var p := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
+    assert b.i_1 !in c2.PortSource by {reveal CircuitValid();}
     var c3 := Connect(c2, b.i_1, a.o);
     ConnectPreservesSubcircuit(c2, b.i_1, a.o, e1.sc);
     ConnectPreservesSubcircuit(c2, b.i_1, a.o, e2.sc);
-    reveal ComposedValid();
-    assert forall np: NP :: np.n in e1.sc ==> np !in c.PortSource.Values;
-    assert forall np: NP :: np.n in e2.sc ==> np !in c.PortSource.Values;
+    assert forall np: NP :: np.n in e1.sc + e2.sc ==> np !in c.PortSource.Values by {reveal CircuitValid();}
     EquivConserved(c1, c2, e1);
     EquivConserved(c2, c3, e1);
     EquivConserved(c2, c3, e2);
+    assert ComposedValid(c3, e1, e2) by {reveal ComposedValid();}
     var e_alt := ComposeEquiv(c3, e1, e2);
     ComposeEquivCorrect(c3, e1, e2);
     assert EquivTrue(c3, e_alt);

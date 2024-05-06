@@ -8,7 +8,7 @@ module Eval {
   {
     CircuitValid(c) &&
     (|path| > 0) &&
-    INPValid(c, path[|path|-1]) &&
+    INPValid(c, Seq.Last(path)) &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
@@ -27,8 +27,10 @@ module Eval {
         if onp in path then
           EvalError({}, {path + [onp]})
         else
+          reveal CircuitValid();
           NodesNotInPathDecreases(c, path, onp);
           StillHasNoDuplicates(path, onp);
+          AppendPathValid(c, path, onp);
           EvaluateONPInner(c, path + [onp], knowns)
       else
         EvalError({head}, {})
@@ -38,11 +40,13 @@ module Eval {
     requires PathValid(c, p)
     requires Seq.HasNoDuplicates(p)
     requires np !in p
-    requires INPValid(c, np) || ONPValid(c, np)
+    requires NPValid(c, np)
     ensures
       var new_p := p + [np];
-      |NodesNotInPath(c, new_p)| < |NodesNotInPath(c, p)|
+      PathValid(c, new_p) &&
+      (|NodesNotInPath(c, new_p)| < |NodesNotInPath(c, p)|)
   {
+    reveal PathValid();
     var new_p := p + [np];
     var all_np := AllNP(c);
     var nodes_in_path := Seq.ToSet(p);
@@ -51,13 +55,25 @@ module Eval {
     assert new_nodes_in_path == nodes_in_path + {np};
   }
 
+  ghost predicate EvaluateONPUnaryBinaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  {
+    CircuitValid(c) &&
+    (|path| > 0) &&
+    ONPValid(c, path[|path|-1]) &&
+    (Seq.Last(path) !in knowns) &&
+    var nk := c.NodeKind[Seq.Last(path).n];
+    (nk.CXor? || nk.CAnd? || nk.CInv?) &&
+    PathValid(c, path) &&
+    Seq.HasNoDuplicates(path)
+  }
+
   ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
     ONPValid(c, path[|path|-1]) &&
-    path[|path|-1] !in knowns &&
-    var nk := c.NodeKind[path[|path|-1].n];
+    (Seq.Last(path) !in knowns) &&
+    var nk := c.NodeKind[Seq.Last(path).n];
     (nk.CXor? || nk.CAnd?) &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
@@ -66,17 +82,17 @@ module Eval {
   function EvaluateONPBinary(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
     requires CircuitValid(c)
     requires |path| > 0
-    requires ONPValid(c, path[|path|-1])
-    requires path[|path|-1] !in knowns
+    requires ONPValid(c, Seq.Last(path))
+    requires Seq.Last(path) !in knowns
     requires
-      var nk := c.NodeKind[path[|path|-1].n];
+      var nk := c.NodeKind[Seq.Last(path).n];
       nk.CXor? || nk.CAnd?
     requires PathValid(c, path)
     requires Seq.HasNoDuplicates(path)
     decreases |NodesNotInPath(c, path)|, 3
   {
     var nk := c.NodeKind[path[|path|-1].n];
-    var head := path[|path|-1];
+    var head := Seq.Last(path);
     assert NodeValid(c, head.n);
     var inp_0 := NP(head.n, INPUT_0);
     var inp_1 := NP(head.n, INPUT_1);
@@ -120,9 +136,9 @@ module Eval {
   {
     CircuitValid(c) &&
     (|path| > 0) &&
-    ONPValid(c, path[|path|-1]) &&
-    path[|path|-1] !in knowns &&
-    c.NodeKind[path[|path|-1].n].CInv? &&
+    ONPValid(c, Seq.Last(path)) &&
+    Seq.Last(path) !in knowns &&
+    c.NodeKind[Seq.Last(path).n].CInv? &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
@@ -131,12 +147,13 @@ module Eval {
     requires EvaluateONPUnaryRequirements(c, path, knowns)
     decreases |NodesNotInPath(c, path)|, 3
   {
-    var head := path[|path|-1];
+    var head := Seq.Last(path);
     var inp_0 := NP(head.n, INPUT_0);
     if inp_0 in path then
       EvalError({}, {path + [inp_0]})
     else
       var new_path := path + [inp_0];
+      AppendPathValid(c, path, inp_0);
       assert PathValid(c, new_path);
       NodesNotInPathDecreases(c, path, inp_0);
       StillHasNoDuplicates(path, inp_0);
@@ -152,7 +169,7 @@ module Eval {
   {
     CircuitValid(c) &&
     (|path| > 0) &&
-    ONPValid(c, path[|path|-1]) &&
+    ONPValid(c, Seq.Last(path)) &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
@@ -188,6 +205,7 @@ module Eval {
   {
     var path := [np];
     LengthOneNoDuplicates(path);
+    reveal PathValid();
     EvaluateONPInner(c, path, knowns)
   }
 
@@ -197,6 +215,7 @@ module Eval {
   {
     var path := [np];
     LengthOneNoDuplicates(path);
+    reveal PathValid();
     EvaluateINPInner(c, path, knowns)
   }
   
