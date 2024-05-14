@@ -1,25 +1,22 @@
 module HideOutput {
 
   import opened Circ
-  import opened Equiv
+  import opened Entity
   import opened Utils
-  import opened MapFunction
+  //import opened MapFunction
 
-  function EquivHideOutput(c: Circuit, e: Equiv, remove: set<NP>): (r: Equiv)
+  function EntityHideOutput(c: Circuit, e: Entity, remove: set<NP>): (r: Entity)
     requires CircuitValid(c)
-    requires EquivValid(c, e)
+    requires EntityValid(c, e)
     requires forall np :: np in remove ==> np !in ScOutputBoundary(c, e.sc)
-    ensures EquivValid(c, r)
-    ensures EquivTrue(c, e) ==> EquivTrue(c, r)
+    ensures EntityValid(c, r)
   {
     reveal CircuitValid();
-    reveal EquivValid();
-    reveal EquivTrue();
     reveal ScValid();
-    reveal NPsValidAndInSc();
-    reveal EquivScOutputsInOutputs();
-    reveal MapFunctionValid();
-    Equiv(e.sc, e.inputs, e.outputs - remove, (x: map<NP, bool>) requires x.Keys == e.inputs => e.f(x) - remove)
+    reveal EntityFValid();
+    Entity(
+      e.sc, e.finputs, e.foutputs - remove,
+      (x: map<NP, bool>) requires x.Keys == e.finputs => e.f(x) - remove)
   }
 
 }

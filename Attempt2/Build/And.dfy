@@ -1,10 +1,10 @@
 module Build.And {
 
   import opened Circ
-  import opened Equiv
   import opened Eval
   import opened Utils
-  import opened MapFunction
+  import opened Entity
+  import opened Subcircuit
   import opened ConservedSubcircuit
 
   datatype AndPorts = AndPorts(
@@ -20,12 +20,13 @@ module Build.And {
     map[p.o := knowns[p.i_0] && knowns[p.i_1]]
   }
 
-  function InsertAndImpl(c: Circuit): (r: (Circuit, AndPorts, Equiv))
+  function InsertAndImpl(c: Circuit): (r: (Circuit, AndPorts, Entity))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
-    ensures EquivValid(r.0, r.2)
+    ensures EntitySomewhatValid(r.0, r.2)
+    ensures EntityFValid(r.0, r.2)
+    ensures ScValid(r.0, r.2.sc)
   {
-    reveal EquivValid();
     reveal CircuitValid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
@@ -41,13 +42,28 @@ module Build.And {
     var m := AndPorts(i_0, i_1, o_0);
     var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == inputs =>
       AndBehav(m, x);
-    var e := Equiv({new_node}, inputs, outputs, f);
+    var e := Entity({new_node}, inputs, outputs, f);
     assert forall np :: np in new_c.PortSource.Values ==> np.n !in e.sc;
     reveal ScValid();
-    reveal NPsValidAndInSc();
-    reveal EquivScOutputsInOutputs();
-    reveal MapFunctionValid();
-    assert EquivValid(new_c, e);
+    assert ScValid(new_c, e.sc) by {
+      reveal ScValid();
+    }
+    assert EntitySomewhatValid(new_c, e) by {
+      reveal EntitySomewhatValid();
+      reveal ConnOutputs();
+      reveal ConnInputs();
+      reveal UnconnInputs();
+      reveal SeqInputs();
+      reveal SeqOutputs();
+      reveal FinalInputs();
+      reveal FinalOutputs();
+      reveal AllONPs();
+      assert (AllPossibleOutputs(new_c, e.sc) >= e.foutputs >= AllOutputs(new_c, e.sc));
+      assert (e.finputs == AllInputs(new_c, e.sc));
+    }
+    assert EntityFValid(new_c, e) by {
+      reveal EntityFValid();
+    }
     (new_c, m, e)
   }
 
@@ -55,8 +71,7 @@ module Build.And {
     requires CircuitValid(c)
     ensures
       var (new_c, m, e) := InsertAndImpl(c);
-      && EquivValid(new_c, e)
-      && EquivTrue(new_c, e)
+      && EntityValid(new_c, e)
   {
     var (new_c, m, e) := InsertAndImpl(c);
     var path := [m.o];
@@ -65,7 +80,7 @@ module Build.And {
     }
     LengthOneNoDuplicates(path);
     assert CircuitValid(new_c);
-    forall knowns: map<NP, bool> | knowns.Keys == e.inputs
+    forall knowns: map<NP, bool> | knowns.Keys == e.finputs
       ensures
         var iv_0 := knowns[m.i_0];
         var iv_1 := knowns[m.i_1];
@@ -84,8 +99,10 @@ module Build.And {
       assert Evaluate(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1);
       assert Evaluate(new_c, m.o, knowns) == EvalOk(e.f(knowns)[m.o]);
     }
-    reveal EquivTrue();
-    assert EquivTrue(new_c, e);
+    assert EntityEvaluatesCorrectly(new_c, e) by {
+      reveal EntityEvaluatesCorrectly();
+    }
+    assert EntityValid(new_c, e);
   }
 
   lemma InsertAndConserves(c: Circuit)
@@ -94,7 +111,7 @@ module Build.And {
     ensures CircuitUnconnected(c, InsertAndImpl(c).0)
     ensures
       var (new_c, m, e) := InsertAndImpl(c);
-      SubcircuitIsIsland(new_c, e.sc)
+      IsIsland(new_c, e.sc)
   {
     reveal CircuitConserved();
     reveal CircuitUnconnected();
@@ -104,34 +121,34 @@ module Build.And {
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n in e.sc ==> new_c.PortSource[np].n in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n !in e.sc ==> new_c.PortSource[np].n !in e.sc);
-    reveal SubcircuitIsIsland();
+    reveal IsIsland();
   }
 
-  function InsertAnd(c: Circuit): (r: (Circuit, AndPorts, Equiv))
+  function InsertAnd(c: Circuit): (r: (Circuit, AndPorts, Entity))
     requires CircuitValid(c)
     ensures
       var (new_c, m, e) := r;
       && r == InsertAndImpl(c)
       && CircuitValid(r.0)
-      && EquivTrue(new_c, e)
+      && EntityValid(new_c, e)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)
-      && SubcircuitIsIsland(new_c, e.sc)
+      && IsIsland(new_c, e.sc)
   {
     InsertAndCorrect(c);
     InsertAndConserves(c);
     InsertAndImpl(c)
   }
 
-  lemma InsertAndScOutputBoundaryEmpty(c: Circuit)
-    requires CircuitValid(c)
-    ensures
-      var (new_c, p, e) := InsertAnd(c);
-      ScOutputBoundary(new_c, e.sc) == {}
-  {
-    var (new_c, p, e) := InsertAnd(c);
-    reveal CircuitValid();
-    assert forall np: NP :: np.n in e.sc ==> np !in c.PortSource.Values;
-  }
+  //lemma InsertAndScOutputBoundaryEmpty(c: Circuit)
+  //  requires CircuitValid(c)
+  //  ensures
+  //    var (new_c, p, e) := InsertAnd(c);
+  //    ScOutputBoundary(new_c, e.sc) == {}
+  //{
+  //  var (new_c, p, e) := InsertAnd(c);
+  //  reveal CircuitValid();
+  //  assert forall np: NP :: np.n in e.sc ==> np !in c.PortSource.Values;
+  //}
 
 }

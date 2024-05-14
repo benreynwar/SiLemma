@@ -2,28 +2,9 @@ module ConservedSubcircuit {
 
   import opened Circ
   import opened Eval
-  import opened Equiv
+  import opened Entity
   import opened Utils
-  import opened MapFunction
-
-  // To show that the rest of the graph is unchanged I need to show that
-  // there is a set of nodes which have the same n.
-  // There are no connections from those nodes to anything new without getting blocked by a known.
-  // The result of an Evaluate should be the same.
-
-  // We define a subgraph as all the nodes in the subgraph together with all the INPs that form the
-  // upper boundary (not really necessary, can probably simplify in the future)
-  datatype Subcircuit = Subcircuit(
-    nodes: set<CNode>,
-    boundary: set<NP>
-  )
-
-  // What kind of changes would I like to categorize
-  // 1) This subcircuit has it's internal stucture left alone.
-  // 2) This subcircuit has no new connections in.
-  // 3) This subcircuit has no new connections out.
-  // 4) This subcircuit is totally left alone (i.e. not change or connections in or out) (1 + 2 + 3)
-
+  import opened Subcircuit
 
   ghost opaque predicate CircuitConserved(ca: Circuit, cb: Circuit)
   {
@@ -60,31 +41,71 @@ module ConservedSubcircuit {
   }
 
   ghost opaque predicate SubcircuitConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
+    requires ScValid(ca, sc)
   {
     reveal ScValid();
-    && (forall n :: n in sc ==> n in ca.NodeKind && n in cb.NodeKind)
+    && (forall n :: n in sc ==> n in cb.NodeKind)
     && (forall n :: n in sc ==> ca.NodeKind[n] == cb.NodeKind[n])
-    && (forall np: NP :: (np in ScInputBoundary(ca, sc)) == (np in ScInputBoundary(cb, sc)))
-    && (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc ==> (np in ca.PortSource) == (np in cb.PortSource))
-    && (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc && np in ca.PortSource ==> ca.PortSource[np] == cb.PortSource[np])
+    && (forall np: NP :: np.n in sc && np in ca.PortSource ==>
+        np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np])
+    && (forall np: NP :: np.n in sc && np !in ca.PortSource && np in cb.PortSource ==>
+        cb.PortSource[np].n !in sc)
   }
+
+  lemma EntitySomewhatValidConserved(ca: Circuit, cb: Circuit, e: Entity)
+    requires CircuitValid(ca)
+    requires CircuitValid(cb)
+    requires EntitySomewhatValid(ca, e)
+    requires ScValid(ca, e.sc)
+    requires SubcircuitConserved(ca, cb, e.sc)
+    requires ScValid(cb, e.sc)
+    requires OutputsInFOutputs(cb, e)
+    ensures EntitySomewhatValid(cb, e)
+  {
+    reveal SubcircuitConserved();
+    reveal EntitySomewhatValid();
+    reveal ScValid();
+    reveal ConnOutputs();
+    reveal SeqOutputs();
+    reveal FinalOutputs();
+    reveal AllONPs();
+    //reveal OutputsInFOutputs();
+    reveal AllINPs();
+    reveal SeqInputs();
+    reveal FinalInputs();
+    reveal UnconnInputs();
+    reveal ConnInputs();
+    reveal CircuitValid();
+  }
+
 
   ghost opaque predicate SubcircuitUnconnected(ca: Circuit, cb: Circuit, sc: set<CNode>)
   {
     && (forall np :: np in cb.PortSource && np !in ca.PortSource ==> np.n !in sc && cb.PortSource[np].n !in sc)
   }
 
-  ghost opaque predicate SubcircuitIsIsland(c: Circuit, sc: set<CNode>)
+  lemma IsIslandConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
+    requires CircuitValid(ca)
+    requires ScValid(ca, sc)
+    requires IsIsland(ca, sc)
+    requires CircuitConserved(ca, cb)
+    requires CircuitUnconnected(ca, cb)
+    ensures IsIsland(cb, sc)
   {
-    && (forall np :: np in c.PortSource && np.n in sc ==> c.PortSource[np].n in sc)
-    && (forall np :: np in c.PortSource && np.n !in sc ==> c.PortSource[np].n !in sc)
+    reveal CircuitValid();
+    reveal ScValid();
+    reveal IsIsland();
+    reveal CircuitConserved();
+    reveal CircuitUnconnected();
   }
   
   lemma CircuitConservedSubcircuitConserved(ca: Circuit, cb: Circuit)
     requires CircuitValid(ca)
     requires CircuitValid(cb)
     requires CircuitConserved(ca, cb)
-    ensures SubcircuitConserved(ca, cb, ca.NodeKind.Keys)
+    ensures
+      && ScValid(ca, ca.NodeKind.Keys)
+      && SubcircuitConserved(ca, cb, ca.NodeKind.Keys)
   {
     reveal CircuitValid();
     reveal CircuitConserved();
@@ -108,23 +129,21 @@ module ConservedSubcircuit {
       ScInputBoundary(cb, sc);
     }
     assert ScInputBoundary(ca, sc) == ScInputBoundary(cb, sc);
-    //NPBetweenSubcircuitsComplement(c, sc, sc) + UnconnectedINPs(c, sc) + InternalInputs(c, sc)
     assert (forall np: NP :: (np in ScInputBoundary(ca, sc)) == (np in ScInputBoundary(cb, sc)));
     assert (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc ==> (np in ca.PortSource) == (np in cb.PortSource));
     assert (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc && np in ca.PortSource ==> ca.PortSource[np] == cb.PortSource[np]);
   }
 
-  ghost opaque predicate ConservedValid(ca: Circuit, cb: Circuit, e: Equiv, known: map<NP, bool>)
+  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Entity, known: map<NP, bool>)
   {
     CircuitValid(ca) && CircuitValid(cb) &&
-    EquivValid(ca, e) && EquivValid(cb, e) &&
+    EntityValid(ca, e) &&
     SubcircuitConserved(ca, cb, e.sc) &&
-    (forall np :: np in e.inputs ==> np in known) &&
-    (forall np :: np in known ==> np.n in e.sc)
+    (e.finputs == known.Keys)
   }
 
   lemma EvaluateINPInnerConserved(
-    ca: Circuit, cb: Circuit, e: Equiv, path: seq<NP>, knowns: map<NP, bool>)
+    ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, knowns: map<NP, bool>)
     requires ConservedValid(ca, cb, e, knowns)
     requires |path| > 0
     requires forall np :: np in path ==> np.n in e.sc
@@ -138,8 +157,6 @@ module ConservedSubcircuit {
       EvaluateINPInner(ca, path, knowns) == EvaluateINPInner(cb, path, knowns)
     decreases |NodesNotInPath(ca, path)|, 2
   {
-    reveal ConservedValid();
-    reveal EquivValid();
     reveal PathValid();
     reveal CircuitValid();
     reveal SubcircuitConserved();
@@ -148,6 +165,8 @@ module ConservedSubcircuit {
     if head in knowns {
       assert EvaluateINPInner(ca, path, knowns) == EvaluateINPInner(cb, path, knowns);
     } else {
+      StaysInSc(ca, e, head);
+      assert knowns.Keys == e.finputs;
       if head in ca.PortSource {
         var onp := ca.PortSource[head];
         if onp in path {
@@ -155,6 +174,7 @@ module ConservedSubcircuit {
           reveal CircuitValid();
           NodesNotInPathDecreases(ca, path, onp);
           StillHasNoDuplicates(path, onp);
+          assert onp.n in e.sc;
           EvaluateONPInnerConserved(ca, cb, e, path + [onp], knowns);
         }
       } else {
@@ -163,7 +183,7 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateONPBinaryConserved(
-      ca: Circuit, cb: Circuit, e: Equiv, path: seq<NP>, knowns: map<NP, bool>)
+      ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, knowns: map<NP, bool>)
     requires ConservedValid(ca, cb, e, knowns)
     requires |path| > 0
     requires ONPValid(ca, Seq.Last(path))
@@ -183,8 +203,6 @@ module ConservedSubcircuit {
       EvaluateONPBinary(ca, path, knowns) == EvaluateONPBinary(cb, path, knowns)
     decreases |NodesNotInPath(ca, path)|, 3
   {
-    reveal ConservedValid();
-    reveal EquivValid();
     reveal PathValid();
     reveal CircuitValid();
     reveal SubcircuitConserved();
@@ -206,7 +224,7 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateONPUnaryConserved(
-      ca: Circuit, cb: Circuit, e: Equiv, path: seq<NP>, knowns: map<NP, bool>)
+      ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, knowns: map<NP, bool>)
     requires ConservedValid(ca, cb, e, knowns)
     requires |path| > 0
     requires ONPValid(ca, path[|path|-1])
@@ -224,8 +242,6 @@ module ConservedSubcircuit {
       EvaluateONPUnary(ca, path, knowns) == EvaluateONPUnary(cb, path, knowns)
     decreases |NodesNotInPath(ca, path)|, 3
   {
-    reveal ConservedValid();
-    reveal EquivValid();
     reveal PathValid();
     reveal CircuitValid();
     reveal SubcircuitConserved();
@@ -240,7 +256,7 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateONPInnerConserved(
-      ca: Circuit, cb: Circuit, e: Equiv, path: seq<NP>, knowns: map<NP, bool>)
+      ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, knowns: map<NP, bool>)
     requires ConservedValid(ca, cb, e, knowns)
     requires EvaluateONPInnerRequirements(ca, path, knowns)
     requires forall np :: np in path ==> np.n in e.sc
@@ -251,8 +267,6 @@ module ConservedSubcircuit {
       EvaluateONPInner(ca, path, knowns) == EvaluateONPInner(cb, path, knowns)
     decreases |NodesNotInPath(ca, path)|, 4
   {
-    reveal ConservedValid();
-    reveal EquivValid();
     reveal PathValid();
     reveal CircuitValid();
     reveal SubcircuitConserved();
@@ -270,7 +284,7 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma EvaluateConserved(ca: Circuit, cb: Circuit, e: Equiv, o: NP, known: map<NP, bool>)
+  lemma EvaluateConserved(ca: Circuit, cb: Circuit, e: Entity, o: NP, known: map<NP, bool>)
     requires ConservedValid(ca, cb, e, known)
     requires o.n in e.sc
     requires INPValid(ca, o) || ONPValid(ca, o)
@@ -279,8 +293,6 @@ module ConservedSubcircuit {
       CircuitValid(ca) && CircuitValid(cb) &&
       (Evaluate(ca, o, known) == Evaluate(cb, o, known))
   {
-    reveal ConservedValid();
-    reveal EquivValid();
     reveal PathValid();
     reveal CircuitValid();
     reveal SubcircuitConserved();
@@ -293,7 +305,7 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma ScInputBoundaryConserved(ca: Circuit, cb: Circuit, e: Equiv)
+  lemma ScInputBoundaryConserved(ca: Circuit, cb: Circuit, e: Entity)
     requires CircuitValid(ca)
     requires CircuitValid(cb)
     requires CircuitConserved(ca, cb)
@@ -305,75 +317,82 @@ module ConservedSubcircuit {
     reveal ScValid();
   }
 
-  lemma ScOutputBoundaryConserved(ca: Circuit, cb: Circuit, e: Equiv)
+  lemma ScOutputBoundaryConserved(ca: Circuit, cb: Circuit, e: Entity)
     requires CircuitValid(ca)
     requires CircuitValid(cb)
     requires CircuitConserved(ca, cb)
     requires CircuitUnconnected(ca, cb)
-    requires EquivValid(ca, e)
+    requires EntityValid(ca, e)
     ensures ScOutputBoundary(ca, e.sc) == ScOutputBoundary(cb, e.sc)
   {
     reveal CircuitValid();
     reveal CircuitConserved();
     reveal CircuitUnconnected();
-    reveal EquivValid();
-    reveal EquivScOutputsInOutputs();
     reveal ScValid();
   }
 
-
-  lemma EquivConserved2(ca: Circuit, cb: Circuit, e: Equiv)
+  lemma EntityConserved2(ca: Circuit, cb: Circuit, e: Entity)
     requires CircuitValid(ca)
     requires CircuitValid(cb)
     requires CircuitConserved(ca, cb)
-    requires CircuitUnconnected(ca, cb)
-    requires EquivValid(ca, e)
-    ensures EquivValid(cb, e)
-    ensures EquivValid(ca, e) ==> EquivTrue(ca, e) == EquivTrue(cb, e)
+    requires EntityValid(ca, e)
+    requires ScValid(cb, e.sc)
+    requires OutputsInFOutputs(cb, e)
+    ensures EntityValid(cb, e)
   {
-    reveal EquivValid();
     CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
-    assert EquivScOutputsInOutputs(ca, e.sc, e.outputs);
-    reveal EquivScOutputsInOutputs();
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     reveal ScValid();
-    EquivConserved(ca, cb, e);
+    EntityConserved(ca, cb, e);
   }
 
-  lemma EquivConserved(ca: Circuit, cb: Circuit, e: Equiv)
+  lemma EntityConserved(ca: Circuit, cb: Circuit, e: Entity)
     requires CircuitValid(ca)
     requires CircuitValid(cb)
+    requires EntityValid(ca, e)
     requires SubcircuitConserved(ca, cb, e.sc)
-    requires EquivScOutputsInOutputs(ca, e.sc, e.outputs)
-    requires EquivScOutputsInOutputs(cb, e.sc, e.outputs)
-    ensures EquivValid(ca, e) == EquivValid(cb, e)
-    ensures EquivValid(ca, e) ==> EquivTrue(ca, e) == EquivTrue(cb, e)
+    requires ScValid(cb, e.sc)
+    requires OutputsInFOutputs(cb, e)
+    ensures EntityValid(cb, e)
   {
-    reveal EquivScOutputsInOutputs();
     reveal CircuitValid();
-    reveal EquivValid();
-    reveal EquivTrue();
-    reveal ConservedValid();
-
     reveal ScValid();
-    reveal NPsValidAndInSc();
     reveal SubcircuitConserved();
 
-    assert ScValid(ca, e.sc) == ScValid(cb, e.sc);
+    assert ScValid(ca, e.sc);
+    assert ScValid(cb, e.sc) by {
+      reveal ScValid();
+    }
 
-    assert EquivValid(ca, e) == EquivValid(cb, e);
-    if EquivValid(ca, e) {
-      forall knowns: map<NP, bool> | knowns.Keys == e.inputs
-        ensures forall np :: np in e.outputs ==> Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns)
+    if EntityValid(ca, e) {
+      forall knowns: map<NP, bool> | knowns.Keys == e.finputs
+        ensures forall np :: np in e.foutputs ==>
+          && NPValid(ca, np) && NPValid(cb, np)
+          && (Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns))
       {
-        forall np | np in e.outputs
-          ensures Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns)
+        forall np | np in e.foutputs
+          ensures
+            && NPValid(ca, np) && NPValid(cb, np)
+            && (Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns))
         {
+          EntityFOutputsAreValid(ca, e);
+          FOutputsInSc(ca, e);
+          reveal NPsInSc();
           EvaluateConserved(ca, cb, e, np, knowns);
           assert Evaluate(ca, np, knowns) == Evaluate(cb, np, knowns);
         }
       }
+    }
+
+    EntitySomewhatValidConserved(ca, cb, e);
+    assert EntitySomewhatValid(cb, e);
+    assert EntityFValid(cb, e) by {
+      reveal EntityFValid();
+    }
+    assert ScValid(cb, e.sc);
+    assert EntityEvaluatesCorrectly(cb, e) by {
+      reveal EntityEvaluatesCorrectly();
     }
   }
 }

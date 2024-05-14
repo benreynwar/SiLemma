@@ -31,8 +31,8 @@ module Circ {
 
   opaque predicate CircuitValid(c: Circuit)
   {
-    (forall np :: np in c.PortSource.Values ==> ONPValid(c, np)) &&
-    (forall np :: np in c.PortSource.Keys ==> INPValid(c, np))
+    && (forall np :: np in c.PortSource.Values ==> ONPValid(c, np))
+    && (forall np :: np in c.PortSource.Keys ==> INPValid(c, np))
   }
 
   function GetNewNodeInternal(c: Circuit, m: CNode, remaining_nodes: set<CNode>): (r: CNode)
@@ -109,7 +109,7 @@ module Circ {
 
   function AllNodes(c: Circuit): set<CNode>
   {
-    (set n | n in c.NodeKind)
+    c.NodeKind.Keys
   }
 
   opaque predicate PathValid(c: Circuit, p: seq<NP>)
@@ -187,6 +187,11 @@ module Circ {
     InputPortValid(nk, np.p)
   }
 
+  lemma NotBothINPValidONPValid(c: Circuit, np: NP)
+    ensures !(INPValid(c, np) && ONPValid(c, np))
+  {
+  }
+
   predicate NPValid(c: Circuit, np: NP)
   {
     INPValid(c, np) || ONPValid(c, np)
@@ -231,9 +236,11 @@ module Circ {
     np !in c.PortSource || c.PortSource[np].n in sc
   }
 
-  function SubcircuitComplement(c: Circuit, sc: set<CNode>): set<CNode>
+  function SubcircuitComplement(c: Circuit, sc: set<CNode>): (r: set<CNode>)
+    ensures ScValid(c, r)
   {
     var all_nodes := AllNodes(c);
+    reveal ScValid();
     all_nodes - sc
   }
 

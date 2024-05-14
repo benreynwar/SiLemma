@@ -2,7 +2,7 @@ module Eval {
 
   import opened Circ
   import opened Utils
-  import opened MapFunction
+  //import opened MapFunction
 
   ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
   {

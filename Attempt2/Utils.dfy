@@ -5,7 +5,42 @@ module Utils {
 
   predicate SetsNoIntersection<T>(a: set<T>, b: set<T>)
   {
-    a * b == {}
+    |a * b| == 0
+  }
+
+  lemma SetsNoIntersectionDuh<T>(a: set<T>, b: set<T>)
+    requires SetsNoIntersection(a, b)
+    ensures !exists x :: x in a && x in b
+  {
+    if exists x :: x in a && x in b {
+      var x :| x in a && x in b;
+      assert x in a * b;
+    }
+  }
+
+  lemma SetsNoIntersectionAdds<T>(a: set<T>, b: set<T>, c: set<T>)
+    requires SetsNoIntersection(a, b)
+    requires SetsNoIntersection(a, c)
+    ensures SetsNoIntersection(a, b + c)
+  {
+    if exists x :: x in a && x in b + c {
+      var x :| x in a && x in b + c;
+      assert x in b || x in c;
+      if x in b {
+        assert x in a && x in b;
+        assert x in (a * b);
+      } else {
+        assert x in a && x in c;
+        assert x in (a * c);
+      }
+      assert false;
+    }
+  }
+
+  lemma SetsNoIntersectionSymm<T>(a: set<T>, b: set<T>)
+    ensures SetsNoIntersection(a, b) == SetsNoIntersection(b, a)
+  {
+    assert a * b == b * a;
   }
 
   lemma NotInBoth<T>(x: T, a: set<T>, b: set<T>)

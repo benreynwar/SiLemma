@@ -2,8 +2,6 @@ module MapFunction {
 
   import opened Circ
   import opened Utils
-  //import opened Compose
-  //import opened Eval
 
   datatype MapFunction = MapFunction(
     inputs: set<NP>,

@@ -3,13 +3,14 @@ module Build.And3 {
   import opened Circ
   import opened Eval
   import opened ConservedSubcircuit
-  import opened Compose
-  import opened ComposeEval
   import opened Utils
-  import opened MapFunction
-  import opened Equiv
+  import opened Entity
   import opened HideOutput
-  import opened Connecting
+  import opened MapFunction
+  import opened ConnectionEval
+  import opened Connection
+  import opened IslandBundle
+  import opened Subcircuit
 
   import opened And
 
@@ -61,91 +62,114 @@ module Build.And3 {
     assert o_base == o_compose - {p1.o};
   }
 
-  function InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Equiv))
+  function {:vcs_split_on_every_assert} InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Entity))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
-    ensures EquivValid(r.0, r.2)
+    ensures EntityValid(r.0, r.2)
   {
+    var eb1 := IslandBundle(c, [], map[]);
+    assert IslandBundleValid(eb1) by {
+      reveal IslandBundleValid();
+    }
     var (c1, a, e1) := InsertAnd(c);
+    var (eb2, a_ref) := AddEntity(eb1, c1, e1);
     assert e1.sc == {a.o.n};
-    assert EquivValid(c1, e1) && EquivTrue(c1, e1);
+    assert EntityValid(c1, e1);
+
+    assert e1 == eb2.es[a_ref].value;
 
     var (c2, b, e2) := InsertAnd(c1);
+    var (eb3, b_ref) := AddEntity(eb2, c2, e2);
     assert e2.sc == {b.o.n};
-    EquivConserved2(c1, c2, e1);
-    assert EquivValid(c2, e1) && EquivTrue(c2, e1);
-    assert EquivValid(c2, e2) && EquivTrue(c2, e2);
-    reveal ScValid();
-    assert ScValid(c2, e1.sc);
-    assert ScValid(c2, e2.sc);
-    reveal CircuitValid();
-    assert (NPBetweenSubcircuits(c2, e1.sc, e2.sc) == {});
+
+    assert e1 == eb3.es[a_ref].value;
+
+    //assert EntityValid(c2, e1) by {
+    //  reveal IslandBundleValid();
+    //}
+    //assert EntityValid(c2, e2);
+    //reveal ScValid();
+    //assert ScValid(c2, e1.sc);
+    //assert ScValid(c2, e2.sc);
+    //reveal CircuitValid();
+    //assert (NPBetweenSubcircuits(c2, e1.sc, e2.sc) == {});
     var connection := map[b.i_1 := a.o];
-    var (c3, e) := ConnectEquivs(c2, e1, e2, connection);
-    assert e.inputs == {a.i_0, a.i_1, b.i_0};
-    assert e.outputs == {a.o, b.o};
-    assert ScOutputBoundary(c3, e.sc) == {};
+    assert ConnectEntitiesRequirements(c2, e1, e2, connection) by {
+      reveal IslandBundleValid();
+      assert CircuitValid(c2);
+      assert EntityValid(c2, e1);
+      assert EntityValid(c2, e2);
+      assert IsIsland(c2, e1.sc);
+      assert IsIsland(c2, e2.sc);
+      assert SetsNoIntersection(e1.sc, e2.sc);
+      assert ConnectionValid(c2, e1, e2, connection) by {
+        reveal ConnectionValid();
+        reveal AllINPs();
+        reveal AllONPs();
+        assert (connection.Keys <= e2.finputs * AllINPs(c2, e2.sc));
+        assert (connection.Values <= e1.foutputs * AllONPs(c2, e1.sc));
+        assert b.i_1 in e2.finputs;
+        assert IsIsland(c2, e2.sc);
+        assert b.i_1 in AllInputs(c2, e2.sc) by {
+          reveal EntitySomewhatValid();
+        }
+        assert b.i_1 !in c2.PortSource.Keys by {
+          reveal UnconnInputs();
+          reveal ConnInputs();
+          reveal SeqInputs();
+          reveal FinalInputs();
+        }
+        assert SetsNoIntersection(connection.Keys, c2.PortSource.Keys);
+      }
+    }
+    var (c3, e) := ConnectEntities(c2, e1, e2, connection);
+    assert e.finputs == {a.i_0, a.i_1, b.i_0};
+    assert e.foutputs == {a.o, b.o};
     var ports := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
-    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == e.inputs =>
+    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == e.finputs =>
       And3Behav(ports, x);
-    var e_h := EquivHideOutput(c3, e, {a.o});
-    assert MapFunctionValid(MapFunction(e_h.inputs, e_h.outputs, f)) by {
+    var e_h := EntityHideOutput(c3, e, {a.o});
+    assert MapFunctionValid(MapFunction(e_h.finputs, e_h.foutputs, f)) by {
       reveal MapFunctionValid();
     }
-    var e_s := SwapEquivF(c3, e_h, f);
-    assert EquivValid(c3, e_s);
+    var e_s := SwapEntityF(c3, e_h, f);
+    assert EntityValid(c3, e_s);
     (c3, ports, e_s)
   }
 
-  lemma InsertAnd3CorrectHelper(c: Circuit, e1: Equiv, e2: Equiv, knowns: map<NP, bool>)
-    requires ComposedValid(c, e1, e2)
-    requires
-      var combined_input_keys := ComposeEquivInputs(c, e1, e2);
-      knowns.Keys == combined_input_keys
-    ensures
-      var e := ComposeEquiv(c, e1, e2);
-      (e.f(knowns) == ComposeEquivF(c, e1, e2, knowns))
-  {
-    reveal ComposedValid();
-    reveal EquivValid();
-    var combined_input_keys := ComposeEquivInputs(c, e1, e2);
-    var e := ComposeEquiv(c, e1, e2);
-    assert (e.f(knowns) == ComposeEquivF(c, e1, e2, knowns));
-  }
-
-  lemma {:vcs_split_on_every_assert} InsertAnd3Correct(c: Circuit)
-    requires CircuitValid(c)
-    ensures
-      var (new_c, ports, e) := InsertAnd3Impl(c);
-      EquivTrue(new_c, e)
-  {
-    var (new_c, ports, e) := InsertAnd3Impl(c);
-    var (c1, a, e1) := InsertAnd(c);
-    var (c2, b, e2) := InsertAnd(c1);
-    var p := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
-    assert b.i_1 !in c2.PortSource by {reveal CircuitValid();}
-    var c3 := Connect(c2, b.i_1, a.o);
-    ConnectPreservesSubcircuit(c2, b.i_1, a.o, e1.sc);
-    ConnectPreservesSubcircuit(c2, b.i_1, a.o, e2.sc);
-    assert forall np: NP :: np.n in e1.sc + e2.sc ==> np !in c.PortSource.Values by {reveal CircuitValid();}
-    EquivConserved(c1, c2, e1);
-    EquivConserved(c2, c3, e1);
-    EquivConserved(c2, c3, e2);
-    assert ComposedValid(c3, e1, e2) by {reveal ComposedValid();}
-    var e_alt := ComposeEquiv(c3, e1, e2);
-    ComposeEquivCorrect(c3, e1, e2);
-    assert EquivTrue(c3, e_alt);
-    var e_rem := EquivHideOutput(c3, e_alt, {a.o});
-    var combined_input_keys := ComposeEquivInputs(c3, e1, e2);
-    forall knowns: map<NP, bool> | knowns.Keys == combined_input_keys
-      ensures e_rem.f(knowns) == e.f(knowns)
-    {
-      And3BehavIsComposition(a, b, knowns);
-      assert e_rem.f(knowns) == ComposeEquivF(c3, e1, e2, knowns) - {a.o};
-      assert e.f(knowns) == And3Behav(p, knowns);
-      assert e_rem.f(knowns) == e.f(knowns);
-    }
-    assert EquivTrue(c3, e);
-  }
+  //lemma {:vcs_split_on_every_assert} InsertAnd3Correct(c: Circuit)
+  //  requires CircuitValid(c)
+  //  ensures
+  //    var (new_c, ports, e) := InsertAnd3Impl(c);
+  //    EntityValid(new_c, e)
+  //{
+  //  var (new_c, ports, e) := InsertAnd3Impl(c);
+  //  var (c1, a, e1) := InsertAnd(c);
+  //  var (c2, b, e2) := InsertAnd(c1);
+  //  var p := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
+  //  assert b.i_1 !in c2.PortSource by {reveal CircuitValid();}
+  //  var c3 := Connect(c2, b.i_1, a.o);
+  //  ConnectPreservesSubcircuit(c2, b.i_1, a.o, e1.sc);
+  //  ConnectPreservesSubcircuit(c2, b.i_1, a.o, e2.sc);
+  //  assert forall np: NP :: np.n in e1.sc + e2.sc ==> np !in c.PortSource.Values by {reveal CircuitValid();}
+  //  EntityConserved(c1, c2, e1);
+  //  EntityConserved(c2, c3, e1);
+  //  EntityConserved(c2, c3, e2);
+  //  assert ComposedValid(c3, e1, e2) by {reveal ComposedValid();}
+  //  var e_alt := ComposeEntity(c3, e1, e2);
+  //  ComposeEntityCorrect(c3, e1, e2);
+  //  assert EntityTrue(c3, e_alt);
+  //  var e_rem := EntityHideOutput(c3, e_alt, {a.o});
+  //  var combined_input_keys := ComposeEntityInputs(c3, e1, e2);
+  //  forall knowns: map<NP, bool> | knowns.Keys == combined_input_keys
+  //    ensures e_rem.f(knowns) == e.f(knowns)
+  //  {
+  //    And3BehavIsComposition(a, b, knowns);
+  //    assert e_rem.f(knowns) == ComposeEntityF(c3, e1, e2, knowns) - {a.o};
+  //    assert e.f(knowns) == And3Behav(p, knowns);
+  //    assert e_rem.f(knowns) == e.f(knowns);
+  //  }
+  //  assert EntityTrue(c3, e);
+  //}
 
 }
