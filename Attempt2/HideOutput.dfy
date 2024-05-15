@@ -3,7 +3,7 @@ module HideOutput {
   import opened Circ
   import opened Entity
   import opened Utils
-  //import opened MapFunction
+  import opened MapFunction
 
   function EntityHideOutput(c: Circuit, e: Entity, remove: set<NP>): (r: Entity)
     requires CircuitValid(c)
@@ -13,10 +13,12 @@ module HideOutput {
   {
     reveal CircuitValid();
     reveal ScValid();
-    reveal EntityFValid();
+    reveal MapFunctionValid();
     Entity(
-      e.sc, e.finputs, e.foutputs - remove,
-      (x: map<NP, bool>) requires x.Keys == e.finputs => e.f(x) - remove)
+      e.sc, MapFunction(e.mf.inputs, e.mf.outputs - remove, e.mf.state,
+      (fi: FI) requires FIValid(fi, e.mf.inputs, e.mf.state) =>
+        var fo := e.mf.f(fi);
+        FO(fo.outputs, fo.state - remove)))
   }
 
 }

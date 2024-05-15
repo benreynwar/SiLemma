@@ -6,6 +6,7 @@ module Build.And {
   import opened Entity
   import opened Subcircuit
   import opened ConservedSubcircuit
+  import opened MapFunction
 
   datatype AndPorts = AndPorts(
     i_0: NP,
@@ -24,7 +25,7 @@ module Build.And {
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
     ensures EntitySomewhatValid(r.0, r.2)
-    ensures EntityFValid(r.0, r.2)
+    ensures MapFunctionValid(r.2.mf)
     ensures ScValid(r.0, r.2.sc)
   {
     reveal CircuitValid();
@@ -40,9 +41,9 @@ module Build.And {
     var inputs := {i_0, i_1};
     var outputs := {o_0};
     var m := AndPorts(i_0, i_1, o_0);
-    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == inputs =>
-      AndBehav(m, x);
-    var e := Entity({new_node}, inputs, outputs, f);
+    var f: FI --> FO := (fi: FI) requires fi.inputs.Keys == inputs && |fi.state.Keys| == 0 =>
+      FO(AndBehav(m, fi.inputs), map[]);
+    var e := Entity({new_node}, MapFunction(inputs, outputs, {}, f));
     assert forall np :: np in new_c.PortSource.Values ==> np.n !in e.sc;
     reveal ScValid();
     assert ScValid(new_c, e.sc) by {
@@ -55,14 +56,12 @@ module Build.And {
       reveal UnconnInputs();
       reveal SeqInputs();
       reveal SeqOutputs();
-      reveal FinalInputs();
-      reveal FinalOutputs();
       reveal AllONPs();
-      assert (AllPossibleOutputs(new_c, e.sc) >= e.foutputs >= AllOutputs(new_c, e.sc));
-      assert (e.finputs == AllInputs(new_c, e.sc));
+      assert (AllONPs(new_c, e.sc) >= e.mf.outputs >= ConnOutputs(new_c, e.sc));
+      assert (e.mf.inputs == AllInputs(new_c, e.sc));
     }
-    assert EntityFValid(new_c, e) by {
-      reveal EntityFValid();
+    assert MapFunctionValid(e.mf) by {
+      reveal MapFunctionValid();
     }
     (new_c, m, e)
   }
@@ -80,24 +79,24 @@ module Build.And {
     }
     LengthOneNoDuplicates(path);
     assert CircuitValid(new_c);
-    forall knowns: map<NP, bool> | knowns.Keys == e.finputs
+    forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
       ensures
-        var iv_0 := knowns[m.i_0];
-        var iv_1 := knowns[m.i_1];
-        EvaluateONP(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1)
+        var iv_0 := fi.inputs[m.i_0];
+        var iv_1 := fi.inputs[m.i_1];
+        EvaluateONP(new_c, m.o, fi) == EvalOk(iv_0 && iv_1)
     {
-      var iv_0 := knowns[m.i_0];
-      var iv_1 := knowns[m.i_1];
+      var iv_0 := fi.inputs[m.i_0];
+      var iv_1 := fi.inputs[m.i_1];
       assert Seq.HasNoDuplicates(path);
-      assert EvaluateONP(new_c, m.o, knowns) == EvaluateONPBinary(new_c, [m.o], knowns);
+      assert EvaluateONP(new_c, m.o, fi) == EvaluateONPBinary(new_c, [m.o], fi);
       reveal Seq.HasNoDuplicates();
-      assert EvaluateINPInner(new_c, [m.o, m.i_0], knowns) == EvalOk(iv_0);
-      assert EvaluateINPInner(new_c, [m.o, m.i_1], knowns) == EvalOk(iv_1);
-      assert EvaluateONPBinary(new_c, [m.o], knowns) == EvalOk(iv_0 && iv_1);
-      assert EvaluateONPInner(new_c, [m.o], knowns) == EvalOk(iv_0 && iv_1);
-      assert EvaluateONP(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1);
-      assert Evaluate(new_c, m.o, knowns) == EvalOk(iv_0 && iv_1);
-      assert Evaluate(new_c, m.o, knowns) == EvalOk(e.f(knowns)[m.o]);
+      assert EvaluateINPInner(new_c, [m.o, m.i_0], fi) == EvalOk(iv_0);
+      assert EvaluateINPInner(new_c, [m.o, m.i_1], fi) == EvalOk(iv_1);
+      assert EvaluateONPBinary(new_c, [m.o], fi) == EvalOk(iv_0 && iv_1);
+      assert EvaluateONPInner(new_c, [m.o], fi) == EvalOk(iv_0 && iv_1);
+      assert EvaluateONP(new_c, m.o, fi) == EvalOk(iv_0 && iv_1);
+      assert Evaluate(new_c, m.o, fi) == EvalOk(iv_0 && iv_1);
+      assert Evaluate(new_c, m.o, fi) == EvalOk(e.mf.f(fi).outputs[m.o]);
     }
     assert EntityEvaluatesCorrectly(new_c, e) by {
       reveal EntityEvaluatesCorrectly();

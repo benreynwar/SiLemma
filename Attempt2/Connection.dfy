@@ -6,13 +6,14 @@ module Connection {
   import opened Subcircuit
   import opened Eval
   import opened ConservedSubcircuit
+  import opened MapFunction
 
   opaque ghost predicate ConnectionValid(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
     requires ScValid(c, e1.sc)
     requires ScValid(c, e2.sc)
   {
-    && (connection.Keys <= e2.finputs * AllINPs(c, e2.sc))
-    && (connection.Values <= e1.foutputs * AllONPs(c, e1.sc))
+    && (connection.Keys <= e2.mf.inputs * AllINPs(c, e2.sc))
+    && (connection.Values <= e1.mf.outputs * AllONPs(c, e1.sc))
     && SetsNoIntersection(connection.Keys, c.PortSource.Keys)
   }
 
@@ -75,7 +76,7 @@ module Connection {
   lemma OtherNoIntersection(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
     ensures SetsNoIntersection(AllInputs(c, e1.sc), AllInputs(c, e2.sc))
-    ensures SetsNoIntersection(AllPossibleOutputs(c, e1.sc), AllPossibleOutputs(c, e2.sc))
+    ensures SetsNoIntersection(AllONPs(c, e1.sc), AllONPs(c, e2.sc))
   {
     reveal NPsInSc();
     reveal AllONPs();
@@ -84,56 +85,105 @@ module Connection {
     reveal ConnOutputs();
     reveal UnconnInputs();
     assert NPsInSc(e1.sc, AllInputs(c, e1.sc));
-    assert NPsInSc(e1.sc, AllPossibleOutputs(c, e1.sc));
+    assert NPsInSc(e1.sc, AllONPs(c, e1.sc));
     assert NPsInSc(e2.sc, AllInputs(c, e2.sc));
-    assert NPsInSc(e2.sc, AllPossibleOutputs(c, e2.sc));
+    assert NPsInSc(e2.sc, AllONPs(c, e2.sc));
     NPSetsNoIntersection(c, e1, e2, connection, AllInputs(c, e1.sc), AllInputs(c, e2.sc));
-    NPSetsNoIntersection(c, e1, e2, connection, AllPossibleOutputs(c, e1.sc), AllPossibleOutputs(c, e2.sc));
+    NPSetsNoIntersection(c, e1, e2, connection, AllONPs(c, e1.sc), AllONPs(c, e2.sc));
   }
 
   function ConnectEntitiesFInputs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>): (r: set<NP>)
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
     // The inputs into e1 and e2, minus any inputs into e1 that came from e1
-    ensures e1.finputs <= r
+    ensures e1.mf.inputs <= r
   {
-    e1.finputs + (e2.finputs - connection.Keys)
+    e1.mf.inputs + (e2.mf.inputs - connection.Keys)
   }
 
-  function ConnectEntitiesF(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>,
-                            knowns: map<NP, bool>): (r: map<NP, bool>)
-    requires ConnectEntitiesRequirements(c, e1, e2, connection)
-    requires knowns.Keys == ConnectEntitiesFInputs(c, e1, e2, connection)
-    ensures r.Keys == e1.foutputs + e2.foutputs
+  lemma MFNoIntersection(c: Circuit, e1: Entity, e2: Entity)
+    requires CircuitValid(c)
+    requires EntityValid(c, e1)
+    requires EntityValid(c, e2)
+    requires SetsNoIntersection(e1.sc, e2.sc)
+    ensures SetsNoIntersection(e1.mf.state, e2.mf.state)
+    ensures SetsNoIntersection(StateINPs(e1.mf.state), StateINPs(e2.mf.state))
+    ensures SetsNoIntersection(StateONPs(e1.mf.state), StateONPs(e2.mf.state))
+    ensures SetsNoIntersection(e1.mf.inputs, e2.mf.inputs)
+    ensures SetsNoIntersection(e1.mf.outputs, e2.mf.outputs)
   {
-    var inputs_1 := ExtractMap(knowns, e1.finputs);
-    reveal EntityFValid();
-    assert inputs_1.Keys == e1.finputs;
-    assert e1.f.requires(inputs_1);
-    var outputs_1 := e1.f(inputs_1);
+    reveal MapFunctionValid();
+    reveal EntitySomewhatValid();
+    assert e1.mf.state <= e1.sc;
+    assert e2.mf.state <= e2.sc;
+    if exists n :: n in e1.mf.state && n in e2.mf.state {
+      var n :| n in e1.mf.state && n in e2.mf.state;
+      assert n in e1.sc && n in e2.sc;
+      assert n in e1.sc * e2.sc;
+      assert false;
+    }
+    reveal ConnInputs();
+    reveal UnconnInputs();
+    if exists np :: np in e1.mf.inputs && np in e2.mf.inputs {
+      var np :| np in e1.mf.inputs && np in e2.mf.inputs;
+      assert np.n in e1.sc && np.n in e2.sc;
+      assert np.n in e1.sc * e2.sc;
+      assert false;
+    }
+    reveal AllONPs();
+    if exists np :: np in e1.mf.outputs && np in e2.mf.outputs {
+      var np :| np in e1.mf.outputs && np in e2.mf.outputs;
+      assert np.n in e1.sc && np.n in e2.sc;
+      assert np.n in e1.sc * e2.sc;
+      assert false;
+    }
+    assert SetsNoIntersection(e1.mf.state, e2.mf.state);
+  }
+
+  function {:vcs_split_on_every_assert} ConnectEntitiesF(
+      c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, fi: FI): (r: FO)
+    requires ConnectEntitiesRequirements(c, e1, e2, connection)
+    requires fi.inputs.Keys == ConnectEntitiesFInputs(c, e1, e2, connection)
+    requires fi.state.Keys == StateONPs(e1.mf.state + e2.mf.state)
+    ensures r.outputs.Keys == e1.mf.outputs + e2.mf.outputs
+    ensures r.state.Keys == StateINPs(e1.mf.state + e2.mf.state)
+  {
+    var inputs_1 := ExtractMap(fi.inputs, e1.mf.inputs);
+    var state1 := ExtractMap(fi.state, StateONPs(e1.mf.state));
+    var state2 := ExtractMap(fi.state, StateONPs(e2.mf.state));
+    reveal MapFunctionValid();
+    assert inputs_1.Keys == e1.mf.inputs;
+    assert e1.mf.f.requires(FI(inputs_1, state1));
+    var fo_1 := e1.mf.f(FI(inputs_1, state1));
+    var outputs_1 := fo_1.outputs;
     assert connection.Values <= outputs_1.Keys by { reveal ConnectionValid(); }
     var outputs_1_to_2 := ExtractMap(outputs_1, connection.Values);
     var inputs_2_from_1 := (map np | np in connection :: np := outputs_1_to_2[connection[np]]);
-    var combined_inputs := knowns + inputs_2_from_1;
-    var inputs_2 := ExtractMap(combined_inputs, e2.finputs);
-    var outputs_2 := e2.f(inputs_2);
-    assert outputs_2.Keys == e2.foutputs;
+    var combined_inputs := fi.inputs + inputs_2_from_1;
+    var inputs_2 := ExtractMap(combined_inputs, e2.mf.inputs);
+    var fo_2 := e2.mf.f(FI(inputs_2, state2));
+    var outputs_2 := fo_2.outputs;
+    assert outputs_2.Keys == e2.mf.outputs;
     OtherNoIntersection(c, e1, e2, connection);
     reveal EntitySomewhatValid();
     FOutputsInSc(c, e1);
     FOutputsInSc(c, e2);
     NPSetsNoIntersection(c, e1, e2, connection, outputs_1.Keys, outputs_2.Keys);
+    MFNoIntersection(c, e1, e2);
     var combined_outputs := AddMaps(outputs_1, outputs_2);
-    combined_outputs
+    assert fo_1.state.Keys == StateINPs(e1.mf.state);
+    assert fo_2.state.Keys == StateINPs(e2.mf.state);
+    var new_state := AddMaps(fo_1.state, fo_2.state);
+    FO(combined_outputs, new_state)
   }
 
   lemma RearrangeKnownKeys(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, knowns: map<NP, bool>)
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
-    requires knowns.Keys == e1.finputs + (e2.finputs - connection.Keys)
-    ensures knowns.Keys == (e1.finputs + e2.finputs) - connection.Keys
+    requires knowns.Keys == e1.mf.inputs + (e2.mf.inputs - connection.Keys)
+    ensures knowns.Keys == (e1.mf.inputs + e2.mf.inputs) - connection.Keys
   {
     ConnectionKeysInE2(c, e1, e2, connection);
     forall np | np in connection.Keys
-      ensures np !in e1.finputs
+      ensures np !in e1.mf.inputs
     {
       reveal NPsInSc();
       assert np.n in e2.sc;
@@ -141,62 +191,67 @@ module Connection {
       InThisNotInThat(np.n, e2.sc, e1.sc);
       assert np.n !in e1.sc;
       FInputsInSc(c, e1);
-      assert np !in e1.finputs;
+      assert np !in e1.mf.inputs;
     }
   }
 
-  function CalculateE2Inputs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, knowns: map<NP, bool>): (r: map<NP, bool>)
-    requires ConnectEntitiesRequirements(c, e1, e2, connection)
-    requires knowns.Keys == e1.finputs + (e2.finputs - connection.Keys)
-  {
-    var inputs_1 := ExtractMap(knowns, e1.finputs);
-    reveal EntityFValid();
-    var outputs_1 := e1.f(inputs_1);
-    assert outputs_1.Keys == e1.foutputs;
-    reveal ConnectionValid();
-    assert connection.Values <= e1.foutputs;
-    var connected := (map np | np in connection :: np := outputs_1[connection[np]]);
-    assert connected.Keys == connection.Keys;
-    assert knowns.Keys == e1.finputs + (e2.finputs - connection.Keys);
-    RearrangeKnownKeys(c, e1, e2, connection, knowns);
-    assert knowns.Keys == (e1.finputs + e2.finputs) - connection.Keys;
-    var combined_map := AddMaps(knowns, connected);
-    var inputs_2 := ExtractMap(combined_map, e2.finputs);
-    inputs_2
-  }
+  //function CalculateE2Inputs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, fi: FI): (r: map<NP, bool>)
+  //  requires ConnectEntitiesRequirements(c, e1, e2, connection)
+  //  requires FIValid(fi, e1.mf.inputs + (e2.mf.inputs - connection.Keys), e1.mf.state + e2.mf.state)
+  //{
+  //  var fi_1 := FI(ExtractMap(fi.inputs, e1.mf.inputs), ExtractMap(fi.state, StateONPs(e1.mf.state)));
+  //  reveal MapFunctionValid();
+  //  var outputs_1 := e1.mf.f(fi_1).outputs;
+  //  assert outputs_1.Keys == e1.mf.outputs;
+  //  reveal ConnectionValid();
+  //  assert connection.Values <= e1.mf.outputs;
+  //  var connected := (map np | np in connection :: np := outputs_1[connection[np]]);
+  //  assert connected.Keys == connection.Keys;
+  //  assert fi.inputs.Keys == e1.mf.inputs + (e2.mf.inputs - connection.Keys);
+  //  RearrangeKnownKeys(c, e1, e2, connection, fi.inputs);
+  //  assert fi.inputs.Keys == (e1.mf.inputs + e2.mf.inputs) - connection.Keys;
+  //  var combined_map := AddMaps(fi.inputs, connected);
+  //  var inputs_2 := ExtractMap(combined_map, e2.mf.inputs);
+  //  inputs_2
+  //}
 
-  lemma ConnectEntitiesFHelper(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, knowns: map<NP, bool>, np: NP)
+  lemma ConnectEntitiesFHelper(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, fi: FI, np: NP)
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
-    requires knowns.Keys == ConnectEntitiesFInputs(c, e1, e2, connection)
-    requires np in e2.foutputs
+    requires FIValid(fi, e1.mf.inputs + (e2.mf.inputs - connection.Keys), e1.mf.state + e2.mf.state)
+    requires np in e2.mf.outputs
     ensures
-      var knowns_2 := CalculateE2Inputs(c, e1, e2, connection, knowns);
-      && e2.f.requires(knowns_2)
-      && np in e2.f(knowns_2)
-      && e2.f(knowns_2)[np] == ConnectEntitiesF(c, e1, e2, connection, knowns)[np]
+      var state1 := ExtractMap(fi.state, StateONPs(e1.mf.state));
+      var state2 := ExtractMap(fi.state, StateONPs(e2.mf.state));
+      var knowns_2 := GetInputs2(e1.mf, e2.mf, connection, fi);
+      && e2.mf.f.requires(FI(knowns_2, state2))
+      && np in e2.mf.f(FI(knowns_2, state2)).outputs
+      && e2.mf.f(FI(knowns_2, state2)).outputs[np] ==
+          ConnectEntitiesF(c, e1, e2, connection, fi).outputs[np]
   {
-    var inputs_1 := ExtractMap(knowns, e1.finputs);
-    reveal EntityFValid();
-    assert inputs_1.Keys == e1.finputs;
-    assert e1.f.requires(inputs_1);
-    var outputs_1 := e1.f(inputs_1);
+    var state1 := ExtractMap(fi.state, StateONPs(e1.mf.state));
+    var state2 := ExtractMap(fi.state, StateONPs(e2.mf.state));
+    var inputs_1 := ExtractMap(fi.inputs, e1.mf.inputs);
+    reveal MapFunctionValid();
+    assert inputs_1.Keys == e1.mf.inputs;
+    assert e1.mf.f.requires(FI(inputs_1, state1));
+    var outputs_1 := e1.mf.f(FI(inputs_1, state1)).outputs;
     assert connection.Values <= outputs_1.Keys by { reveal ConnectionValid(); }
     var outputs_1_to_2 := ExtractMap(outputs_1, connection.Values);
     var inputs_2_from_1 := (map np | np in connection :: np := outputs_1_to_2[connection[np]]);
-    var combined_inputs := knowns + inputs_2_from_1;
-    var inputs_2 := ExtractMap(combined_inputs, e2.finputs);
+    var combined_inputs := fi.inputs + inputs_2_from_1;
+    var inputs_2 := ExtractMap(combined_inputs, e2.mf.inputs);
 
-    assert inputs_2 == CalculateE2Inputs(c, e1, e2, connection, knowns);
+    assert inputs_2 == GetInputs2(e1.mf, e2.mf, connection, fi);
 
-    var outputs_2 := e2.f(inputs_2);
-    assert outputs_2.Keys == e2.foutputs;
+    var outputs_2 := e2.mf.f(FI(inputs_2, state2)).outputs;
+    assert outputs_2.Keys == e2.mf.outputs;
     OtherNoIntersection(c, e1, e2, connection);
     reveal EntitySomewhatValid();
     FOutputsInSc(c, e1);
     FOutputsInSc(c, e2);
     NPSetsNoIntersection(c, e1, e2, connection, outputs_1.Keys, outputs_2.Keys);
     var combined_outputs := AddMaps(outputs_1, outputs_2);
-    assert combined_outputs == ConnectEntitiesF(c, e1, e2, connection, knowns);
+    assert combined_outputs == ConnectEntitiesF(c, e1, e2, connection, fi).outputs;
   }
 
   opaque predicate ConnectCircuitRequirements(c: Circuit, connection: map<NP, NP>)
@@ -249,7 +304,7 @@ module Connection {
 
   opaque predicate ConnectionValuesInFOutputs(connection: map<NP, NP>, e: Entity)
   {
-    && (forall np :: np in connection.Values && np.n in e.sc ==> np in e.foutputs)
+    && (forall np :: np in connection.Values && np.n in e.sc ==> np in e.mf.outputs)
   }
 
   predicate ConnectionsEntityCompatible(connection: map<NP, NP>, e: Entity)
@@ -378,20 +433,69 @@ module Connection {
     assert (forall np :: np in connection.Values ==> ONPValid(c, np));
   }
 
+  lemma MFNPsInSc(c: Circuit, e: Entity)
+    requires CircuitValid(c)
+    requires EntityValid(c, e)
+    ensures NPsInSc(e.sc, MFNPs(e.mf))
+  {
+  }
+
+  lemma ConnectEntitiesReqToConnectMapFunctionReq(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+    requires ConnectEntitiesRequirements(c, e1, e2, connection)
+    ensures ConnectMapFunctionRequirement(e1.mf, e2.mf, connection)
+  {
+    assert MapFunctionValid(e1.mf);
+    assert MapFunctionValid(e2.mf);
+    reveal ConnectionValid();
+    assert (forall np :: np in connection.Keys ==> np in e2.mf.inputs);
+    assert (forall np :: np in connection.Values ==> np in e1.mf.outputs);
+    assert SetsNoIntersection(e1.sc, e2.sc);
+    reveal EntitySomewhatValid();
+    assert e1.mf.state <= e1.sc;
+    assert e2.mf.state <= e2.sc;
+    SubsetsNoIntersection(e1.sc, e2.sc, e1.mf.state, e2.mf.state);
+    assert SetsNoIntersection(e1.mf.state, e2.mf.state);
+    MFNPsInSc(c, e1);
+    MFNPsInSc(c, e2);
+    ScNoIntersectionNPsNoIntersection(e1.sc, e2.sc, MFNPs(e1.mf), MFNPs(e2.mf));
+    assert SetsNoIntersection(MFNPs(e1.mf), MFNPs(e2.mf));
+  }
+
   opaque function ConnectEntitiesImpl(
       c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>): (r: (Circuit, Entity))
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
     ensures CircuitValid(r.0)
   {
-    var new_finputs := ConnectEntitiesFInputs(c, e1, e2, connection);
-    var new_f := (knowns: map<NP, bool>) requires knowns.Keys == new_finputs =>
-      ConnectEntitiesF(c, e1, e2, connection, knowns);
-    var e := Entity(
-      e1.sc + e2.sc,
-      new_finputs,
-      e1.foutputs + e2.foutputs,
-      new_f
-    );
+    assert connection.Keys <= e2.mf.inputs by {
+      reveal ConnectionValid();
+    }
+    assert connection.Values <= e1.mf.outputs by {
+      reveal ConnectionValid();
+    }
+    assert SetsNoIntersection(e1.mf.inputs + e1.mf.outputs, e2.mf.inputs + e2.mf.outputs) by {
+      reveal ConnectionValid();
+      assert SetsNoIntersection(e1.sc, e2.sc);
+      reveal EntitySomewhatValid();
+      FInputsInSc(c, e1);
+      FInputsInSc(c, e2);
+      FOutputsInSc(c, e1);
+      FOutputsInSc(c, e2);
+      reveal NPsInSc();
+      assert forall np :: np in e1.mf.inputs + e1.mf.outputs ==> np.n in e1.sc;
+      assert forall np :: np in e2.mf.inputs + e2.mf.outputs ==> np.n in e2.sc;
+      if exists np :: np in e1.mf.inputs + e1.mf.outputs && np in e2.mf.inputs + e2.mf.outputs {
+        var np :| np in e1.mf.inputs + e1.mf.outputs && np in e2.mf.inputs + e2.mf.outputs;
+        assert np.n in e1.sc && np.n in e2.sc;
+        assert np.n in e1.sc * e2.sc;
+        assert false;
+      }
+    }
+    assert SetsNoIntersection(e1.mf.state, e2.mf.state) by {
+      reveal EntitySomewhatValid();
+      SubsetsNoIntersection(e1.sc, e2.sc, e1.mf.state, e2.mf.state);
+    }
+    var mf := ConnectMapFunction(e1.mf, e2.mf, connection);
+    var e := Entity(e1.sc + e2.sc, mf);
 
     assert ConnectCircuitRequirements(c, connection) by {
       ConnectCircuitReqFromConnectEntitiesReq(c, e1, e2, connection);
@@ -415,19 +519,18 @@ module Connection {
     ensures
       var (new_c, e) := ConnectEntitiesImpl(c, e1, e2, connection);
       && ScValid(new_c, e.sc)
-      && (AllPossibleOutputs(new_c, e.sc) >= e.foutputs >= AllOutputs(new_c, e.sc))
+      && (AllONPs(new_c, e.sc) >= e.mf.outputs >= ConnOutputs(new_c, e.sc))
   {
     var (new_c, e) := ConnectEntitiesImpl(c, e1, e2, connection);
     reveal ScValid();
     reveal ConnectEntitiesImpl();
     reveal AllONPs();
     reveal SeqOutputs();
-    reveal FinalOutputs();
-    assert AllOutputs(c, e.sc) == AllOutputs(c, e1.sc) + AllOutputs(c, e2.sc) by {
+    assert ConnOutputs(c, e.sc) == ConnOutputs(c, e1.sc) + ConnOutputs(c, e2.sc) by {
       reveal IsIsland();
       reveal ConnOutputs();
     }
-    assert AllPossibleOutputs(new_c, e.sc) == AllPossibleOutputs(c, e1.sc) + AllPossibleOutputs(c, e2.sc);
+    assert AllONPs(new_c, e.sc) == AllONPs(c, e1.sc) + AllONPs(c, e2.sc);
     assert ConnOutputs(c, e1.sc) == {} by {
       reveal IsIsland();
       reveal ConnOutputs();
@@ -437,10 +540,10 @@ module Connection {
     IsIslandNoOutputs(c, e1.sc);
     IsIslandNoOutputs(c, e2.sc);
 
-    assert e.foutputs >= AllOutputs(c, e1.sc) + AllOutputs(c, e2.sc) by {reveal EntitySomewhatValid();}
-    assert e.foutputs <= AllPossibleOutputs(c, e1.sc) + AllPossibleOutputs(c, e2.sc) by {reveal EntitySomewhatValid();}
+    assert e.mf.outputs >= ConnOutputs(c, e1.sc) + ConnOutputs(c, e2.sc) by {reveal EntitySomewhatValid();}
+    assert e.mf.outputs <= AllONPs(c, e1.sc) + AllONPs(c, e2.sc) by {reveal EntitySomewhatValid();}
 
-    assert AllPossibleOutputs(c, e.sc) >= e.foutputs >= AllOutputs(c, e.sc) by {reveal EntitySomewhatValid();}
+    assert AllONPs(c, e.sc) >= e.mf.outputs >= ConnOutputs(c, e.sc) by {reveal EntitySomewhatValid();}
   }
 
   lemma NPSetsNoIntersection(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>, nps1: set<NP>, nps2: set<NP>)
@@ -485,14 +588,14 @@ module Connection {
     ConnectEntitiesFOutputsCorrect(c, e1, e2, connection);
 
     calc {
-      AllInputs(new_c, e.sc) == UnconnInputs(new_c, e.sc) + ConnInputs(new_c, e.sc) + SeqInputs(new_c, e.sc) + FinalInputs(new_c, e.sc);
+      AllInputs(new_c, e.sc) == UnconnInputs(new_c, e.sc) + ConnInputs(new_c, e.sc);
       {
         reveal ScValid();
         reveal UnconnInputs();
         reveal ConnectEntitiesImpl();
         assert UnconnInputs(new_c, e.sc) == UnconnInputs(c, e.sc)-connection.Keys;
       }
-      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys) + ConnInputs(new_c, e.sc) + SeqInputs(new_c, e.sc) + FinalInputs(new_c, e.sc);
+      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys) + ConnInputs(new_c, e.sc);
       {
         ConnectEntitiesIsIsland(c, e1, e2,  connection);
         IsIslandNoInputs(new_c, e.sc);
@@ -500,66 +603,69 @@ module Connection {
         reveal ConnInputs();
         assert |ConnInputs(new_c, e.sc)| == 0;
       }
-      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys) + SeqInputs(new_c, e.sc) + FinalInputs(new_c, e.sc);
+      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys);
       {
         reveal SeqInputs();
-        reveal FinalInputs();
         reveal ConnectEntitiesImpl();
         assert SeqInputs(new_c, e.sc) == SeqInputs(c, e.sc);
-        assert FinalInputs(new_c, e.sc) == FinalInputs(c, e.sc);
       }
-      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys) + SeqInputs(c, e.sc) + FinalInputs(c, e.sc);
+      AllInputs(new_c, e.sc) == (UnconnInputs(c, e.sc)-connection.Keys);
       {
         UnconnInputsAdd(c, e1.sc, e2.sc);
         reveal ConnectEntitiesImpl();
         assert UnconnInputs(c, e.sc) == UnconnInputs(c, e1.sc) + UnconnInputs(c, e2.sc);
-        reveal SeqInputs();
-        reveal FinalInputs();
-        assert SeqInputs(c, e.sc) == SeqInputs(c, e1.sc) + SeqInputs(c, e2.sc);
-        assert FinalInputs(c, e.sc) == FinalInputs(c, e1.sc) + FinalInputs(c, e2.sc);
       }
-      AllInputs(new_c, e.sc) == ((UnconnInputs(c, e1.sc)+UnconnInputs(c, e2.sc))-connection.Keys) +
-                                 SeqInputs(c, e1.sc) + SeqInputs(c, e2.sc) + FinalInputs(c, e1.sc) + FinalInputs(c, e2.sc);
+      AllInputs(new_c, e.sc) == ((UnconnInputs(c, e1.sc)+UnconnInputs(c, e2.sc))-connection.Keys);
       {
         ConnectionKeysInE2(c, e1, e2, connection);
         NPSetsNoIntersection(c, e1, e2, connection, UnconnInputs(c, e1.sc), connection.Keys);
         assert |UnconnInputs(c, e1.sc) * connection.Keys| == 0;
         ReorderSets2(UnconnInputs(c, e1.sc), UnconnInputs(c, e2.sc), connection.Keys);
       }
-      AllInputs(new_c, e.sc) == UnconnInputs(c, e1.sc)+(UnconnInputs(c, e2.sc)-connection.Keys) +
-                                 SeqInputs(c, e1.sc) + SeqInputs(c, e2.sc) + FinalInputs(c, e1.sc) + FinalInputs(c, e2.sc);
-      AllInputs(new_c, e.sc) == (UnconnInputs(c, e1.sc) + SeqInputs(c, e1.sc) + FinalInputs(c, e1.sc)) +
-                                ((UnconnInputs(c, e2.sc)-connection.Keys) + SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc));
+      AllInputs(new_c, e.sc) == UnconnInputs(c, e1.sc)+(UnconnInputs(c, e2.sc)-connection.Keys);
+      AllInputs(new_c, e.sc) == (UnconnInputs(c, e1.sc) + ((UnconnInputs(c, e2.sc)-connection.Keys)));
       {
         ConnectionKeysINPs(c, e1, e2, connection);
-        INPsAndONPsNoIntersection(c, connection.Keys, SeqInputs(c, e2.sc));
-        INPsAndONPsNoIntersection(c, connection.Keys, FinalInputs(c, e2.sc));
-        SetsNoIntersectionAdds(connection.Keys, SeqInputs(c, e2.sc), FinalInputs(c, e2.sc));
-        ReorderSets(UnconnInputs(c, e2.sc), connection.Keys, SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc));
-        assert ((UnconnInputs(c, e2.sc)-connection.Keys) + SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc)) ==
-               ((UnconnInputs(c, e2.sc) + SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc)) - connection.Keys);
       }
-      AllInputs(new_c, e.sc) == (UnconnInputs(c, e1.sc) + SeqInputs(c, e1.sc) + FinalInputs(c, e1.sc)) +
-                                ((UnconnInputs(c, e2.sc) + SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc)) - connection.Keys);
+      AllInputs(new_c, e.sc) == UnconnInputs(c, e1.sc) + (UnconnInputs(c, e2.sc) - connection.Keys);
       {
         reveal IsIsland();
         reveal ConnInputs();
         assert |ConnInputs(c, e1.sc)| == 0;
         assert |ConnInputs(c, e2.sc)| == 0;
-        assert AllInputs(c, e1.sc) == (UnconnInputs(c, e1.sc) + SeqInputs(c, e1.sc) + FinalInputs(c, e1.sc));
-        assert AllInputs(c, e2.sc) == (UnconnInputs(c, e2.sc) + SeqInputs(c, e2.sc) + FinalInputs(c, e2.sc));
       }
       AllInputs(new_c, e.sc) == AllInputs(c, e1.sc) + (AllInputs(c, e2.sc) - connection.Keys);
       {
         reveal EntitySomewhatValid();
       }
-      AllInputs(new_c, e.sc) == e1.finputs + (e2.finputs - connection.Keys);
+      AllInputs(new_c, e.sc) == e1.mf.inputs + (e2.mf.inputs - connection.Keys);
       {
         reveal ConnectEntitiesImpl();
       }
-      AllInputs(new_c, e.sc) == e.finputs;
+      AllInputs(new_c, e.sc) == e.mf.inputs;
     }
     reveal EntitySomewhatValid();
+    calc {
+      e.mf.state;
+      {reveal ConnectEntitiesImpl();}
+      e1.mf.state + e2.mf.state;
+      AllSeq(c, e1.sc) + AllSeq(c, e2.sc);
+      {reveal AllSeq(); reveal ScValid();}
+      AllSeq(c, e1.sc + e2.sc);
+      {reveal ConnectEntitiesImpl();}
+      AllSeq(c, e.sc);
+      {
+        reveal ConnectEntitiesImpl();
+        assert c.NodeKind == new_c.NodeKind;
+        reveal AllSeq();
+      }
+      AllSeq(new_c, e.sc);
+    }
+    assert ScValid(c, e.sc) by {
+      reveal ScValid();
+      reveal ConnectEntitiesImpl();
+    }
+    assert e.mf.state == AllSeq(new_c, e.sc);
     assert EntitySomewhatValid(new_c, e);
   }
 
@@ -567,10 +673,10 @@ module Connection {
     requires ConnectEntitiesRequirements(c, e1, e2, connection)
     ensures
       var (new_c, e) := ConnectEntitiesImpl(c, e1, e2, connection);
-      EntityFValid(new_c, e)
+      MapFunctionValid(e.mf)
   {
     reveal ConnectEntitiesImpl();
-    reveal EntityFValid();
+    reveal MapFunctionValid();
   }
 
   lemma ConnectEntitiesEntitiesStillValid(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
@@ -590,8 +696,8 @@ module Connection {
     assert NoInternalConnections(connection, e1.sc) by {
       reveal NoInternalConnections();
       reveal ConnectionValid();
-      assert (connection.Keys <= e2.finputs * AllINPs(c, e2.sc));
-      assert (connection.Values <= e1.foutputs * AllONPs(c, e1.sc));
+      assert (connection.Keys <= e2.mf.inputs * AllINPs(c, e2.sc));
+      assert (connection.Values <= e1.mf.outputs * AllONPs(c, e1.sc));
       ConnectionKeysInE2(c, e1, e2, connection);
       forall np | np in connection.Keys
         ensures np.n !in e1.sc
@@ -612,8 +718,8 @@ module Connection {
     assert NoInternalConnections(connection, e2.sc) by {
       reveal NoInternalConnections();
       reveal ConnectionValid();
-      assert (connection.Keys <= e2.finputs * AllINPs(c, e2.sc));
-      assert (connection.Values <= e1.foutputs * AllONPs(c, e1.sc));
+      assert (connection.Keys <= e2.mf.inputs * AllINPs(c, e2.sc));
+      assert (connection.Values <= e1.mf.outputs * AllONPs(c, e1.sc));
       ConnectionValuesInE1(c, e1, e2, connection);
       forall np | np in connection.Values
         ensures np.n !in e2.sc
@@ -639,245 +745,4 @@ module Connection {
     ConnectCircuitEntitiesStillValid(c, connection, e2);
   }
 
-  //lemma ConnectEntitiesValid(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
-  //  requires ConnectEntitiesRequirements(c, e1, e2, connection)
-  //  ensures
-  //    var (new_c, e) := ConnectEntitiesImpl(c, e1, e2, connection);
-  //    EntityEvaluatesCorrectly(new_c, e)
-  //{
-  //  //reveal ConnectEntitiesImpl();
-  //  var (new_c, e) := ConnectEntitiesImpl(c, e1, e2, connection);
-  //  forall knowns: map<NP, bool> | knowns.Keys == e.finputs {
-  //    forall np | np in e.foutputs {
-  //      assert Evaluate(c, np, knowns) == EvalOk(e.f(knowns)[np]);
-  //    }
-  //  }
-  //}
-
-  //lemma SetsNoIntersectionFromComposedValid(c: Circuit, e1: Entity, e2: Entity)
-  //requires ComposedValid(c, e1, e2)
-  //ensures SetsNoIntersection(e1.sc, e2.sc)
-  //ensures SetsNoIntersection(e1.finputs, e2.finputs)
-  //ensures SetsNoIntersection(e1.foutputs, e2.foutputs)
-  //ensures SetsNoIntersection(e1.finputs, e2.foutputs)
-  //ensures SetsNoIntersection(e1.foutputs, e2.finputs)
-  //{
-  //  reveal ScValid();
-  //  
-  //  //reveal EntityValid();
-  //  //reveal NPsValidAndInSc();
-  //}
-
-  //function ComposeEntity(c: Circuit, e1: Entity, e2: Entity): (r: Entity)
-  //  requires ComposedValid(c, e1, e2)
-  //  ensures EntityValid(c, r)
-  //{
-  //  var combined_input_keys := ComposeEntityInputs(c, e1, e2);
-  //  var e := Entity(
-  //    CombineSets(e1.sc, e2.sc),
-  //    combined_input_keys,
-  //    e1.foutputs + e2.foutputs,
-  //    (combined_inputs: map<NP, bool>) requires combined_inputs.Keys == combined_input_keys =>
-  //      ComposeEntityF(c, e1, e2, combined_inputs)
-  //  );
-  //  assert ScValid(c, e.sc) by {reveal ScValid();}
-  //  assert (ScInputBoundary(c, e.sc) == e.finputs) by {
-  //    ComposeEntityInputsCorrect(c, e1, e2);
-  //  }
-  //  assert SetsNoIntersection(e.finputs, e.foutputs) by {
-  //    SetsNoIntersectionFromComposedValid(c, e1, e2);
-  //  }
-  //  //assert NPsValidAndInSc(c, e.sc, e.outputs) by {reveal NPsValidAndInSc();}
-  //  //assert NPsValidAndInSc(c, e.sc, e.inputs) by {reveal NPsValidAndInSc();}
-  //  //assert MapFunctionValid(EtoMf(e)) by {reveal MapFunctionValid();}
-  //  //assert EntityScOutputsInOutputs(c, e.sc, e.outputs) by {reveal EntityScOutputsInOutputs();}
-  //  //assert EntityValid(c, e);
-  //  e
-  //}
-
-  //function ComposeEntityInputs(c: Circuit, e1: Entity, e2: Entity): (r: set<NP>)
-  //  requires ComposedValid(c, e1, e2)
-  //  ensures forall np :: np in e1.finputs ==> np in r
-  //{
-  //  (e1.finputs + e2.finputs) - NPBetweenSubcircuits(c, e2.sc, e1.sc)
-  //}
-
-  //lemma {:vcs_split_on_every_assert} ComposeEntityInputsCorrectHelper(c: Circuit, e1: Entity, e2: Entity)
-  //  requires ComposedValid(c, e1, e2)
-  //  ensures
-  //    ScValid(c, e1.sc) &&
-  //    ScValid(c, e2.sc) &&
-  //    ScValid(c, e1.sc + e2.sc) &&
-  //    NPBetweenSubcircuitsComplement(c, e1.sc + e2.sc, e1.sc + e2.sc) ==
-  //      NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) -
-  //      NPBetweenSubcircuits(c, e2.sc, e1.sc)
-  //{
-  //  assert ScValid(c, e1.sc);
-  //  assert ScValid(c, e2.sc);
-  //  assert ScValid(c, e1.sc + e2.sc) by {reveal ScValid();}
-  //  assert NPBetweenSubcircuitsComplement(c, e1.sc + e2.sc, e1.sc + e2.sc) ==
-  //      NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) + NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) -
-  //      NPBetweenSubcircuits(c, e2.sc, e1.sc) - NPBetweenSubcircuits(c, e1.sc, e2.sc);
-  //  assert NPBetweenSubcircuits(c, e1.sc, e2.sc) == {};
-  //}
-
-  //lemma ComposeEntityInputsCorrect(c: Circuit, e1: Entity, e2: Entity)
-  //  requires ComposedValid(c, e1, e2)
-  //  ensures ScValid(c, e1.sc + e2.sc)
-  //  ensures
-  //    ScInputBoundary(c, e1.sc + e2.sc) == ComposeEntityInputs(c, e1, e2)
-  //{
-  //  assert ScValid(c, e1.sc + e2.sc) && ScValid(c, e1.sc) && ScValid(c, e2.sc) by {
-  //    reveal ScValid();
-  //  }
-  //  var ui := UnconnectedINPs(c, e1.sc + e2.sc) + InternalInputs(c, e1.sc + e2.sc);
-  //  var nb :=  NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) +
-  //             NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) -
-  //             NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  calc {
-  //    ComposeEntityInputs(c, e1, e2);
-  //    (e1.finputs + e2.finputs) - NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //    //{reveal EntityValid();}
-  //    ScInputBoundary(c, e1.sc) + ScInputBoundary(c, e2.sc)
-  //      - NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //    NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) +
-  //      UnconnectedINPs(c, e1.sc) + InternalInputs(c, e1.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) +
-  //      UnconnectedINPs(c, e2.sc) + InternalInputs(c, e2.sc) -
-  //      NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //    UnconnectedINPs(c, e1.sc + e2.sc) + InternalInputs(c, e1.sc + e2.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) -
-  //      NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //    {
-  //      // Need to show that the terms in NPBetweenSubcircuits are not in Unconnected or Internal.
-  //      assert forall np :: np in UnconnectedINPs(c, e1.sc + e2.sc) ==> np !in c.PortSource;
-  //      reveal CircuitValid();
-  //      assert forall np :: np in InternalInputs(c, e1.sc + e2.sc) ==> np !in c.PortSource;
-  //      assert forall np :: np in NPBetweenSubcircuits(c, e2.sc, e1.sc) ==> np in c.PortSource;
-  //    }
-  //    UnconnectedINPs(c, e1.sc + e2.sc) + InternalInputs(c, e1.sc + e2.sc) +
-  //      (NPBetweenSubcircuitsComplement(c, e1.sc, e1.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e2.sc, e2.sc) -
-  //      NPBetweenSubcircuits(c, e2.sc, e1.sc));
-  //    {ComposeEntityInputsCorrectHelper(c, e1, e2);}
-  //    UnconnectedINPs(c, e1.sc + e2.sc) + InternalInputs(c, e1.sc + e2.sc) +
-  //      NPBetweenSubcircuitsComplement(c, e1.sc + e2.sc, e1.sc + e2.sc);
-  //    ScInputBoundary(c, e1.sc + e2.sc);
-  //  }
-  //}
-
-  //lemma ONPNotInKnownsNotInKnowns2(c: Circuit, onp: NP, e1: Entity, e2: Entity, knowns: map<NP, bool>)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires GoodKnownKeys(c, e1, e2, knowns)
-  //  requires onp !in knowns
-  //  requires ONPValid(c, onp)
-  //  ensures onp !in CalculateE2Inputs(c, e1, e2, knowns)
-  //{
-  //  reveal GoodKnownKeys();
-  //  assert (onp !in (e1.finputs + e2.finputs) - NPBetweenSubcircuits(c, e2.sc, e1.sc));
-  //  var knowns_2 := CalculateE2Inputs(c, e1, e2, knowns);
-  //  var e2_inputs_from_e1_keys := NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  assert forall np :: np in knowns_2 ==> np in e2_inputs_from_e1_keys || np in knowns;
-  //  assert onp !in e2_inputs_from_e1_keys by {
-  //    reveal CircuitValid();
-  //  }
-  //}
-
-  //opaque predicate GoodKnownKeys(c: Circuit, e1: Entity, e2: Entity, knowns: map<NP, bool>)
-  //  requires ComposedValid(c, e1, e2)
-  //{
-  //  knowns.Keys == ComposeEntityInputs(c, e1, e2)
-  //}
-
-  //lemma InE1ButNotE1InputsNotInKnowns(c: Circuit, e1: Entity, e2: Entity, knowns: map<NP, bool>, np: NP)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires GoodKnownKeys(c, e1, e2, knowns)
-  //  requires np.n in e1.sc
-  //  requires np !in e1.finputs
-  //  ensures np !in knowns
-  //{
-  //  reveal GoodKnownKeys();
-  //  reveal ScValid();
-  //  InThisNotInThat(np.n, e1.sc, e2.sc);
-  //  assert np.n !in e2.sc;
-  //  assert knowns.Keys == (e1.finputs + e2.finputs) - NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  //reveal EntityValid();
-  //  //reveal NPsValidAndInSc();
-  //  assert np !in e2.finputs;
-  //}
-
-  //lemma InE2ButNotE2InputsNotInKnowns(c: Circuit, e1: Entity, e2: Entity, knowns: map<NP, bool>, np: NP)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires GoodKnownKeys(c, e1, e2, knowns)
-  //  requires np.n in e2.sc
-  //  requires np !in e2.finputs
-  //  ensures np !in knowns
-  //{
-  //  reveal GoodKnownKeys();
-  //  reveal ScValid();
-  //  InThisNotInThat(np.n, e2.sc, e1.sc);
-  //  assert np.n !in e1.sc;
-  //  assert knowns.Keys == (e1.finputs + e2.finputs) - NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  //reveal EntityValid();
-  //  //reveal NPsValidAndInSc();
-  //  assert np !in e2.finputs;
-  //}
-
-  //function CalculateE2Inputs(c: Circuit, e1: Entity, e2: Entity, knowns: map<NP, bool>): (r: map<NP, bool>)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires GoodKnownKeys(c, e1, e2, knowns)
-  //{
-  //  reveal CircuitValid();
-  //  reveal GoodKnownKeys();
-  //  //var mf1 := EtoMf(e1);
-  //  //var mf2 := EtoMf(e2);
-  //  //assert MapFunctionValid(mf1);
-  //  //assert MapFunctionValid(mf2);
-  //  var e2_inputs_from_e1_keys := NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  var e2_inputs_from_e1 := (map np | np in e2_inputs_from_e1_keys :: np := c.PortSource[np]);
-  //  assert forall np :: np in e2_inputs_from_e1_keys ==> np in e2.finputs;
-  //  //assert forall np :: np in e2_inputs_from_e1.Values ==> np in e1.foutputs by {
-  //  //  reveal EntityScOutputsInOutputs();
-  //  //}
-  //  ////assert SetsNoIntersection(mf1.inputs+mf1.outputs, mf2.inputs+mf2.outputs) by {
-  //  ////  reveal NPsValidAndInSc();
-  //  ////}
-  //  //GetInputs2(mf1, mf2, e2_inputs_from_e1, knowns)
-  //  map[]
-  //}
-
-  //lemma CalculateE2InputsKeysCorrect(c: Circuit, e1: Entity, e2: Entity, knowns: map<NP, bool>)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires GoodKnownKeys(c, e1, e2, knowns)
-  //  ensures
-  //    CalculateE2Inputs(c, e1, e2, knowns).Keys == e2.finputs
-  //{
-  //}
-
-  //function ComposeEntityF(c: Circuit, e1: Entity, e2: Entity, combined_inputs: map<NP, bool>): (r: map<NP, bool>)
-  //  requires ComposedValid(c, e1, e2)
-  //  requires combined_inputs.Keys == ComposeEntityInputs(c, e1, e2)
-  //{
-  //  //reveal EntityValid();
-  //  //var mf1 := MapFunction(e1.finputs, e1.foutputs, e1.f);
-  //  //var mf2 := MapFunction(e2.finputs, e2.foutputs, e2.f);
-  //  //assert MapFunctionValid(mf1);
-  //  //assert MapFunctionValid(mf2);
-  //  var e2_inputs_from_e1_keys := NPBetweenSubcircuits(c, e2.sc, e1.sc);
-  //  var e2_inputs_from_e1 := (map np | np in e2_inputs_from_e1_keys :: np := c.PortSource[np]);
-  //  assert forall np :: np in e2_inputs_from_e1_keys ==> np in e2.finputs by {
-  //    reveal CircuitValid();
-  //  }
-  //  assert forall np :: np in e2_inputs_from_e1.Values ==> np in e1.foutputs by {
-  //    //reveal EntityScOutputsInOutputs();
-  //    reveal CircuitValid();
-  //  }
-  //  //assert SetsNoIntersection(mf1.inputs+mf1.outputs, mf2.inputs+mf2.outputs) by {
-  //  //  //reveal NPsValidAndInSc();
-  //  //}
-  //  //ComposeMapFunction(mf1, mf2, e2_inputs_from_e1, combined_inputs)
-  //  map[]
-  //}
 }

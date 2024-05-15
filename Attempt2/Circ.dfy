@@ -8,10 +8,6 @@ module Circ {
     | CInv()
       // A contant 0 or 1
     | CConst(value: bool)
-      // An input to the circuit.
-    | CInput()
-      // An output from the circuit.
-    | COutput()
       // A register.
     | CSeq()
 
@@ -68,8 +64,6 @@ module Circ {
       case CAnd() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
       case CInv() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
       case CConst(b) => {NP(node, OUTPUT_0)}
-      case CInput() => {NP(node, OUTPUT_0)}
-      case COutput() => {NP(node, INPUT_0)}
       case CSeq() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
   }
 
@@ -156,8 +150,6 @@ module Circ {
       case CAnd() => p == OUTPUT_0
       case CInv() => p == OUTPUT_0
       case CConst(b) => p == OUTPUT_0
-      case CInput() => p == OUTPUT_0
-      case COutput() => false
       case CSeq() => p == OUTPUT_0
   }
 
@@ -168,8 +160,6 @@ module Circ {
       case CAnd() => p == INPUT_0 || p == INPUT_1
       case CInv() => p == INPUT_0
       case CConst(b) => false
-      case CInput() => false
-      case COutput() => p == INPUT_0
       case CSeq() => p == INPUT_0
   }
 
@@ -273,7 +263,7 @@ module Circ {
     var nps := AllNPFromNodes(c, sc);
     (set np | np in nps && ONPValid(c, np) &&
       var nk := c.NodeKind[np.n];
-      nk.CInput? || nk.CSeq? :: np)
+      nk.CSeq? :: np)
   }
 
   opaque predicate ScValid(c: Circuit, sc: set<CNode>)

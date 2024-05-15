@@ -39,27 +39,27 @@ module Build.And3 {
       var o_base := And3Behav(p, knowns);
       var input_keys_1 := {p1.i_0, p1.i_1};
       var input_keys_2 := {p2.i_0, p2.i_1};
-      var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
-      var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2 => AndBehav(p2, x));
+      var mf1 := MapFunction(input_keys_1, {p1.o}, {}, (fi: FI) requires FIValid(fi, input_keys_1, {}) => FO(AndBehav(p1, fi.inputs), map[]));
+      var mf2 := MapFunction(input_keys_2, {p2.o}, {}, (fi: FI) requires FIValid(fi, input_keys_2, {}) => FO(AndBehav(p2, fi.inputs), map[]));
       assert MapFunctionValid(mf1) && MapFunctionValid(mf2) by {
         reveal MapFunctionValid();
       }
       var connection := map[p2.i_1 := p1.o];
-      var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
-      o_base == o_compose - {p1.o}
+      var o_compose := ConnectMapFunctionF(mf1, mf2, connection, FI(knowns, map[]));
+      o_base == o_compose.outputs - {p1.o}
   {
     var p := And3Ports(p1.i_0, p1.i_1, p2.i_0, p2.o);
     var o_base := And3Behav(p, knowns);
     var input_keys_1 := {p1.i_0, p1.i_1};
     var input_keys_2 := {p2.i_0, p2.i_1};
-    var mf1 := MapFunction(input_keys_1, {p1.o}, (x: map<NP, bool>) requires x.Keys == input_keys_1 => AndBehav(p1, x));
-    var mf2 := MapFunction(input_keys_2, {p2.o}, (x: map<NP, bool>) requires x.Keys == input_keys_2 => AndBehav(p2, x));
+    var mf1 := MapFunction(input_keys_1, {p1.o}, {}, (fi: FI) requires FIValid(fi, input_keys_1, {}) => FO(AndBehav(p1, fi.inputs), map[]));
+    var mf2 := MapFunction(input_keys_2, {p2.o}, {}, (fi: FI) requires FIValid(fi, input_keys_2, {}) => FO(AndBehav(p2, fi.inputs), map[]));
     assert MapFunctionValid(mf1) && MapFunctionValid(mf2) by {
       reveal MapFunctionValid();
     }
     var connection := map[p2.i_1 := p1.o];
-    var o_compose := ComposeMapFunction(mf1, mf2, connection, knowns);
-    assert o_base == o_compose - {p1.o};
+    var o_compose := ConnectMapFunctionF(mf1, mf2, connection, FI(knowns, map[]));
+    assert o_base == o_compose.outputs - {p1.o};
   }
 
   function {:vcs_split_on_every_assert} InsertAnd3Impl(c: Circuit): (r: (Circuit, And3Ports, Entity))
@@ -106,9 +106,9 @@ module Build.And3 {
         reveal ConnectionValid();
         reveal AllINPs();
         reveal AllONPs();
-        assert (connection.Keys <= e2.finputs * AllINPs(c2, e2.sc));
-        assert (connection.Values <= e1.foutputs * AllONPs(c2, e1.sc));
-        assert b.i_1 in e2.finputs;
+        assert (connection.Keys <= e2.mf.inputs * AllINPs(c2, e2.sc));
+        assert (connection.Values <= e1.mf.outputs * AllONPs(c2, e1.sc));
+        assert b.i_1 in e2.mf.inputs;
         assert IsIsland(c2, e2.sc);
         assert b.i_1 in AllInputs(c2, e2.sc) by {
           reveal EntitySomewhatValid();
@@ -117,22 +117,22 @@ module Build.And3 {
           reveal UnconnInputs();
           reveal ConnInputs();
           reveal SeqInputs();
-          reveal FinalInputs();
         }
         assert SetsNoIntersection(connection.Keys, c2.PortSource.Keys);
       }
     }
     var (c3, e) := ConnectEntities(c2, e1, e2, connection);
-    assert e.finputs == {a.i_0, a.i_1, b.i_0};
-    assert e.foutputs == {a.o, b.o};
+    assert e.mf.inputs == {a.i_0, a.i_1, b.i_0};
+    assert e.mf.outputs == {a.o, b.o};
     var ports := And3Ports(a.i_0, a.i_1, b.i_0, b.o);
-    var f: map<NP, bool> --> map<NP, bool> := (x: map<NP, bool>) requires x.Keys == e.finputs =>
-      And3Behav(ports, x);
+    var f: FI --> FO := (fi: FI) requires FIValid(fi, e.mf.inputs, {}) =>
+      FO(And3Behav(ports, fi.inputs), map[]);
     var e_h := EntityHideOutput(c3, e, {a.o});
-    assert MapFunctionValid(MapFunction(e_h.finputs, e_h.foutputs, f)) by {
+    var mf := MapFunction(e_h.mf.inputs, e_h.mf.outputs, {}, f);
+    assert MapFunctionValid(mf) by {
       reveal MapFunctionValid();
     }
-    var e_s := SwapEntityF(c3, e_h, f);
+    var e_s := SwapEntityF(c3, e_h, mf);
     assert EntityValid(c3, e_s);
     (c3, ports, e_s)
   }

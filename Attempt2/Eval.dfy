@@ -2,9 +2,9 @@ module Eval {
 
   import opened Circ
   import opened Utils
-  //import opened MapFunction
+  import opened MapFunction
 
-  ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
@@ -13,14 +13,14 @@ module Eval {
     Seq.HasNoDuplicates(path)
   }
 
-  function EvaluateINPInner(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires EvaluateINPInnerRequirements(c, path, knowns)
+  function EvaluateINPInner(c: Circuit, path: seq<NP>, fi: FI): EvalResult
+    requires EvaluateINPInnerRequirements(c, path)
     decreases |NodesNotInPath(c, path)|, 2
   {
     var head := path[|path|-1];
     var tail := path[..|path|-1];
-    if head in knowns then
-      EvalOk(knowns[head])
+    if head in fi.inputs then
+      EvalOk(fi.inputs[head])
     else
       if head in c.PortSource then
         var onp := c.PortSource[head];
@@ -31,7 +31,7 @@ module Eval {
           NodesNotInPathDecreases(c, path, onp);
           StillHasNoDuplicates(path, onp);
           AppendPathValid(c, path, onp);
-          EvaluateONPInner(c, path + [onp], knowns)
+          EvaluateONPInner(c, path + [onp], fi)
       else
         EvalError({head}, {})
   }
@@ -55,35 +55,35 @@ module Eval {
     assert new_nodes_in_path == nodes_in_path + {np};
   }
 
-  ghost predicate EvaluateONPUnaryBinaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  ghost predicate EvaluateONPUnaryBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
     ONPValid(c, path[|path|-1]) &&
-    (Seq.Last(path) !in knowns) &&
+    (Seq.Last(path) !in fi.inputs) &&
     var nk := c.NodeKind[Seq.Last(path).n];
     (nk.CXor? || nk.CAnd? || nk.CInv?) &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
 
-  ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
     ONPValid(c, path[|path|-1]) &&
-    (Seq.Last(path) !in knowns) &&
+    (Seq.Last(path) !in fi.inputs) &&
     var nk := c.NodeKind[Seq.Last(path).n];
     (nk.CXor? || nk.CAnd?) &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
 
-  function EvaluateONPBinary(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
+  function EvaluateONPBinary(c: Circuit, path: seq<NP>, fi: FI): EvalResult
     requires CircuitValid(c)
     requires |path| > 0
     requires ONPValid(c, Seq.Last(path))
-    requires Seq.Last(path) !in knowns
+    requires Seq.Last(path) !in fi.inputs
     requires
       var nk := c.NodeKind[Seq.Last(path).n];
       nk.CXor? || nk.CAnd?
@@ -110,8 +110,8 @@ module Eval {
       assert |NodesNotInPath(c, path + [inp_0])| < |NodesNotInPath(c, path)|;
       StillHasNoDuplicates(path, inp_0);
       StillHasNoDuplicates(path, inp_1);
-      var iv_0 := EvaluateINPInner(c, path + [inp_0], knowns);
-      var iv_1 := EvaluateINPInner(c, path + [inp_1], knowns);
+      var iv_0 := EvaluateINPInner(c, path + [inp_0], fi);
+      var iv_1 := EvaluateINPInner(c, path + [inp_1], fi);
       match iv_0
         case EvalError(missing_0, loops_0) => (
           match iv_1
@@ -132,19 +132,19 @@ module Eval {
         )
   }
 
-  ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
     ONPValid(c, Seq.Last(path)) &&
-    Seq.Last(path) !in knowns &&
+    Seq.Last(path) !in fi.inputs &&
     c.NodeKind[Seq.Last(path).n].CInv? &&
     PathValid(c, path) &&
     Seq.HasNoDuplicates(path)
   }
 
-  function EvaluateONPUnary(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires EvaluateONPUnaryRequirements(c, path, knowns)
+  function EvaluateONPUnary(c: Circuit, path: seq<NP>, fi: FI): EvalResult
+    requires EvaluateONPUnaryRequirements(c, path, fi)
     decreases |NodesNotInPath(c, path)|, 3
   {
     var head := Seq.Last(path);
@@ -157,7 +157,7 @@ module Eval {
       assert PathValid(c, new_path);
       NodesNotInPathDecreases(c, path, inp_0);
       StillHasNoDuplicates(path, inp_0);
-      var iv_0 := EvaluateINPInner(c, new_path, knowns);
+      var iv_0 := EvaluateINPInner(c, new_path, fi);
       match iv_0
         case EvalError(missing_0, loops_0) =>
           EvalError(missing_0, loops_0)
@@ -165,7 +165,7 @@ module Eval {
           EvalOk(!b0)
   }
 
-  ghost predicate EvaluateONPInnerRequirements(c: Circuit, path: seq<NP>, knowns: map<NP, bool>)
+  ghost predicate EvaluateONPInnerRequirements(c: Circuit, path: seq<NP>)
   {
     CircuitValid(c) &&
     (|path| > 0) &&
@@ -174,21 +174,32 @@ module Eval {
     Seq.HasNoDuplicates(path)
   }
 
-  function EvaluateONPInner(c: Circuit, path: seq<NP>, knowns: map<NP, bool>): EvalResult
-    requires EvaluateONPInnerRequirements(c, path, knowns)
+  function EvaluateONPInner(c: Circuit, path: seq<NP>, fi: FI): EvalResult
+    requires EvaluateONPInnerRequirements(c, path)
     decreases |NodesNotInPath(c, path)|, 4
   {
     var head := path[|path|-1];
-    if head in knowns then
-      EvalOk(knowns[head])
-    else
-      var nk := c.NodeKind[head.n];
+    var nk := c.NodeKind[head.n];
+    if head in fi.inputs then
       match nk
-        case CXor() => EvaluateONPBinary(c, path, knowns)
-        case CAnd() => EvaluateONPBinary(c, path, knowns)
-        case CInv() => EvaluateONPUnary(c, path, knowns)
+        case CXor() => EvalOk(fi.inputs[head])
+        case CAnd() => EvalOk(fi.inputs[head])
+        case CInv() => EvalOk(fi.inputs[head])
+        case CConst(b) => EvalError({head}, {})
+        case CSeq() => EvalError({head}, {})
+    else if head in fi.state then
+      match nk
+        case CXor() => EvalError({head}, {})
+        case CAnd() => EvalError({head}, {})
+        case CInv() => EvalError({head}, {})
+        case CConst(b) => EvalError({head}, {})
+        case CSeq() => EvalOk(fi.state[head])
+    else
+      match nk
+        case CXor() => EvaluateONPBinary(c, path, fi)
+        case CAnd() => EvaluateONPBinary(c, path, fi)
+        case CInv() => EvaluateONPUnary(c, path, fi)
         case CConst(b) => EvalOk(b)
-        case CInput() => EvalError({head}, {})
         case CSeq() => EvalError({head}, {})
   }
 
@@ -199,34 +210,34 @@ module Eval {
     reveal Seq.HasNoDuplicates();
   }
 
-  function EvaluateONP(c: Circuit, np: NP, knowns: map<NP, bool>): EvalResult
+  function EvaluateONP(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
     requires ONPValid(c, np)
   {
     var path := [np];
     LengthOneNoDuplicates(path);
     reveal PathValid();
-    EvaluateONPInner(c, path, knowns)
+    EvaluateONPInner(c, path, fi)
   }
 
-  function EvaluateINP(c: Circuit, np: NP, knowns: map<NP, bool>): EvalResult
+  function EvaluateINP(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
     requires INPValid(c, np)
   {
     var path := [np];
     LengthOneNoDuplicates(path);
     reveal PathValid();
-    EvaluateINPInner(c, path, knowns)
+    EvaluateINPInner(c, path, fi)
   }
   
-  function Evaluate(c: Circuit, np: NP, knowns: map<NP, bool>): EvalResult
+  function Evaluate(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
     requires ONPValid(c, np) || INPValid(c, np)
   {
     if ONPValid(c, np) then
-      EvaluateONP(c, np, knowns)
+      EvaluateONP(c, np, fi)
     else
-      EvaluateINP(c, np, knowns)
+      EvaluateINP(c, np, fi)
   }
 
 

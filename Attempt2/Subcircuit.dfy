@@ -8,6 +8,22 @@ module Subcircuit {
     forall np :: np in nps ==> np.n in sc
   }
 
+  lemma ScNoIntersectionNPsNoIntersection(sca: set<CNode>, scb: set<CNode>, npsa: set<NP>, npsb: set<NP>)
+    requires SetsNoIntersection(sca, scb)
+    requires NPsInSc(sca, npsa)
+    requires NPsInSc(scb, npsb)
+    ensures SetsNoIntersection(npsa, npsb)
+  {
+    reveal NPsInSc();
+    if exists np :: np in npsa && np in npsb {
+      var np :| np in npsa && np in npsb;
+      assert np.n in sca;
+      assert np.n in scb;
+      assert np.n in sca * scb;
+      assert false;
+    }
+  }
+
   opaque predicate NPsValid(c: Circuit, nps: set<NP>)
   {
     forall np :: np in nps ==> NPValid(c, np)
@@ -80,6 +96,15 @@ module Subcircuit {
       c.PortSource[np])
   }
 
+  opaque function AllSeq(c: Circuit, sc: set<CNode>): (r: set<CNode>)
+    requires ScValid(c, sc)
+    ensures r <= sc
+  {
+    reveal ScValid();
+    (set n | (n in sc) && c.NodeKind[n].CSeq? :: n)
+  }
+    
+
   opaque function SeqInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
     requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
@@ -100,28 +125,6 @@ module Subcircuit {
     reveal ScValid();
     reveal INPsValid();
     (set n | (n in sc) && c.NodeKind[n].CSeq? :: NP(n, INPUT_0))
-  }
-
-  opaque function FinalInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires ScValid(c, sc)
-    ensures NPsInSc(sc, r)
-    ensures ONPsValid(c, r)
-  {
-    reveal NPsInSc();
-    reveal ScValid();
-    reveal ONPsValid();
-    (set n | (n in sc) && c.NodeKind[n].CInput? :: NP(n, OUTPUT_0))
-  }
-
-  opaque function FinalOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires ScValid(c, sc)
-    ensures NPsInSc(sc, r)
-    ensures INPsValid(c, r)
-  {
-    reveal NPsInSc();
-    reveal ScValid();
-    reveal INPsValid();
-    (set n | (n in sc) && c.NodeKind[n].COutput? :: NP(n, INPUT_0))
   }
 
   opaque function AllINPs(c: Circuit, sc: set<CNode>): (r: set<NP>)
@@ -146,18 +149,18 @@ module Subcircuit {
     (set np | np in AllNPFromNodes(c, sc) && ONPValid(c, np) :: np)
   }
   
-  function AllPossibleOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires ScValid(c, sc)
-    ensures NPsInSc(sc, r)
-    ensures NPsValid(c, r)
-  {
-    reveal NPsInSc();
-    reveal ScValid();
-    reveal NPsValid();
-    reveal INPsValid();
-    reveal ONPsValid();
-    AllONPs(c, sc) + SeqOutputs(c, sc) + FinalOutputs(c, sc)
-  }
+  //function AllPossibleOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
+  //  requires ScValid(c, sc)
+  //  ensures NPsInSc(sc, r)
+  //  ensures NPsValid(c, r)
+  //{
+  //  reveal NPsInSc();
+  //  reveal ScValid();
+  //  reveal NPsValid();
+  //  reveal INPsValid();
+  //  reveal ONPsValid();
+  //  AllONPs(c, sc) + SeqOutputs(c, sc)
+  //}
 
   function AllInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
     requires CircuitValid(c)
@@ -170,22 +173,22 @@ module Subcircuit {
     reveal NPsValid();
     reveal INPsValid();
     reveal ONPsValid();
-    UnconnInputs(c, sc) + ConnInputs(c, sc) + SeqInputs(c, sc) + FinalInputs(c, sc)
+    UnconnInputs(c, sc) + ConnInputs(c, sc)
   }
-  
-  function AllOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
-    requires ScValid(c, sc)
-    ensures NPsInSc(sc, r)
-    ensures NPsValid(c, r)
-  {
-    reveal NPsInSc();
-    reveal ScValid();
-    reveal NPsValid();
-    reveal INPsValid();
-    reveal ONPsValid();
-    ConnOutputs(c, sc) + SeqOutputs(c, sc) + FinalOutputs(c, sc)
-  }
+
+  //function AllOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
+  //  requires CircuitValid(c)
+  //  requires ScValid(c, sc)
+  //  ensures NPsInSc(sc, r)
+  //  ensures NPsValid(c, r)
+  //{
+  //  reveal NPsInSc();
+  //  reveal ScValid();
+  //  reveal NPsValid();
+  //  reveal INPsValid();
+  //  reveal ONPsValid();
+  //  ConnOutputs(c, sc) + SeqOutputs(c, sc)
+  //}
 
   function ConnFromTo(c: Circuit, sca: set<CNode>, scb: set<CNode>): (r: set<NP>)
     requires CircuitValid(c)

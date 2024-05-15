@@ -8,6 +8,21 @@ module Utils {
     |a * b| == 0
   }
 
+  lemma SubsetsNoIntersection<T>(a: set<T>, b: set<T>, aa: set<T>, bb: set<T>)
+    requires SetsNoIntersection(a, b)
+    requires aa <= a
+    requires bb <= b
+    ensures SetsNoIntersection(aa, bb)
+  {
+    var cc := aa * bb;
+    assert cc <= aa;
+    assert cc <= bb;
+    assert cc <= a;
+    assert cc <= b;
+    assert cc <= a * b;
+    assert |cc| == 0;
+  }
+
   lemma SetsNoIntersectionDuh<T>(a: set<T>, b: set<T>)
     requires SetsNoIntersection(a, b)
     ensures !exists x :: x in a && x in b
