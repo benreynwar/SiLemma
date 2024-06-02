@@ -8,6 +8,11 @@ module Subcircuit {
     forall np :: np in nps ==> np.n in sc
   }
 
+  opaque predicate NPsNotInSc(sc: set<CNode>, nps: set<NP>)
+  {
+    forall np :: np in nps ==> np.n !in sc
+  }
+
   lemma ScNoIntersectionNPsNoIntersection(sca: set<CNode>, scb: set<CNode>, npsa: set<NP>, npsb: set<NP>)
     requires SetsNoIntersection(sca, scb)
     requires NPsInSc(sca, npsa)
@@ -85,7 +90,6 @@ module Subcircuit {
 
   opaque function ConnOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
     requires CircuitValid(c)
-    requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
     ensures ONPsValid(c, r)
   {
@@ -149,46 +153,18 @@ module Subcircuit {
     (set np | np in AllNPFromNodes(c, sc) && ONPValid(c, np) :: np)
   }
   
-  //function AllPossibleOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-  //  requires ScValid(c, sc)
-  //  ensures NPsInSc(sc, r)
-  //  ensures NPsValid(c, r)
-  //{
-  //  reveal NPsInSc();
-  //  reveal ScValid();
-  //  reveal NPsValid();
-  //  reveal INPsValid();
-  //  reveal ONPsValid();
-  //  AllONPs(c, sc) + SeqOutputs(c, sc)
-  //}
-
   function AllInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
     requires CircuitValid(c)
     requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
-    ensures NPsValid(c, r)
+    ensures INPsValid(c, r)
   {
     reveal NPsInSc();
     reveal ScValid();
-    reveal NPsValid();
     reveal INPsValid();
     reveal ONPsValid();
     UnconnInputs(c, sc) + ConnInputs(c, sc)
   }
-
-  //function AllOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-  //  requires CircuitValid(c)
-  //  requires ScValid(c, sc)
-  //  ensures NPsInSc(sc, r)
-  //  ensures NPsValid(c, r)
-  //{
-  //  reveal NPsInSc();
-  //  reveal ScValid();
-  //  reveal NPsValid();
-  //  reveal INPsValid();
-  //  reveal ONPsValid();
-  //  ConnOutputs(c, sc) + SeqOutputs(c, sc)
-  //}
 
   function ConnFromTo(c: Circuit, sca: set<CNode>, scb: set<CNode>): (r: set<NP>)
     requires CircuitValid(c)

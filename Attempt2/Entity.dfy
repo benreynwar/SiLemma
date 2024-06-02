@@ -1,5 +1,6 @@
 module Entity {
 
+  import Std.Collections.Seq
   import opened Subcircuit
   import opened Circ
   import opened Eval
@@ -15,58 +16,91 @@ module Entity {
     requires CircuitValid(c)
   {
     && ScValid(c, e.sc)
-    && (AllONPs(c, e.sc) >= e.mf.outputs >= ConnOutputs(c, e.sc))
-    && (e.mf.inputs == AllInputs(c, e.sc))
-    && (e.mf.state == AllSeq(c, e.sc))
+    && (AllONPs(c, e.sc) >= Seq.ToSet(e.mf.outputs) >= ConnOutputs(c, e.sc))
+    && (Seq.ToSet(e.mf.inputs) == AllInputs(c, e.sc))
+    && (Seq.ToSet(e.mf.state) == AllSeq(c, e.sc))
   }
 
   lemma EntityFInputsAreValid(c: Circuit, e: Entity)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)
-    ensures forall np :: np in e.mf.inputs ==> NPValid(c, np)
-    ensures forall np :: np in StateONPs(e.mf.state) ==> NPValid(c, np)
+    ensures forall np :: np in e.mf.inputs ==> INPValid(c, np)
+    ensures forall np :: np in StateONPs(e.mf.state) ==> ONPValid(c, np)
   {
-    reveal ScValid();
     reveal EntitySomewhatValid();
-    reveal NPsValid();
+    reveal AllSeq();
+    reveal INPsValid();
+    assert INPsValid(c, AllInputs(c, e.sc));
+    assert INPsValid(c, Seq.ToSet(e.mf.inputs));
+    reveal Seq.ToSet();
+    forall np | np in StateONPs(e.mf.state)
+      ensures ONPValid(c, np)
+    {
+      assert np.n in e.mf.state;
+      assert np.p == OUTPUT_0;
+      assert np.n in AllSeq(c, e.sc);
+      reveal ScValid();
+      assert np.n in c.NodeKind;
+    }
   }
 
   lemma EntityFOutputsAreValid(c: Circuit, e: Entity)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)
-    ensures forall np :: np in e.mf.outputs ==> NPValid(c, np)
-    ensures forall np :: np in StateINPs(e.mf.state) ==> NPValid(c, np)
+    ensures forall np :: np in e.mf.outputs ==> ONPValid(c, np)
+    ensures forall np :: np in StateINPs(e.mf.state) ==> INPValid(c, np)
   {
     reveal ScValid();
     reveal EntitySomewhatValid();
-    reveal NPsValid();
-    assert e.mf.outputs <= AllONPs(c, e.sc);
+    reveal ONPsValid();
+    assert Seq.ToSet(e.mf.outputs) <= AllONPs(c, e.sc);
+    reveal Seq.ToSet();
     reveal ONPsValid();
     reveal AllSeq();
+    forall np | np in StateINPs(e.mf.state)
+      ensures INPValid(c, np)
+    {
+      assert np.n in AllSeq(c, e.sc);
+    }
   }
 
   ghost opaque predicate EntityEvaluatesCorrectly(c: Circuit, e: Entity)
     requires CircuitValid(c)
     requires ScValid(c, e.sc)
-    requires MapFunctionValid(e.mf)
+    requires e.mf.Valid()
     requires EntitySomewhatValid(c, e)
   {
     reveal ScValid();
     EntityFOutputsAreValid(c, e);
-    reveal MapFunctionValid();
-    forall fi: FI :: FIValid(fi, e.mf.inputs, e.mf.state) ==> (
-      && (forall np :: np in e.mf.outputs ==>
-          Evaluate(c, np, fi) == EvalOk(e.mf.f(fi).outputs[np]))
-      && (forall np :: np in StateINPs(e.mf.state) ==>
-          Evaluate(c, np, fi) == EvalOk(e.mf.f(fi).state[np]))
-      )
+    reveal MapFunction.Valid();
+    reveal Seq.ToSet();
+    forall fi: FI :: FIValid(fi, e.mf.inputs, e.mf.state) ==>
+      assert FICircuitValid(c, fi) by {EntityValidFiValidToFICircuitValid(c, e, fi);}
+      forall np :: np in Seq.ToSet(e.mf.outputs) || np in StateINPs(e.mf.state) ==>
+        Evaluate(c, np, fi) == EvalOk(MFLookup(e.mf, fi, np))
+  }
+
+  ghost opaque predicate EntitySeqEvaluatesCorrectly(c: Circuit, e: Entity)
+    requires CircuitValid(c)
+    requires ScValid(c, e.sc)
+    requires e.mf.Valid()
+    requires EntitySomewhatValid(c, e)
+  {
+    reveal ScValid();
+    EntityFOutputsAreValid(c, e);
+    reveal MapFunction.Valid();
+    reveal Seq.ToSet();
+    forall fi: FI :: FIValid(fi, e.mf.inputs, e.mf.state) ==>
+      assert FICircuitValid(c, fi) by {EntityValidFiValidToFICircuitValid(c, e, fi);}
+      forall np :: np in Seq.ToSet(e.mf.outputs) || np in StateINPs(e.mf.state) ==>
+        Evaluate(c, np, fi) == EvalOk(MFLookup(e.mf, fi, np))
   }
 
   ghost predicate EntityValid(c: Circuit, e: Entity)
     requires CircuitValid(c)
   {
     && EntitySomewhatValid(c, e)
-    && MapFunctionValid(e.mf)
+    && e.mf.Valid()
     && ScValid(c, e.sc)
     && EntityEvaluatesCorrectly(c, e)
   }
@@ -74,24 +108,27 @@ module Entity {
   lemma FInputsInSc(c: Circuit, e: Entity)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)
-    ensures NPsInSc(e.sc, e.mf.inputs)
+    ensures NPsInSc(e.sc, Seq.ToSet(e.mf.inputs))
     ensures NPsInSc(e.sc, StateONPs(e.mf.state))
   {
     reveal EntitySomewhatValid();
+    reveal AllINPs();
     reveal NPsInSc();
+    reveal Seq.ToSet();
     reveal AllSeq();
   }
 
   lemma FOutputsInSc(c: Circuit, e: Entity)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)
-    ensures NPsInSc(e.sc, e.mf.outputs)
+    ensures NPsInSc(e.sc, Seq.ToSet(e.mf.outputs))
     ensures NPsInSc(e.sc, StateINPs(e.mf.state))
   {
     reveal NPsInSc();
     reveal EntitySomewhatValid();
     reveal AllSeq();
-    assert AllONPs(c, e.sc) >= e.mf.outputs;
+    reveal Seq.ToSet();
+    assert AllONPs(c, e.sc) >= Seq.ToSet(e.mf.outputs);
   }
 
   lemma StaysInSc(c: Circuit, e: Entity, np: NP)
@@ -107,30 +144,29 @@ module Entity {
     reveal EntitySomewhatValid();
     reveal UnconnInputs();
     reveal ConnInputs();
+    reveal Seq.ToSet();
+    assert np !in AllInputs(c, e.sc);
   }
 
   predicate OutputsInFOutputs(c: Circuit, e: Entity)
     requires CircuitValid(c)
-    requires ScValid(c, e.sc)
   {
-    e.mf.outputs >= ConnOutputs(c, e.sc)
+    Seq.ToSet(e.mf.outputs) >= ConnOutputs(c, e.sc)
   }
 
-  function SwapEntityF(c: Circuit, e: Entity, mf: MapFunction): (r: Entity)
+  lemma InputsOfIslandNotInPortSource(c: Circuit, e: Entity)
     requires CircuitValid(c)
+    requires IsIsland(c, e.sc)
     requires EntityValid(c, e)
-    requires mf.inputs == e.mf.inputs
-    requires mf.outputs == e.mf.outputs
-    requires mf.state == e.mf.state
-    requires MapFunctionValid(mf)
-    requires MapFunctionsEquiv(e.mf, mf)
-    ensures EntityValid(c, r)
+    ensures SetsNoIntersection(Seq.ToSet(e.mf.inputs), c.PortSource.Keys)
   {
-    reveal EntitySomewhatValid();
-    reveal MapFunctionValid();
-    reveal ScValid();
-    reveal EntityEvaluatesCorrectly();
-    Entity(e.sc, mf)
+    reveal Seq.ToSet();
+    forall np | np in e.mf.inputs
+      ensures np !in c.PortSource
+    {
+      NPInFInputsOfIslandNotInPortSource(c, e, np);
+    }
+    assert forall np :: np in Seq.ToSet(e.mf.inputs) ==> np in e.mf.inputs;
   }
 
   lemma NPInFInputsOfIslandNotInPortSource(c: Circuit, e: Entity, np: NP) 
@@ -140,6 +176,7 @@ module Entity {
     requires np in e.mf.inputs
     ensures np !in c.PortSource
   {
+    reveal Seq.ToSet();
     assert np in AllInputs(c, e.sc) by {
       reveal EntitySomewhatValid();
     }
@@ -158,6 +195,28 @@ module Entity {
         reveal SeqInputs();
       }
     }
+  }
+
+  lemma EntityValidFiValidToFICircuitValid(c: Circuit, e: Entity, fi: FI)
+    requires CircuitValid(c)
+    requires EntitySomewhatValid(c, e)
+    requires FIValid(fi, e.mf.inputs, e.mf.state)
+    ensures FICircuitValid(c, fi)
+  {
+    reveal EntitySomewhatValid();
+    assert Seq.ToSet(e.mf.inputs) == AllInputs(c, e.sc);
+    assert Seq.ToSet(e.mf.inputs) == fi.inputs.Keys;
+    reveal ConnInputs();
+    reveal UnconnInputs();
+    reveal INPsValid();
+    assert fi.state.Keys == Seq.ToSet(e.mf.state);
+    assert fi.state.Keys == AllSeq(c, e.sc);
+    reveal AllSeq();
+    reveal ONPsValid();
+    reveal ScValid();
+    assert (forall np :: np in fi.inputs.Keys ==> INPValid(c, np));
+    assert (forall n :: n in fi.state.Keys ==> c.NodeKind[n].CSeq?);
+    reveal FICircuitValid();
   }
 
 }

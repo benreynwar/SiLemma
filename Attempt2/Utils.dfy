@@ -5,7 +5,7 @@ module Utils {
 
   predicate SetsNoIntersection<T>(a: set<T>, b: set<T>)
   {
-    |a * b| == 0
+    a !! b
   }
 
   lemma SubsetsNoIntersection<T>(a: set<T>, b: set<T>, aa: set<T>, bb: set<T>)
@@ -64,6 +64,20 @@ module Utils {
   {
     if (x in a) && (x in b) {
       assert x in (a * b);
+      assert false;
+    }
+  }
+
+  lemma HasNoDuplicatesNotInBoth<T>(a: seq<T>, b: seq<T>, x: T)
+    requires Seq.HasNoDuplicates(a + b)
+    ensures !(x in a && x in b)
+  {
+    if x in a && x in b {
+      assert |a| > 0;
+      var index1 := Seq.IndexOf(a, x);
+      var index2 := Seq.IndexOf(b, x);
+      assert (a + b)[index1] == (a + b)[|a| + index2];
+      reveal Seq.HasNoDuplicates();
       assert false;
     }
   }
@@ -150,5 +164,65 @@ module Utils {
     (a && !b) || (!a && b)
   }
 
+  predicate UniqueElements<T(==)>(els: seq<T>)
+  {
+    forall i: nat, j: nat :: i < |els| && j < |els| && i != j ==> els[i] != els[j]
+  }
+
+  lemma NotEqualFromUniqueElements<T>(els: seq<T>, index1: nat, index2: nat)
+    requires UniqueElements(els)
+    requires index1 < |els|
+    requires index2 < |els|
+    requires index1 != index2
+    ensures els[index1] != els[index2]
+  {
+  }
+
+  opaque predicate MapMatchesSeqs<T(==), U(==)>(m: map<T, U>, a: seq<T>, b: seq<U>)
+    requires |a| == |b|
+  {
+    forall index: nat :: index < |a| ==> a[index] in m && m[a[index]] == b[index]
+  }
+
+  opaque function SeqsToMap<T(==), U(==)>(a: seq<T>, b: seq<U>): (r: map<T, U>)
+    requires Seq.HasNoDuplicates(a)
+    requires |a| == |b|
+    ensures r.Keys == Seq.ToSet(a)
+    ensures MapMatchesSeqs(r, a, b)
+  {
+    reveal Seq.ToSet();
+    reveal MapMatchesSeqs();
+    if |a| == 0 then
+      map[]
+    else
+      var x := a[0];
+      var new_a := a[1..];
+      var y := b[0];
+      var new_b := b[1..];
+      assert Seq.HasNoDuplicates(new_a) && x !in new_a by {
+        reveal Seq.HasNoDuplicates();
+      }
+      var new_map := SeqsToMap(new_a, new_b);
+      var r := new_map[x := y];
+      r
+  }
+
+  lemma SubSeqsNoDuplicates<T>(a: seq<T>, b: seq<T>)
+    requires Seq.HasNoDuplicates(a + b)
+    ensures Seq.HasNoDuplicates(a)
+    ensures Seq.HasNoDuplicates(b)
+  {
+    reveal Seq.HasNoDuplicates();
+    if !Seq.HasNoDuplicates(a) {
+      var index1: nat, index2: nat :| index1 < |a| && index2 < |a| && index1 != index2 && a[index1] == a[index2];
+      assert (a+b)[index1] == (a+b)[index2];
+      assert !Seq.HasNoDuplicates(a+b);
+    }
+    if !Seq.HasNoDuplicates(b) {
+      var index1: nat, index2: nat :| index1 < |b| && index2 < |b| && index1 != index2 && b[index1] == b[index2];
+      assert (a+b)[|a| + index1] == (a+b)[|a| + index2];
+      assert !Seq.HasNoDuplicates(a+b);
+    }
+  }
 
 }

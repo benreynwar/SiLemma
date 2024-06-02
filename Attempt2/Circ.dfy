@@ -6,6 +6,7 @@ module Circ {
     | CXor()
     | CAnd()
     | CInv()
+    | CIden()
       // A contant 0 or 1
     | CConst(value: bool)
       // A register.
@@ -63,21 +64,34 @@ module Circ {
       case CXor() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
       case CAnd() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
       case CInv() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
+      case CIden() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
       case CConst(b) => {NP(node, OUTPUT_0)}
       case CSeq() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
   }
 
   function AllNPFromNodes(c: Circuit, nodes: set<CNode>): (r: set<NP>)
-    requires forall n :: n in nodes ==> NodeValid(c, n)
+    requires ScValid(c, nodes)
     ensures forall np :: np in r ==> NPValid(c, np) && np.n in nodes
     ensures forall np :: NPValid(c, np) && (np.n in nodes) ==> np in r
   {
+    reveal ScValid();
     if |nodes| == 0 then
       {}
     else
       var node :| node in nodes;
       var new_nodes := nodes - {node};
       AllNPfromNode(c, node) + AllNPFromNodes(c, new_nodes)
+  }
+
+  lemma AllNPFromNodesDependsNodeKind(ca: Circuit, cb: Circuit, nodes: set<CNode>)
+    requires ca.NodeKind == cb.NodeKind
+    requires ScValid(ca, nodes)
+    ensures ScValid(cb, nodes)
+    ensures AllNPFromNodes(ca, nodes) == AllNPFromNodes(cb, nodes)
+  {
+    assert ScValid(cb, nodes) by {
+      reveal ScValid();
+    }
   }
 
   function AllNPInternal(c: Circuit, nodes: set<CNode>, nps: set<NP>): (r: set<NP>)
@@ -149,6 +163,7 @@ module Circ {
       case CXor() => p == OUTPUT_0
       case CAnd() => p == OUTPUT_0
       case CInv() => p == OUTPUT_0
+      case CIden() => p == OUTPUT_0
       case CConst(b) => p == OUTPUT_0
       case CSeq() => p == OUTPUT_0
   }
@@ -159,6 +174,7 @@ module Circ {
       case CXor() => p == INPUT_0 || p == INPUT_1
       case CAnd() => p == INPUT_0 || p == INPUT_1
       case CInv() => p == INPUT_0
+      case CIden() => p == INPUT_0
       case CConst(b) => false
       case CSeq() => p == INPUT_0
   }

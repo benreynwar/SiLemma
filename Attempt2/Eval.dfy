@@ -4,17 +4,65 @@ module Eval {
   import opened Utils
   import opened MapFunction
 
-  ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>)
+  ghost predicate EvaluateConstRequirements(c: Circuit, fi: FI)
   {
-    CircuitValid(c) &&
-    (|path| > 0) &&
-    INPValid(c, Seq.Last(path)) &&
-    PathValid(c, path) &&
-    Seq.HasNoDuplicates(path)
+    && CircuitValid(c)
+    && FICircuitValid(c, fi)
+  }
+
+  ghost predicate EvaluatePathRequirements(c: Circuit, path: seq<NP>)
+  {
+    && (|path| > 0)
+    && PathValid(c, path)
+    && Seq.HasNoDuplicates(path)
+  }
+
+  ghost predicate EvaluateINPInnerRequirements(c: Circuit, path: seq<NP>, fi: FI)
+  {
+    && EvaluateConstRequirements(c, fi)
+    && EvaluatePathRequirements(c, path)
+    && INPValid(c, Seq.Last(path))
+  }
+
+  ghost predicate EvaluateONPUnaryBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
+  {
+    && EvaluateConstRequirements(c, fi)
+    && EvaluatePathRequirements(c, path)
+    && ONPValid(c, path[|path|-1])
+    && (Seq.Last(path).n !in fi.state)
+    && var nk := c.NodeKind[Seq.Last(path).n];
+    && (nk.CXor? || nk.CAnd? || nk.CInv? || nk.CIden?)
+  }
+
+  ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
+  {
+    && EvaluateConstRequirements(c, fi)
+    && EvaluatePathRequirements(c, path)
+    && ONPValid(c, Seq.Last(path))
+    && (Seq.Last(path).n !in fi.state)
+    && var nk := c.NodeKind[Seq.Last(path).n];
+    && (nk.CXor? || nk.CAnd?)
+  }
+
+  ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
+  {
+    && EvaluateConstRequirements(c, fi)
+    && EvaluatePathRequirements(c, path)
+    && ONPValid(c, Seq.Last(path))
+    && (Seq.Last(path).n !in fi.state)
+    && var nk := c.NodeKind[Seq.Last(path).n];
+    && (nk.CInv? || nk.CIden?)
+  }
+
+  ghost predicate EvaluateONPInnerRequirements(c: Circuit, path: seq<NP>, fi: FI)
+  {
+    && EvaluateConstRequirements(c, fi)
+    && EvaluatePathRequirements(c, path)
+    && ONPValid(c, Seq.Last(path))
   }
 
   function EvaluateINPInner(c: Circuit, path: seq<NP>, fi: FI): EvalResult
-    requires EvaluateINPInnerRequirements(c, path)
+    requires EvaluateINPInnerRequirements(c, path, fi)
     decreases |NodesNotInPath(c, path)|, 2
   {
     var head := path[|path|-1];
@@ -55,40 +103,8 @@ module Eval {
     assert new_nodes_in_path == nodes_in_path + {np};
   }
 
-  ghost predicate EvaluateONPUnaryBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
-  {
-    CircuitValid(c) &&
-    (|path| > 0) &&
-    ONPValid(c, path[|path|-1]) &&
-    (Seq.Last(path) !in fi.inputs) &&
-    var nk := c.NodeKind[Seq.Last(path).n];
-    (nk.CXor? || nk.CAnd? || nk.CInv?) &&
-    PathValid(c, path) &&
-    Seq.HasNoDuplicates(path)
-  }
-
-  ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
-  {
-    CircuitValid(c) &&
-    (|path| > 0) &&
-    ONPValid(c, path[|path|-1]) &&
-    (Seq.Last(path) !in fi.inputs) &&
-    var nk := c.NodeKind[Seq.Last(path).n];
-    (nk.CXor? || nk.CAnd?) &&
-    PathValid(c, path) &&
-    Seq.HasNoDuplicates(path)
-  }
-
   function EvaluateONPBinary(c: Circuit, path: seq<NP>, fi: FI): EvalResult
-    requires CircuitValid(c)
-    requires |path| > 0
-    requires ONPValid(c, Seq.Last(path))
-    requires Seq.Last(path) !in fi.inputs
-    requires
-      var nk := c.NodeKind[Seq.Last(path).n];
-      nk.CXor? || nk.CAnd?
-    requires PathValid(c, path)
-    requires Seq.HasNoDuplicates(path)
+    requires EvaluateONPBinaryRequirements(c, path, fi)
     decreases |NodesNotInPath(c, path)|, 3
   {
     var nk := c.NodeKind[path[|path|-1].n];
@@ -132,19 +148,11 @@ module Eval {
         )
   }
 
-  ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
-  {
-    CircuitValid(c) &&
-    (|path| > 0) &&
-    ONPValid(c, Seq.Last(path)) &&
-    Seq.Last(path) !in fi.inputs &&
-    c.NodeKind[Seq.Last(path).n].CInv? &&
-    PathValid(c, path) &&
-    Seq.HasNoDuplicates(path)
-  }
-
   function EvaluateONPUnary(c: Circuit, path: seq<NP>, fi: FI): EvalResult
     requires EvaluateONPUnaryRequirements(c, path, fi)
+    requires
+      var nk := c.NodeKind[Seq.Last(path).n];
+      nk.CInv? || nk.CIden?
     decreases |NodesNotInPath(c, path)|, 3
   {
     var head := Seq.Last(path);
@@ -162,43 +170,37 @@ module Eval {
         case EvalError(missing_0, loops_0) =>
           EvalError(missing_0, loops_0)
         case EvalOk(b0) =>
-          EvalOk(!b0)
+          var nk := c.NodeKind[head.n];
+          match nk
+            case CInv => EvalOk(!b0)
+            case CIden => EvalOk(b0)
   }
 
-  ghost predicate EvaluateONPInnerRequirements(c: Circuit, path: seq<NP>)
+  opaque predicate FICircuitValid(c: Circuit, fi: FI)
   {
-    CircuitValid(c) &&
-    (|path| > 0) &&
-    ONPValid(c, Seq.Last(path)) &&
-    PathValid(c, path) &&
-    Seq.HasNoDuplicates(path)
+    // It's possible a np to be in fi.inputs and a Seq sink.
+    && (forall np :: np in fi.inputs.Keys ==> INPValid(c, np))
+    && (forall n :: n in fi.state.Keys ==> n in c.NodeKind && c.NodeKind[n].CSeq?)
   }
 
   function EvaluateONPInner(c: Circuit, path: seq<NP>, fi: FI): EvalResult
-    requires EvaluateONPInnerRequirements(c, path)
+    requires EvaluateONPInnerRequirements(c, path, fi)
     decreases |NodesNotInPath(c, path)|, 4
   {
     var head := path[|path|-1];
     var nk := c.NodeKind[head.n];
-    if head in fi.inputs then
+    if head.n in fi.state then
+      assert nk.CSeq? by {
+        reveal FICircuitValid();
+      }
       match nk
-        case CXor() => EvalOk(fi.inputs[head])
-        case CAnd() => EvalOk(fi.inputs[head])
-        case CInv() => EvalOk(fi.inputs[head])
-        case CConst(b) => EvalError({head}, {})
-        case CSeq() => EvalError({head}, {})
-    else if head in fi.state then
-      match nk
-        case CXor() => EvalError({head}, {})
-        case CAnd() => EvalError({head}, {})
-        case CInv() => EvalError({head}, {})
-        case CConst(b) => EvalError({head}, {})
-        case CSeq() => EvalOk(fi.state[head])
+        case CSeq() => EvalOk(fi.state[head.n])
     else
       match nk
         case CXor() => EvaluateONPBinary(c, path, fi)
         case CAnd() => EvaluateONPBinary(c, path, fi)
         case CInv() => EvaluateONPUnary(c, path, fi)
+        case CIden() => EvaluateONPUnary(c, path, fi)
         case CConst(b) => EvalOk(b)
         case CSeq() => EvalError({head}, {})
   }
@@ -212,6 +214,7 @@ module Eval {
 
   function EvaluateONP(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
+    requires FICircuitValid(c, fi)
     requires ONPValid(c, np)
   {
     var path := [np];
@@ -222,6 +225,7 @@ module Eval {
 
   function EvaluateINP(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
+    requires FICircuitValid(c, fi)
     requires INPValid(c, np)
   {
     var path := [np];
@@ -232,6 +236,7 @@ module Eval {
   
   function Evaluate(c: Circuit, np: NP, fi: FI): EvalResult
     requires CircuitValid(c)
+    requires FICircuitValid(c, fi)
     requires ONPValid(c, np) || INPValid(c, np)
   {
     if ONPValid(c, np) then
