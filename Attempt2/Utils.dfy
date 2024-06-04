@@ -207,10 +207,20 @@ module Utils {
       r
   }
 
+  lemma NoIntersectionEquiv<T>(a: set<T>, b: set<T>)
+    ensures (a !! b) == (|a * b| == 0)
+  {
+    if !(a !! b) {
+      var x :| x in a && x in b;
+      assert x in a * b;
+    }
+  }
+
   lemma SubSeqsNoDuplicates<T>(a: seq<T>, b: seq<T>)
     requires Seq.HasNoDuplicates(a + b)
     ensures Seq.HasNoDuplicates(a)
     ensures Seq.HasNoDuplicates(b)
+    ensures Seq.ToSet(a) !! Seq.ToSet(b)
   {
     reveal Seq.HasNoDuplicates();
     if !Seq.HasNoDuplicates(a) {
@@ -221,6 +231,17 @@ module Utils {
     if !Seq.HasNoDuplicates(b) {
       var index1: nat, index2: nat :| index1 < |b| && index2 < |b| && index1 != index2 && b[index1] == b[index2];
       assert (a+b)[|a| + index1] == (a+b)[|a| + index2];
+      assert !Seq.HasNoDuplicates(a+b);
+    }
+    if !(Seq.ToSet(a) !! Seq.ToSet(b)) {
+      NoIntersectionEquiv(Seq.ToSet(a), Seq.ToSet(b));
+      assert |Seq.ToSet(a) * Seq.ToSet(b)| > 0;
+      assert !(Seq.ToSet(a) !! Seq.ToSet(b));
+      var v :| v in Seq.ToSet(a) * Seq.ToSet(b);
+      reveal Seq.ToSet();
+      var index1 := Seq.IndexOf(a, v);
+      var index2 := Seq.IndexOf(b, v);
+      assert (a+b)[index1] == (a+b)[|a| + index2];
       assert !Seq.HasNoDuplicates(a+b);
     }
   }

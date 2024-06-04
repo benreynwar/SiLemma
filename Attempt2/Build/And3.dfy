@@ -21,10 +21,7 @@ module Build.And3 {
     ensures CircuitValid(r.0)
     ensures EntityValid(r.0, r.1)
   {
-    var eb1 := IslandBundle(c, [], map[]);
-    assert IslandBundleValid(eb1) by {
-      reveal IslandBundleValid();
-    }
+    var eb1 := IslandBundleFromCircuit(c);
     var (c1, e1) := InsertAnd(c);
     var (eb2, a_ref) := AddEntity(eb1, c1, e1);
     assert e1.sc == {e1.mf.outputs[0].n};

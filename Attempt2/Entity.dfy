@@ -131,6 +131,16 @@ module Entity {
     assert AllONPs(c, e.sc) >= Seq.ToSet(e.mf.outputs);
   }
 
+  lemma FAllInSc(c: Circuit, e: Entity)
+    requires CircuitValid(c)
+    requires EntitySomewhatValid(c, e)
+    ensures NPsInSc(e.sc, e.mf.NPs())
+  {
+    FInputsInSc(c, e);
+    FOutputsInSc(c, e);
+    reveal NPsInSc();
+  }
+
   lemma StaysInSc(c: Circuit, e: Entity, np: NP)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)
@@ -217,6 +227,28 @@ module Entity {
     assert (forall np :: np in fi.inputs.Keys ==> INPValid(c, np));
     assert (forall n :: n in fi.state.Keys ==> c.NodeKind[n].CSeq?);
     reveal FICircuitValid();
+  }
+
+  lemma EntitiesSeparate(c: Circuit, e1: Entity, e2: Entity)
+    requires CircuitValid(c)
+    requires EntitySomewhatValid(c, e1)
+    requires EntitySomewhatValid(c, e2)
+    requires e1.sc !! e2.sc
+    ensures e1.mf.NPs() !! e2.mf.NPs()
+  {
+    FAllInSc(c, e1);
+    FAllInSc(c, e2);
+    forall np | np in e1.mf.NPs()
+      ensures np !in e2.mf.NPs()
+    {
+      if np in e2.mf.NPs() {
+        reveal NPsInSc();
+        assert np.n in e1.sc;
+        assert np.n in e2.sc;
+        assert np.n in e1.sc * e2.sc;
+        assert false;
+      }
+    }
   }
 
 }

@@ -101,6 +101,27 @@ module Connection {
     && IsIsland(c, e2.sc)
   }
 
+  lemma ConnectionInSc(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
+    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+    ensures
+      var connection := conn.GetConnection();
+      && NPsInSc(e2.sc, connection.Keys)
+      && NPsInSc(e1.sc, connection.Values)
+      && NPsNotInSc(e2.sc, connection.Values)
+      && NPsNotInSc(e1.sc, connection.Keys)
+  {
+    var connection := conn.GetConnection();
+    assert connection.Values <= Seq.ToSet(e1.mf.outputs);
+    assert connection.Keys == Seq.ToSet(e2.mf.inputs) - Seq.ToSet(e12.mf.inputs);
+    reveal NPsInSc();
+    reveal NPsNotInSc();
+    reveal Seq.ToSet();
+    FOutputsInSc(c, e1);
+    FOutputsInSc(c, e2);
+    FInputsInSc(c, e1);
+    FInputsInSc(c, e2);
+  }
+
   opaque predicate ConnectCircuitRequirements(c: Circuit, connection: map<NP, NP>)
   {
     && (forall np :: np in connection.Keys ==> INPValid(c, np) && np !in c.PortSource)

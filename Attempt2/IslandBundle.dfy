@@ -17,6 +17,7 @@ module IslandBundle {
 
   datatype IslandBundle = IslandBundle(
     c: Circuit,
+    bg: Circuit,
     es: seq<Option<Entity>>,
     NodeEquiv: map<CNode, nat>
   )
@@ -26,11 +27,29 @@ module IslandBundle {
     && (forall e :: e in eb.es && e.Some? ==> EntityValid(eb.c, e.value))
     // All Equivs are islands (i.e. not connections in or out)
     && (forall e :: e in eb.es && e.Some? ==> IsIsland(eb.c, e.value.sc))
-    // NodeEquiv points to an Equiv in the eb.es seq.
+    // NodeEquiv points to an Entity in the eb.es seq.
     && (forall n :: n in eb.NodeEquiv ==> eb.NodeEquiv[n] < |eb.es|)
-    // All nodes in an Equiv must be pointed to from this NodeEquiv map
+    // All nodes in an Entity must be pointed to from this NodeEquiv map
     && (forall index: nat :: index < |eb.es| && eb.es[index].Some? ==>
         (forall n :: n in eb.es[index].value.sc ==> n in eb.NodeEquiv && eb.NodeEquiv[n] == index))
+    // The background nodes are not in any of the entities.
+    && (eb.bg.NodeKind.Keys !! eb.NodeEquiv.Keys)
+    && (eb.c.NodeKind.Keys == eb.bg.NodeKind.Keys + eb.NodeEquiv.Keys)
+    && CircuitUnconnected(eb.bg, eb.c)
+    && CircuitConserved(eb.bg, eb.c)
+    && ScValid(eb.c, eb.bg.NodeKind.Keys)
+  }
+
+  function IslandBundleFromCircuit(c: Circuit): (eb: IslandBundle)
+    requires CircuitValid(c)
+    ensures IslandBundleValid(eb)
+  {
+    var eb := IslandBundle(c, c, [], map[]);
+    reveal IslandBundleValid();
+    reveal CircuitUnconnected();
+    reveal CircuitConserved();
+    reveal ScValid();
+    eb
   }
 
   lemma IslandBundleToSetsNoIntersection(eb: IslandBundle, e1_index: nat, e2_index: nat)
@@ -63,6 +82,7 @@ module IslandBundle {
     requires EntityValid(new_c, new_e)
     requires IsIsland(new_c, new_e.sc)
     requires forall n :: n in new_e.sc ==> n !in eb.NodeEquiv
+    requires forall n :: n in new_e.sc ==> n !in eb.bg.NodeKind
     requires new_c.NodeKind.Keys == eb.c.NodeKind.Keys + new_e.sc
     ensures IslandBundleValid(AddEntityImpl(eb, new_c, new_e).0)
   {
@@ -107,6 +127,9 @@ module IslandBundle {
     }
     assert IslandBundleValid(new_eb) by {
       reveal IslandBundleValid();
+      reveal CircuitUnconnected();
+      reveal CircuitConserved();
+      reveal ScValid();
     }
   }
 
@@ -126,6 +149,7 @@ module IslandBundle {
     var new_node_equiv := (map n | n in new_e.sc :: n := |eb.es|);
     var new_eb := IslandBundle(
       new_c,
+      eb.bg,
       eb.es + [Some(new_e)],
       AddMaps(eb.NodeEquiv, new_node_equiv)
     );
@@ -140,6 +164,7 @@ module IslandBundle {
     requires EntityValid(new_c, new_e)
     requires IsIsland(new_c, new_e.sc)
     requires forall n :: n in new_e.sc ==> n !in eb.NodeEquiv
+    requires forall n :: n in new_e.sc ==> n !in eb.bg.NodeKind
     requires new_c.NodeKind.Keys == eb.c.NodeKind.Keys + new_e.sc
     ensures IslandBundleValid(r.0)
     ensures r.1 < |r.0.es|
@@ -170,6 +195,13 @@ module IslandBundle {
     }
   }
 
+  lemma EntityBackgroundNoIntersection(eb: IslandBundle, e1_index: nat)
+    requires IslandBundleValid(eb)
+    requires e1_index < |eb.es| && eb.es[e1_index].Some?
+    ensures eb.es[e1_index].value.sc !! eb.bg.NodeKind.Keys
+  {
+    reveal IslandBundleValid();
+  }
 
   lemma IBConnectEntitiesRequirements(
       eb: IslandBundle, e1_index: nat, e2_index: nat, e12: Entity, conn: MFConnection)
@@ -225,6 +257,7 @@ module IslandBundle {
       then |new_es|-1 else eb.NodeEquiv[n]);
     var ib := IslandBundle(
       new_c,
+      eb.bg,
       new_es,
       new_node_equiv
     );
@@ -324,7 +357,49 @@ module IslandBundle {
     assert (forall n :: n in ib.NodeEquiv ==> ib.NodeEquiv[n] < |ib.es|);
     assert (forall index: nat :: index < |ib.es| && ib.es[index].Some? ==>
      (forall n :: n in ib.es[index].value.sc ==> n in ib.NodeEquiv && ib.NodeEquiv[n] == index));
-    assert IslandBundleValid(ib);
+    assert IslandBundleValid(ib) by {
+      reveal CircuitUnconnected();
+      reveal CircuitConserved();
+      reveal ConnectEntitiesImpl();
+      var connection := conn.GetConnection();
+      ConnectionInSc(eb.c, e1, e2, e12, conn);
+      assert NPsInSc(e2.sc, connection.Keys);
+      assert NPsInSc(e1.sc, connection.Values);
+      EntityBackgroundNoIntersection(eb, e1_index);
+      EntityBackgroundNoIntersection(eb, e2_index);
+      assert NoInternalConnections(connection, eb.bg.NodeKind.Keys) by {
+       reveal NPsInSc();
+       reveal NoInternalConnections();
+      }
+      ConnectCircuitConservesSubcircuit(eb.c, connection, eb.bg.NodeKind.Keys);
+      reveal IslandBundleValid();
+      var bg := eb.bg;
+      assert bg == ib.bg;
+      forall np | np in ib.c.PortSource && np !in bg.PortSource
+        ensures np.n !in ib.bg.NodeKind && ib.c.PortSource[np].n !in ib.bg.NodeKind
+      {
+        if np in eb.c.PortSource {
+          assert np.n !in bg.NodeKind && eb.c.PortSource[np].n !in bg.NodeKind;
+          assert np.n !in bg.NodeKind && ib.c.PortSource[np].n !in bg.NodeKind;
+        } else {
+          assert ib.c.PortSource.Keys == eb.c.PortSource.Keys + connection.Keys;
+          assert np in connection.Keys;
+          reveal NPsInSc();
+          assert np.n in e2.sc;
+          assert np.n !in ib.bg.NodeKind;
+          assert ib.c.PortSource[np] in connection.Values;
+          assert ib.c.PortSource[np].n in e1.sc;
+          assert ib.c.PortSource[np].n !in ib.bg.NodeKind;
+        }
+      }
+      assert (forall np :: np in eb.c.PortSource && np !in eb.bg.PortSource ==> np.n !in eb.bg.NodeKind && eb.c.PortSource[np].n !in eb.bg.NodeKind);
+      assert (forall np :: np in ib.c.PortSource && np !in ib.bg.PortSource ==> np.n !in ib.bg.NodeKind && ib.c.PortSource[np].n !in ib.bg.NodeKind);
+      assert CircuitUnconnected(ib.bg, ib.c);
+      assert CircuitConserved(ib.bg, ib.c);
+      assert ScValid(ib.c, ib.bg.NodeKind.Keys) by {
+        reveal ScValid();
+      }
+    }
   }
 
   function IBConnectEntities(eb: IslandBundle, e1_index: nat, e2_index: nat, e12: Entity,

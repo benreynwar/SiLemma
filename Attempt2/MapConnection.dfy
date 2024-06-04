@@ -41,6 +41,16 @@ module MapConnection {
       (map a | a in out :: x[a])
     }
 
+    lemma EmptyThenValid()
+      requires |in1| == 0
+      requires |out| == 0
+      requires |conn| == 0
+      ensures Valid()
+    {
+      reveal ConnectionX<T>.Valid();
+      reveal Seq.HasNoDuplicates();
+    }
+
   }
 
   datatype ConnectionXY<T(==)> = ConnectionXY(
@@ -133,7 +143,19 @@ module MapConnection {
     {
       MapMapInternal(0, x, y)
     }
+
+    lemma EmptyThenValid()
+      requires |in1| == 0
+      requires |in2| == 0
+      requires |out| == 0
+      requires |conn| == 0
+      ensures Valid()
+    {
+      reveal ConnectionXY<T>.Valid();
+      reveal Seq.HasNoDuplicates();
+    }
   }
+
 
   ghost predicate MakeConnectionsReqs(
     mf_a: MapFunction, mf_b: MapFunction, mf_ab: MapFunction,
