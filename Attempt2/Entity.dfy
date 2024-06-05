@@ -259,4 +259,24 @@ module Entity {
     }
   }
 
+  function EntitySwapMF(c: Circuit, e: Entity, mf: MapFunction): (r: Entity)
+    requires CircuitValid(c)
+    requires EntityValid(c, e)
+    requires mf.Valid()
+    requires MapFunctionsEquiv(e.mf, mf)
+    ensures EntityValid(c, r)
+  {
+    var r := Entity(e.sc, mf);
+    reveal MapFunctionsEquiv();
+    assert EntitySomewhatValid(c, r) by {
+      reveal EntitySomewhatValid();
+    }
+    assert r.mf.Valid();
+    assert ScValid(c, r.sc);
+    assert EntityEvaluatesCorrectly(c, r) by {
+      reveal EntityEvaluatesCorrectly();
+    }
+    r
+  }
+
 }

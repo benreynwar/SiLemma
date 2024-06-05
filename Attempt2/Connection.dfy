@@ -468,6 +468,7 @@ module Connection {
       c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection): (r: Circuit)
     requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
     ensures CircuitValid(r)
+    ensures r.NodeKind == c.NodeKind
   {
     var connection := conn.GetConnection();
 

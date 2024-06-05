@@ -440,6 +440,8 @@ module CombineParallel {
 
   function CombineParallelEntityConn(c: Circuit, e1: Entity, e2: Entity): (r: (Entity, MFConnection))
     requires CombineParallelEntitiesRequirements(c, e1, e2)
+    ensures (e1.mf.NPs() !! e2.mf.NPs())
+    ensures (Seq.ToSet(e1.mf.state) !! Seq.ToSet(e2.mf.state))
     ensures ConnectEntitiesRequirements(c, e1, e2, r.0, r.1)
   {
     var combiner := ParallelCombiner(e1.mf, e2.mf);

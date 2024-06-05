@@ -432,6 +432,8 @@ module CombineSeries {
   function CombineSeriesEntityConn(c: Circuit, e1: Entity, e2: Entity): (r: (Entity, MFConnection))
     requires CombineSeriesEntitiesRequirements(c, e1, e2)
     ensures ConnectEntitiesRequirements(c, e1, e2, r.0, r.1)
+    ensures (e1.mf.NPs() !! e2.mf.NPs())
+    ensures (Seq.ToSet(e1.mf.state) !! Seq.ToSet(e2.mf.state))
   {
     var combiner := SeriesCombiner(e1.mf, e2.mf);
     assert Seq.ToSet(e1.mf.state) !! Seq.ToSet(e2.mf.state) by {

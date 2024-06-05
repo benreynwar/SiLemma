@@ -238,6 +238,7 @@ module IslandBundle {
     ensures r.0.es[r.1].Some?
     ensures r.0.es[e1_index].None?
     ensures r.0.es[e2_index].None?
+    ensures r.0.c.NodeKind == eb.c.NodeKind
   {
     var e1 := eb.es[e1_index].value;
     var e2 := eb.es[e2_index].value;
@@ -415,7 +416,7 @@ module IslandBundle {
     IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
   }
 
-  function IBCombineParallelEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
+  opaque function IBCombineParallelEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
     requires IslandBundleValid(eb)
     requires e1_index != e2_index
     requires e1_index < |eb.es| && eb.es[e1_index].Some?
@@ -425,6 +426,26 @@ module IslandBundle {
       var e2 := eb.es[e2_index].value;
       CombineParallelEntitiesRequirements(eb.c, e1, e2)
     ensures IslandBundleValid(r.0)
+    ensures |r.0.es| == |eb.es| + 1
+    ensures r.1 < |r.0.es|
+    ensures r.0.es[r.1].Some?
+    ensures r.0.es[e1_index].None?
+    ensures r.0.es[e2_index].None?
+    ensures r.0.c.NodeKind == eb.c.NodeKind
+    ensures
+      var e1 := eb.es[e1_index].value;
+      var e2 := eb.es[e2_index].value;
+      var e := r.0.es[r.1].value;
+      && (e.mf.inputs == e1.mf.inputs + e2.mf.inputs)
+      && (e.mf.outputs == e1.mf.outputs + e2.mf.outputs)
+      && (e.mf.state == e1.mf.state + e2.mf.state)
+      && (e.sc == e1.sc + e2.sc)
+      && (e1.mf.NPs() !! e2.mf.NPs())
+      && (Seq.ToSet(e1.mf.state) !! Seq.ToSet(e2.mf.state))
+      && (e.mf == ParallelCombiner(e1.mf, e2.mf).mf())
+    ensures
+      forall index: nat :: index < |eb.es| && index != e1_index && index != e2_index ==> eb.es[index] == r.0.es[index]
+    ensures eb.bg == r.0.bg
   {
     var e1 := eb.es[e1_index].value;
     var e2 := eb.es[e2_index].value;
@@ -433,7 +454,7 @@ module IslandBundle {
     IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
   }
 
-  function IBCombineSeriesEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
+  opaque function IBCombineSeriesEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
     requires IslandBundleValid(eb)
     requires e1_index != e2_index
     requires e1_index < |eb.es| && eb.es[e1_index].Some?
@@ -443,12 +464,57 @@ module IslandBundle {
       var e2 := eb.es[e2_index].value;
       CombineSeriesEntitiesRequirements(eb.c, e1, e2)
     ensures IslandBundleValid(r.0)
+    ensures |r.0.es| == |eb.es| + 1
+    ensures r.1 < |r.0.es|
+    ensures r.0.es[r.1].Some?
+    ensures r.0.es[e1_index].None?
+    ensures r.0.es[e2_index].None?
+    ensures r.0.c.NodeKind == eb.c.NodeKind
+    ensures eb.bg == r.0.bg
+    ensures
+      var e1 := eb.es[e1_index].value;
+      var e2 := eb.es[e2_index].value;
+      var e := r.0.es[r.1].value;
+      && (e.mf.inputs == e1.mf.inputs)
+      && (e.mf.outputs == e2.mf.outputs)
+      && (e.mf.state == e1.mf.state + e2.mf.state)
+      && (e.sc == e1.sc + e2.sc)
+      && (e1.mf.NPs() !! e2.mf.NPs())
+      && (Seq.ToSet(e1.mf.state) !! Seq.ToSet(e2.mf.state))
+      && (e.mf == SeriesCombiner(e1.mf, e2.mf).mf())
   {
     var e1 := eb.es[e1_index].value;
     var e2 := eb.es[e2_index].value;
     var (e12, conn) := CombineSeriesEntityConn(eb.c, e1, e2);
     IBConnectEntitiesCorrect(eb, e1_index, e2_index, e12, conn);
     IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
+  }
+
+  function IBSwapMF(eb: IslandBundle, e_index: nat, mf: MapFunction): (r: IslandBundle)
+    requires IslandBundleValid(eb)
+    requires e_index < |eb.es| && eb.es[e_index].Some?
+    requires mf.Valid()
+    requires
+      var e := eb.es[e_index].value;
+      assert e.mf.Valid() by {reveal IslandBundleValid();}
+      MapFunctionsEquiv(e.mf, mf)
+    ensures IslandBundleValid(r)
+  {
+    var e := eb.es[e_index].value;
+    assert CircuitValid(eb.c) && EntityValid(eb.c, e) by {
+      reveal IslandBundleValid();
+    }
+    var new_e := EntitySwapMF(eb.c, e, mf);
+    var new_eb := IslandBundle(
+      eb.c,
+      eb.bg,
+      eb.es[e_index := Some(new_e)],
+      eb.NodeEquiv
+      );
+    assert IslandBundleValid(new_eb) by {
+      reveal IslandBundleValid();
+    }
+    new_eb
   }
 
 }

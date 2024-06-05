@@ -1109,6 +1109,7 @@ module ConnectionEval {
     ensures CircuitValid(new_c)
     ensures EntityValid(new_c, e12)
     ensures IsIsland(new_c, e12.sc)
+    ensures new_c.NodeKind == c.NodeKind
   {
     ConnectEntitiesValid(c, e1, e2, e12, conn);
     ConnectEntitiesIsIsland(c, e1, e2, e12, conn);
