@@ -286,6 +286,13 @@ module MapFunction {
     seq(|state|, (i: nat) requires i < |state| => NP(state[i], INPUT_0))
   }
 
+  lemma StateINPsSeqNoDuplicates(state: seq<CNode>)
+    requires Seq.HasNoDuplicates(state)
+    ensures Seq.HasNoDuplicates(StateINPsSeq(state))
+  {
+    reveal Seq.HasNoDuplicates();
+  }
+
   lemma StateINPsSeqSame(state: seq<CNode>)
     requires Seq.HasNoDuplicates(state)
     ensures Seq.ToSet(StateINPsSeq(state)) == StateINPs(state)
@@ -329,6 +336,13 @@ module MapFunction {
   function StateONPsSeq(state: seq<CNode>): seq<NP>
   {
     seq(|state|, (i: nat) requires i < |state| => NP(state[i], OUTPUT_0))
+  }
+
+  lemma StateONPsSeqNoDuplicates(state: seq<CNode>)
+    requires Seq.HasNoDuplicates(state)
+    ensures Seq.HasNoDuplicates(StateONPsSeq(state))
+  {
+    reveal Seq.HasNoDuplicates();
   }
 
   function StateINPs(state: seq<CNode>): set<NP>

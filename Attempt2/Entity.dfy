@@ -141,6 +141,14 @@ module Entity {
     reveal NPsInSc();
   }
 
+  lemma StateInSc(c: Circuit, e: Entity)
+    requires CircuitValid(c)
+    requires EntitySomewhatValid(c, e)
+    ensures Seq.ToSet(e.mf.state) <= e.sc
+  {
+    reveal EntitySomewhatValid();
+  }
+
   lemma StaysInSc(c: Circuit, e: Entity, np: NP)
     requires CircuitValid(c)
     requires EntitySomewhatValid(c, e)

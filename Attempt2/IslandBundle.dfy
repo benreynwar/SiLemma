@@ -11,6 +11,8 @@ module IslandBundle {
   import opened Subcircuit
   import opened MapFunction
   import opened MapConnection
+  import opened CombineParallel
+  import opened CombineSeries
 
   // All nodes in the circuit are in exactly one Equiv.
   // This helps with reasoning about the circuit when adding stuff.
@@ -188,11 +190,6 @@ module IslandBundle {
     reveal IslandBundleValid();
     var sc1 := eb.es[e1_index].value.sc;
     var sc2 := eb.es[e2_index].value.sc;
-    forall np | np in nps {
-      assert eb.NodeEquiv[np.n] == e1_index;
-      assert eb.NodeEquiv[np.n] != e2_index;
-      assert np.n !in sc2;
-    }
   }
 
   lemma EntityBackgroundNoIntersection(eb: IslandBundle, e1_index: nat)
@@ -414,6 +411,42 @@ module IslandBundle {
       ConnectEntitiesRequirements(eb.c, e1, e2, e12, conn)
     ensures IslandBundleValid(r.0)
   {
+    IBConnectEntitiesCorrect(eb, e1_index, e2_index, e12, conn);
+    IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
+  }
+
+  function IBCombineParallelEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
+    requires IslandBundleValid(eb)
+    requires e1_index != e2_index
+    requires e1_index < |eb.es| && eb.es[e1_index].Some?
+    requires e2_index < |eb.es| && eb.es[e2_index].Some?
+    requires
+      var e1 := eb.es[e1_index].value;
+      var e2 := eb.es[e2_index].value;
+      CombineParallelEntitiesRequirements(eb.c, e1, e2)
+    ensures IslandBundleValid(r.0)
+  {
+    var e1 := eb.es[e1_index].value;
+    var e2 := eb.es[e2_index].value;
+    var (e12, conn) := CombineParallelEntityConn(eb.c, e1, e2);
+    IBConnectEntitiesCorrect(eb, e1_index, e2_index, e12, conn);
+    IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
+  }
+
+  function IBCombineSeriesEntities(eb: IslandBundle, e1_index: nat, e2_index: nat): (r: (IslandBundle, nat))
+    requires IslandBundleValid(eb)
+    requires e1_index != e2_index
+    requires e1_index < |eb.es| && eb.es[e1_index].Some?
+    requires e2_index < |eb.es| && eb.es[e2_index].Some?
+    requires
+      var e1 := eb.es[e1_index].value;
+      var e2 := eb.es[e2_index].value;
+      CombineSeriesEntitiesRequirements(eb.c, e1, e2)
+    ensures IslandBundleValid(r.0)
+  {
+    var e1 := eb.es[e1_index].value;
+    var e2 := eb.es[e2_index].value;
+    var (e12, conn) := CombineSeriesEntityConn(eb.c, e1, e2);
     IBConnectEntitiesCorrect(eb, e1_index, e2_index, e12, conn);
     IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn)
   }

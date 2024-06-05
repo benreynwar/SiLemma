@@ -132,7 +132,8 @@ module Build.AndN {
         }
        }
     assert (forall index_out: nat, index2: nat :: index_out < |out| && index2 < |in2| && in2out_direct
-       && out[index_out] == in2[index2] ==> (conn[index_out] == (true, index2)));
+              && out[index_out] == in2[index2]
+              ==> (conn[index_out] == (true, index2)));
     assert ConnectionXY(mf_combined.inputs, mf_andn.outputs, mf_and.inputs, true, false, abiao2bi).Valid() by {
       reveal ConnectionXY<NP>.Valid();
       reveal Seq.HasNoDuplicates();

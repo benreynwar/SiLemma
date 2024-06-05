@@ -78,9 +78,11 @@ module MapConnection {
             && ( in_type && in2out_direct ==> out[index] == in2[conn[index].1])
           ))
       && (forall index_out: nat, index1: nat :: index_out < |out| && index1 < |in1| && in1out_direct
-            && out[index_out] == in1[index1] ==> (conn[index_out] == (false, index1)))
+            && out[index_out] == in1[index1]
+            ==> (conn[index_out] == (false, index1)))
       && (forall index_out: nat, index2: nat :: index_out < |out| && index2 < |in2| && in2out_direct
-            && out[index_out] == in2[index2] ==> (conn[index_out] == (true, index2)))
+            && out[index_out] == in2[index2]
+            ==> (conn[index_out] == (true, index2)))
     }
 
     function MapSeq(x: seq<bool>, y: seq<bool>): (r: seq<bool>)
@@ -456,7 +458,7 @@ module MapConnection {
         ConnectionKeyValueCorrect(np, onp)
     }
 
-    function {:vcs_split_on_every_assert} GetConnection(): (r: map<NP, NP>)
+    function GetConnection(): (r: map<NP, NP>)
       requires SomewhatValid()
       ensures r.Values <= Seq.ToSet(mf_a.outputs)
       ensures r.Keys == Seq.ToSet(mf_b.inputs) - Seq.ToSet(mf_ab.inputs)

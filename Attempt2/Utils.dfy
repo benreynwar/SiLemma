@@ -216,6 +216,7 @@ module Utils {
     }
   }
 
+
   lemma SubSeqsNoDuplicates<T>(a: seq<T>, b: seq<T>)
     requires Seq.HasNoDuplicates(a + b)
     ensures Seq.HasNoDuplicates(a)
@@ -244,6 +245,30 @@ module Utils {
       assert (a+b)[index1] == (a+b)[|a| + index2];
       assert !Seq.HasNoDuplicates(a+b);
     }
+  }
+
+  lemma NoDuplicatesInConcat<T>(xs: seq<T>, ys: seq<T>)
+    // Like the one in the std library but using Seq.ToSet rather than
+    // multiset.
+    requires Seq.HasNoDuplicates(xs)
+    requires Seq.HasNoDuplicates(ys)
+    requires Seq.ToSet(xs) !! Seq.ToSet(ys)
+    ensures Seq.HasNoDuplicates(xs+ys)
+  {
+    reveal Seq.HasNoDuplicates();
+    reveal Seq.ToSet();
+    var zs := xs + ys;
+    if |zs| > 1 {
+      assert forall i :: 0 <= i < |xs| ==> zs[i] in Seq.ToSet(xs);
+      assert forall j :: |xs| <= j < |zs| ==> zs[j] in Seq.ToSet(ys);
+      assert forall i, j :: 0 <= i < |xs| <= j < |zs| ==> zs[i] != zs[j];
+    }
+  }
+
+  lemma ConcatSeqToSet<T>(a: seq<T>, b: seq<T>)
+    ensures Seq.ToSet(a + b) == Seq.ToSet(a) + Seq.ToSet(b)
+  {
+    reveal Seq.ToSet();
   }
 
 }
