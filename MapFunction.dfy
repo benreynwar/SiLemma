@@ -67,10 +67,12 @@ module MapFunction {
           && sf.requires(si)
           && SOValid(sf(si), outputs, state)
       ))
-      && Seq.HasNoDuplicates(inputs + outputs)
+      && Seq.HasNoDuplicates(inputs)
+      && Seq.HasNoDuplicates(outputs)
       && Seq.HasNoDuplicates(state)
-      && Seq.HasNoDuplicates(inputs + StateONPsSeq(state))
-      && Seq.HasNoDuplicates(outputs + StateINPsSeq(state))
+      && SeqsNoIntersection(inputs, outputs)
+      && SeqsNoIntersection(inputs, StateONPsSeq(state))
+      && SeqsNoIntersection(outputs, StateINPsSeq(state))
     }
 
     function NPs(): set<NP>
@@ -83,7 +85,6 @@ module MapFunction {
       ensures Seq.HasNoDuplicates(inputs)
     {
       reveal Valid();
-      SubSeqsNoDuplicates(inputs, outputs);
     }
 
     lemma OutputsHasNoDuplicates()
@@ -91,7 +92,6 @@ module MapFunction {
       ensures Seq.HasNoDuplicates(outputs)
     {
       reveal Valid();
-      SubSeqsNoDuplicates(inputs, outputs);
     }
 
     function si2fi(si: SI): (fi: FI)
@@ -262,8 +262,6 @@ module MapFunction {
       ensures !(np in outputs && np in StateINPs(state))
     {
       reveal Valid();
-      assert Seq.HasNoDuplicates(outputs + StateINPsSeq(state));
-      HasNoDuplicatesNotInBoth(outputs, StateINPsSeq(state), np);
       StateINPsSeqSame(state);
       reveal Seq.ToSet();
     }
@@ -273,8 +271,6 @@ module MapFunction {
       ensures !(np in inputs && np in StateONPs(state))
     {
       reveal Valid();
-      assert Seq.HasNoDuplicates(inputs + StateONPsSeq(state));
-      HasNoDuplicatesNotInBoth(inputs, StateONPsSeq(state), np);
       StateONPsSeqSame(state);
       reveal Seq.ToSet();
     }
@@ -345,6 +341,34 @@ module MapFunction {
     reveal Seq.HasNoDuplicates();
   }
 
+  lemma StateONPsSeqContains(state: seq<CNode>, n: CNode)
+    ensures (n in state) == (NP(n, OUTPUT_0) in StateONPsSeq(state))
+  {
+    if n in state {
+      var index: nat :| index < |state| && state[index] == n;
+      assert StateONPsSeq(state)[index] == NP(n, OUTPUT_0);
+    } else {
+    }
+  }
+
+  lemma StateONPsSeqNoIntersection(state1: seq<CNode>, state2: seq<CNode>)
+    requires SeqsNoIntersection(state1, state2)
+    ensures SeqsNoIntersection(StateONPsSeq(state1), StateONPsSeq(state2))
+  {
+    reveal Seq.ToSet();
+    assert forall x: CNode, y: CNode :: x in Seq.ToSet(state1) && y in Seq.ToSet(state2) ==> x != y;
+    assert forall x: CNode :: (x in Seq.ToSet(state1)) == (x in state1);
+    assert forall x: CNode :: (x in Seq.ToSet(state2)) == (x in state2);
+    assert forall x: CNode, y: CNode :: x in state1 && y in state2 ==> x != y;
+    forall x: CNode
+      ensures (x in state1) == (NP(x, OUTPUT_0) in StateONPsSeq(state1))
+    {
+      StateONPsSeqContains(state1, x);
+    }
+    assert forall x: CNode :: (x in state1) == (NP(x, OUTPUT_0) in StateONPsSeq(state1));
+    assert forall x: CNode, y: CNode :: (NP(x, OUTPUT_0) in StateONPsSeq(state1)) && (NP(y, OUTPUT_0) in StateONPsSeq(state2)) ==> x != y;
+  }
+
   function StateINPs(state: seq<CNode>): set<NP>
   {
     (set n | n in state :: NP(n, INPUT_0))
@@ -393,8 +417,6 @@ module MapFunction {
       reveal mf.Valid();
       reveal Seq.ToSet();
       StateINPsSeqSame(mf.state);
-      assert Seq.HasNoDuplicates(mf.outputs + StateINPsSeq(mf.state));
-      HasNoDuplicatesNotInBoth(mf.outputs, StateINPsSeq(mf.state), np);
     }
     if (np in mf.outputs) then
       MFLookupOutput(mf, fi, np)
@@ -413,6 +435,112 @@ module MapFunction {
     && forall fi: FI :: FIValid(fi, mf1.inputs, mf1.state) ==> (
       mf1.f(fi) == mf2.f(fi)
     )
+  }
+
+  opaque ghost predicate MapFunctionsSFEquiv(mf1: MapFunction, mf2: MapFunction)
+    requires mf1.Valid()
+    requires mf2.Valid()
+  {
+    reveal MapFunction.Valid();
+    && mf1.inputs == mf2.inputs
+    && mf1.outputs == mf2.outputs
+    && mf1.state == mf2.state
+    && forall si: SI :: SIValid(si, mf1.inputs, mf1.state) ==> (
+      mf1.sf(si) == mf2.sf(si)
+    )
+  }
+
+  lemma MapFunctionsEquivSFEquiv(mf1: MapFunction, mf2: MapFunction)
+    requires mf1.Valid()
+    requires mf2.Valid()
+    requires MapFunctionsSFEquiv(mf1, mf2)
+    ensures MapFunctionsEquiv(mf1, mf2)
+  {
+    reveal MapFunctionsSFEquiv();
+    reveal MapFunction.Valid();
+    forall fi: FI | FIValid(fi, mf1.inputs, mf1.state)
+      ensures mf1.f(fi) == mf2.f(fi)
+    {
+      var si1 := mf1.fi2si(fi);
+      var si2 := mf2.fi2si(fi);
+      mf1.fi2si2fi(fi);
+      mf2.fi2si2fi(fi);
+      assert si1 == si2;
+      var so1 := mf1.sf(si1);
+      var so2 := mf2.sf(si2);
+      assert so1 == so2;
+      var fo1 := mf1.f(fi);
+      var fo2 := mf2.f(fi);
+      assert fo1 == mf1.so2fo(so1);
+      assert fo2 == mf2.so2fo(so2);
+      assert fo1 == fo2;
+    }
+    reveal MapFunctionsEquiv();
+  }
+
+  datatype RFunction = RFunction(
+    input_width: nat,
+    output_width: nat,
+    state_width: nat,
+    sf: SI --> SO
+  ) {
+    predicate SIValid(si: SI)
+    {
+      && (|si.inputs| == input_width)
+      && (|si.state| == state_width)
+    }
+    predicate SOValid(so: SO)
+    {
+      && (|so.outputs| == output_width)
+      && (|so.state| == state_width)
+    }
+
+    opaque ghost predicate Valid()
+    {
+      && forall si: SI :: SIValid(si) ==> (sf.requires(si) && SOValid(sf(si)))
+    }
+
+    lemma SFBehaves(si: SI)
+      requires Valid()
+      requires SIValid(si)
+      ensures sf.requires(si)
+      ensures SOValid(sf(si))
+    {
+      reveal Valid();
+    }
+
+    opaque ghost predicate MFConsistent(mf: MapFunction)
+      requires Valid()
+    {
+      reveal Valid();
+      && (|mf.inputs| == input_width)
+      && (|mf.outputs| == output_width)
+      && (|mf.state| == state_width)
+      && (forall si :: SIValid(si) ==> mf.sf.requires(si) && mf.sf(si) == sf(si))
+    }
+  }
+
+  opaque ghost predicate RFunctionEquiv(rf1: RFunction, rf2: RFunction)
+    requires rf1.Valid()
+    requires rf2.Valid()
+  {
+    reveal RFunction.Valid();
+    && rf1.input_width == rf2.input_width
+    && rf1.output_width == rf2.output_width
+    && rf1.state_width == rf2.state_width
+    && (forall si: SI :: rf1.SIValid(si) ==> rf1.sf(si) == rf2.sf(si))
+  }
+
+  const NullMF := MapFunction(
+    [], [], [],
+    (si: SI) requires |si.inputs| == 0 && |si.state| == 0 => SO([], []))
+
+  lemma NullMFValid()
+    ensures NullMF.Valid()
+  {
+    reveal MapFunction.Valid();
+    reveal Seq.ToSet();
+    reveal Seq.HasNoDuplicates();
   }
 
 }

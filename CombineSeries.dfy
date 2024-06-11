@@ -60,8 +60,6 @@ module CombineSeries {
       ensures SOValid(so, mf_b.outputs, mf_a.state + mf_b.state)
     {
       reveal MapFunction.Valid();
-      SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-      SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
       var si_a := SI(si.inputs, si.state[..|mf_a.state|]);
       var so_a := mf_a.sf(si_a);
       var si_b := SI(so_a.outputs, si.state[|mf_a.state|..]);
@@ -80,8 +78,6 @@ module CombineSeries {
       var inputs := r.inputs;
       var state := r.state;
       var outputs := r.outputs;
-      SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-      SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
       NoDuplicatesInConcat(mf_a.inputs, mf_b.inputs);
       NoDuplicatesInConcat(mf_a.outputs, mf_b.outputs);
       assert Seq.ToSet(mf_a.inputs + mf_b.inputs) !! Seq.ToSet(mf_a.outputs + mf_b.outputs) by {
@@ -104,7 +100,6 @@ module CombineSeries {
         StateONPsSeqSame(mf_b.state);
         assert Seq.ToSet(StateONPsSeq(mf_a.state + mf_b.state)) == StateONPs(mf_a.state + mf_b.state);
         assert StateONPs(mf_a.state + mf_b.state) == StateONPs(mf_a.state) + StateONPs(mf_b.state);
-        SubSeqsNoDuplicates(mf_a.inputs, StateONPsSeq(mf_a.state));
       }
       StateONPsSeqNoDuplicates(state);
       NoDuplicatesInConcat(inputs, StateONPsSeq(state));
@@ -115,7 +110,6 @@ module CombineSeries {
         StateINPsSeqSame(mf_b.state);
         assert Seq.ToSet(StateINPsSeq(mf_a.state + mf_b.state)) == StateINPs(mf_a.state + mf_b.state);
         assert StateINPs(mf_a.state + mf_b.state) == StateINPs(mf_a.state) + StateINPs(mf_b.state);
-        SubSeqsNoDuplicates(mf_b.outputs, StateINPsSeq(mf_b.state));
       }
       StateINPsSeqNoDuplicates(state);
       NoDuplicatesInConcat(outputs, StateINPsSeq(state));
@@ -162,8 +156,6 @@ module CombineSeries {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.inputs, mf_b.inputs);
       }
       assert (
@@ -215,8 +207,6 @@ module CombineSeries {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.outputs, mf_b.outputs);
       }
       assert (forall index: nat :: index < |conn| ==> (
@@ -300,8 +290,6 @@ module CombineSeries {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.state, mf_b.state);
       }
       assert (forall index: nat :: index < |conn| ==> (

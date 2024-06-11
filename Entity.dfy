@@ -279,4 +279,34 @@ module Entity {
     r
   }
 
+  const NullEntity := Entity({}, NullMF)
+
+  lemma NullEntityValid(c: Circuit)
+    requires CircuitValid(c)
+    ensures EntityValid(c, NullEntity)
+  {
+    var e := NullEntity;
+    assert ScValid(c, e.sc) by {
+      reveal ScValid();
+    }
+    assert e.mf.Valid() by {
+      NullMFValid();
+    }
+    assert EntitySomewhatValid(c, e) by {
+      reveal AllONPs();
+      reveal Seq.ToSet();
+      reveal ConnOutputs();
+      reveal ConnInputs();
+      reveal UnconnInputs();
+      reveal EntitySomewhatValid();
+    }
+    assert EntityEvaluatesCorrectly(c, e) by {
+      reveal Seq.ToSet();
+      assert |Seq.ToSet(e.mf.outputs)| == 0;
+      assert |StateINPs(e.mf.state)| == 0;
+      reveal EntityEvaluatesCorrectly();
+    }
+    reveal EntitySomewhatValid();
+  }
+
 }

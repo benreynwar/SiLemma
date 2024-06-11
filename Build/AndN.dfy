@@ -302,8 +302,6 @@ module Build.AndN {
       ));
       assert Seq.HasNoDuplicates(e1.mf.inputs);
       assert Seq.HasNoDuplicates([b_i0, b_o]) by {
-        assert Seq.HasNoDuplicates(e2.mf.inputs + e2.mf.outputs);
-        SubSeqsNoDuplicates(e2.mf.inputs, e2.mf.outputs);
         assert b_i0 in e2.mf.inputs;
         assert b_o in e2.mf.outputs;
         if b_i0 == b_o {
@@ -318,8 +316,11 @@ module Build.AndN {
         Seq.LemmaNoDuplicatesInConcat(e1.mf.inputs, [b_i0, b_o]);
       }
       assert Seq.HasNoDuplicates(state);
-      assert Seq.HasNoDuplicates(inputs + StateONPsSeq(state));
-      assert Seq.HasNoDuplicates(outputs + StateINPsSeq(state));
+      assert Seq.HasNoDuplicates(inputs);
+      assert Seq.HasNoDuplicates(outputs);
+      assert SeqsNoIntersection(inputs, outputs);
+      assert SeqsNoIntersection(inputs, StateONPsSeq(state));
+      assert SeqsNoIntersection(outputs, StateINPsSeq(state));
       reveal combined_mf.Valid();
     }
     combined_mf

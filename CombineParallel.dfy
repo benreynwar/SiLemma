@@ -60,8 +60,6 @@ module CombineParallel {
       ensures SOValid(so, mf_a.outputs + mf_b.outputs, mf_a.state + mf_b.state)
     {
       reveal MapFunction.Valid();
-      SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-      SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
       var si_a := SI(si.inputs[..|mf_a.inputs|], si.state[..|mf_a.state|]);
       var si_b := SI(si.inputs[|mf_a.inputs|..], si.state[|mf_a.state|..]);
       var so_a := mf_a.sf(si_a);
@@ -82,8 +80,6 @@ module CombineParallel {
       var inputs := r.inputs;
       var state := r.state;
       var outputs := r.outputs;
-      SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-      SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
       NoDuplicatesInConcat(mf_a.inputs, mf_b.inputs);
       NoDuplicatesInConcat(mf_a.outputs, mf_b.outputs);
       assert Seq.ToSet(mf_a.inputs + mf_b.inputs) !! Seq.ToSet(mf_a.outputs + mf_b.outputs) by {
@@ -107,8 +103,6 @@ module CombineParallel {
         assert Seq.ToSet(StateONPsSeq(mf_a.state + mf_b.state)) == StateONPs(mf_a.state + mf_b.state);
         ConcatSeqToSet(mf_a.inputs, mf_b.inputs);
         assert StateONPs(mf_a.state + mf_b.state) == StateONPs(mf_a.state) + StateONPs(mf_b.state);
-        SubSeqsNoDuplicates(mf_a.inputs, StateONPsSeq(mf_a.state));
-        SubSeqsNoDuplicates(mf_b.inputs, StateONPsSeq(mf_b.state));
       }
       StateONPsSeqNoDuplicates(state);
       NoDuplicatesInConcat(inputs, StateONPsSeq(state));
@@ -120,8 +114,6 @@ module CombineParallel {
         assert Seq.ToSet(StateINPsSeq(mf_a.state + mf_b.state)) == StateINPs(mf_a.state + mf_b.state);
         ConcatSeqToSet(mf_a.outputs, mf_b.outputs);
         assert StateINPs(mf_a.state + mf_b.state) == StateINPs(mf_a.state) + StateINPs(mf_b.state);
-        SubSeqsNoDuplicates(mf_a.outputs, StateINPsSeq(mf_a.state));
-        SubSeqsNoDuplicates(mf_b.outputs, StateINPsSeq(mf_b.state));
       }
       StateINPsSeqNoDuplicates(state);
       NoDuplicatesInConcat(outputs, StateINPsSeq(state));
@@ -168,8 +160,6 @@ module CombineParallel {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.inputs, mf_b.inputs);
       }
       assert (
@@ -211,8 +201,6 @@ module CombineParallel {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.outputs, mf_b.outputs);
       }
       assert (forall index: nat :: index < |conn| ==> (
@@ -310,8 +298,6 @@ module CombineParallel {
         && Seq.HasNoDuplicates(out)
       by {
         reveal MapFunction.Valid();
-        SubSeqsNoDuplicates(mf_a.inputs, mf_a.outputs);
-        SubSeqsNoDuplicates(mf_b.inputs, mf_b.outputs);
         NoDuplicatesInConcat(mf_a.state, mf_b.state);
       }
       assert (forall index: nat :: index < |conn| ==> (

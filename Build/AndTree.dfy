@@ -75,6 +75,7 @@ module Build.AndTree {
   {
     reveal MapFunction.Valid();
     reveal Seq.HasNoDuplicates();
+    reveal Seq.ToSet();
     MapFunction(
       inputs,
       [output],
@@ -135,8 +136,6 @@ module Build.AndTree {
     }
     assert Seq.HasNoDuplicates(e_left.mf.inputs + e_right.mf.inputs) by {
       reveal MapFunction.Valid();
-      SubSeqsNoDuplicates(e_left.mf.inputs, e_left.mf.outputs);
-      SubSeqsNoDuplicates(e_right.mf.inputs, e_right.mf.outputs);
       NoDuplicatesInConcat(e_left.mf.inputs, e_right.mf.inputs);
     }
     var mf := AndTreeMFImpl(n, e_left.mf.inputs + e_right.mf.inputs, e_and.mf.outputs[0]);
@@ -196,14 +195,11 @@ module Build.AndTree {
       reveal MapFunction.Valid();
       assert |si_left.inputs| == |mf_left.inputs|;
       assert |si_left.state| == |mf_left.state|;
-      SubSeqsNoDuplicates(mf_left.inputs, mf_left.outputs);
-      SubSeqsNoDuplicates(mf_right.inputs, mf_right.outputs);
       var so_left := mf_left.sf(si_left);
       var so_right := mf_right.sf(si_right);
       var so_top := mf_top.sf(si);
       assert so_top == SO(so_left.outputs + so_right.outputs, []);
       var si_and := SI(so_left.outputs + so_right.outputs, []);
-      SubSeqsNoDuplicates(mf_and.inputs, mf_and.outputs);
       assert SIValid(si_and, mf_and.inputs, mf_and.state);
       var so_and := mf_and.sf(si_and);
       var so := SO(so_and.outputs, []);

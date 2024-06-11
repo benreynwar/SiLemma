@@ -8,6 +8,37 @@ module Utils {
     a !! b
   }
 
+  predicate SeqsNoIntersection<T(==)>(a: seq<T>, b: seq<T>)
+  {
+    Seq.ToSet(a) !! Seq.ToSet(b)
+  }
+
+  predicate SeqsNoIntersectionByIndex<T(==)>(a: seq<T>, b: seq<T>)
+  {
+    !exists index1: nat, index2: nat :: index1 < |a| && index2 < |b| && a[index1] == b[index2]
+  }
+
+  lemma SeqsNoIntersectionEquiv<T>(a: seq<T>, b: seq<T>)
+    ensures SeqsNoIntersection(a, b) == SeqsNoIntersectionByIndex(a, b)
+  {
+    if !SeqsNoIntersectionByIndex(a, b) {
+        var index1: nat, index2: nat :| index1 < |a| && index2 < |b| && a[index1] == b[index2];
+        assert a[index1] in a;
+        assert a[index1] in b;
+        reveal Seq.ToSet();
+        assert a[index1] in Seq.ToSet(a);
+        assert a[index1] in Seq.ToSet(b);
+        assert a[index1] in Seq.ToSet(a) * Seq.ToSet(b);
+        assert !SeqsNoIntersection(a, b);
+    }
+    if !SeqsNoIntersection(a, b) {
+      var value :| value in Seq.ToSet(a) * Seq.ToSet(b);
+      reveal Seq.ToSet();
+      assert value in a;
+      assert value in b;
+    }
+  }
+
   lemma SubsetsNoIntersection<T>(a: set<T>, b: set<T>, aa: set<T>, bb: set<T>)
     requires SetsNoIntersection(a, b)
     requires aa <= a
@@ -269,6 +300,135 @@ module Utils {
     ensures Seq.ToSet(a + b) == Seq.ToSet(a) + Seq.ToSet(b)
   {
     reveal Seq.ToSet();
+  }
+
+  function ChunkSeq<T>(a: seq<T>, n_chunks: nat, chunk_size: nat): (r: seq<seq<T>>)
+    requires |a| == n_chunks * chunk_size
+    ensures chunk_size * |r| == |a|
+    ensures forall c :: c in r ==> |c| == chunk_size
+  {
+    if n_chunks == 0 then
+      []
+    else
+      ChunkSeq(a[..|a|-chunk_size], n_chunks-1, chunk_size) + [a[(|a|-chunk_size)..]]
+  }
+
+  lemma ChunkSeqSingle<T>(a: seq<T>)
+    ensures ChunkSeq(a, 1, |a|) == [a]
+  {
+  }
+
+  function DivMod(a: nat, b: nat): (r: (nat, nat))
+    requires b > 0
+    ensures r.0 * b + r.1 == a
+    ensures r.1 < b
+  {
+    if a < b then
+      (0, a)
+    else
+      var (p, q) := DivMod(a - b, b);
+      (p + 1, q)
+  }
+
+  lemma DivModHelper(a: nat, n_chunks: nat, chunk_size: nat)
+    requires a < n_chunks * chunk_size
+    ensures
+      var (p, q) := DivMod(a, chunk_size);
+      p < n_chunks
+  {
+  }
+
+  function JoinSets<T(!new)>(a: seq<set<T>>): (r: set<T>)
+    ensures forall x: T :: (exists b :: b in a && x in b) == (x in r)
+  {
+    if |a| == 0 then
+      {}
+    else
+      a[0] + JoinSets(a[1..])
+  }
+
+  function UnchunkSeq<T>(a: seq<seq<T>>, n_chunks: nat, chunk_size: nat): (r: seq<T>)
+    requires |a| == n_chunks
+    requires forall c :: c in a ==> |c| == chunk_size
+    ensures |r| == n_chunks * chunk_size
+  {
+    var r := seq(n_chunks*chunk_size, (index: nat) requires index < n_chunks*chunk_size =>
+      var (chunk_index, index_in_chunk) := DivMod(index, chunk_size);
+      a[chunk_index][index_in_chunk]);
+    r
+  }
+
+  ghost predicate NoDuplicatesNoIntersections<T>(a: seq<seq<T>>)
+  {
+    && (forall index: nat :: index < |a| ==> Seq.HasNoDuplicates(a[index]))
+    && (forall index1: nat, index2: nat :: index1 < |a| && index2 < |a| && (index1 != index2) ==>
+      SeqsNoIntersection(a[index1], a[index2]))
+  }
+
+  ghost predicate SeqSeqsNoIntersection<T>(a: seq<seq<T>>, b: seq<seq<T>>)
+  {
+    forall index1: nat, index2: nat :: index1 < |a| && index2 < |b| ==> SeqsNoIntersection(a[index1], b[index2])
+  }
+
+  lemma UnchunkSeqNoDuplicates<T>(a: seq<seq<T>>, n_chunks: nat, chunk_size: nat)
+    requires |a| == n_chunks
+    requires forall c :: c in a ==> |c| == chunk_size
+    requires NoDuplicatesNoIntersections(a)
+    ensures Seq.HasNoDuplicates(UnchunkSeq(a, n_chunks, chunk_size))
+  {
+    var r := UnchunkSeq(a, n_chunks, chunk_size);
+    forall index1: nat, index2: nat | index1 < |r| && index2 < |r| && index1 != index2
+      ensures r[index1] != r[index2]
+    {
+      var (p1, q1) := DivMod(index1, chunk_size);
+      DivModHelper(index1, n_chunks, chunk_size);
+      var (p2, q2) := DivMod(index2, chunk_size);
+      DivModHelper(index2, n_chunks, chunk_size);
+      assert r[index1] == a[p1][q1];
+      assert r[index2] == a[p2][q2];
+      if p1 == p2 {
+        assert q1 != q2;
+        assert a[p1][q1] != a[p2][q2] by {
+          reveal Seq.HasNoDuplicates();
+        }
+      } else {
+        assert Seq.ToSet(a[p1]) !! Seq.ToSet(a[p2]);
+        reveal Seq.ToSet();
+        assert a[p1][q1] in Seq.ToSet(a[p1]);
+        assert a[p1][q1] !in Seq.ToSet(a[p2]);
+        assert a[p2][q2] in Seq.ToSet(a[p2]);
+        assert a[p1][q1] != a[p2][q2];
+      }
+    }
+    reveal Seq.HasNoDuplicates();
+  }
+
+  lemma UnchunkSeqsNoIntersection<T>(a: seq<seq<T>>, b: seq<seq<T>>, n_chunks_a: nat, chunk_size_a: nat, n_chunks_b: nat, chunk_size_b: nat)
+    requires |a| == n_chunks_a
+    requires forall c :: c in a ==> |c| == chunk_size_a
+    requires |b| == n_chunks_b
+    requires forall c :: c in b ==> |c| == chunk_size_b
+    requires NoDuplicatesNoIntersections(a)
+    requires NoDuplicatesNoIntersections(b)
+    requires SeqSeqsNoIntersection(a, b)
+    ensures SeqsNoIntersection(UnchunkSeq(a, n_chunks_a, chunk_size_a), UnchunkSeq(b, n_chunks_b, chunk_size_b))
+  {
+    var uca := UnchunkSeq(a, n_chunks_a, chunk_size_a);
+    var ucb := UnchunkSeq(b, n_chunks_b, chunk_size_b);
+    forall index1: nat, index2: nat | index1 < n_chunks_a*chunk_size_a && index2 < n_chunks_b*chunk_size_b
+      ensures uca[index1] != ucb[index2]
+    {
+      var (p1, q1) := DivMod(index1, chunk_size_a);
+      DivModHelper(index1, n_chunks_a, chunk_size_a);
+      var (p2, q2) := DivMod(index2, chunk_size_b);
+      DivModHelper(index2, n_chunks_b, chunk_size_b);
+      assert uca[index1] == a[p1][q1];
+      assert ucb[index2] == b[p2][q2];
+      assert SeqsNoIntersection(a[p1], b[p2]);
+      SeqsNoIntersectionEquiv(a[p1], b[p2]);
+      assert a[p1][q1] != b[p2][q2];
+    }
+    SeqsNoIntersectionEquiv(uca, ucb);
   }
 
 }

@@ -431,4 +431,58 @@ module ConservedSubcircuit {
       reveal EntityEvaluatesCorrectly();
     }
   }
+
+  ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Entity)
+  {
+    && CircuitValid(new_c)
+    && EntityValid(new_c, e)
+    && IsIsland(new_c, e.sc)
+    && CircuitUnconnected(c, new_c)
+    && CircuitConserved(c, new_c)
+    && (new_c.NodeKind.Keys == c.NodeKind.Keys + e.sc)
+    && (c.NodeKind.Keys !! e.sc)
+  }
+
+  datatype EntityInserter = EntityInserter(
+    rf: RFunction,
+    fn: Circuit --> (Circuit, Entity)
+  ) {
+
+    ghost predicate SpecificValid(c: Circuit)
+      requires CircuitValid(c)
+      requires rf.Valid()
+    {
+      && fn.requires(c)
+      && var (new_c, e) := fn(c);
+      && rf.MFConsistent(e.mf)
+      && SimpleInsertion(c, new_c, e)
+    }
+
+    opaque ghost predicate Valid() {
+      && rf.Valid()
+      && (forall c: Circuit :: CircuitValid(c) ==> SpecificValid(c))
+    }
+
+    lemma ValidForCircuit(c: Circuit)
+      requires Valid()
+      requires CircuitValid(c)
+      ensures rf.Valid()
+      ensures SpecificValid(c)
+    {
+      reveal Valid();
+    }
+  }
+
+  lemma StillSimpleInsertionAfterEntitySwapMF(old_c: Circuit, new_c: Circuit, e: Entity, mf: MapFunction)
+    requires SimpleInsertion(old_c, new_c, e)
+    requires mf.Valid()
+    requires MapFunctionsEquiv(e.mf, mf)
+    ensures
+      var new_e := EntitySwapMF(new_c, e, mf);
+      SimpleInsertion(old_c, new_c, new_e)
+  {
+  }
+  
+
+
 }

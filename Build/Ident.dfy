@@ -8,13 +8,6 @@ module Build.IdentBuilder {
   import opened ConservedSubcircuit
   import opened MapFunction
 
-  datatype IdentInstance = IdentInstance(
-    inputs: seq<NP>,
-    outputs: seq<NP>,
-    state: seq<CNode>)
-  {
-  }
-
   function InsertIdentImpl(c: Circuit): (r: (Circuit, Entity))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
