@@ -160,19 +160,13 @@ module IslandBundle {
 
   function AddEntity(eb: IslandBundle, new_c: Circuit, new_e: Entity): (r: (IslandBundle, nat))
     requires IslandBundleValid(eb)
-    requires CircuitConserved(eb.c, new_c)
-    requires CircuitUnconnected(eb.c, new_c)
-    requires CircuitValid(new_c)
-    requires EntityValid(new_c, new_e)
-    requires IsIsland(new_c, new_e.sc)
-    requires forall n :: n in new_e.sc ==> n !in eb.NodeEquiv
-    requires forall n :: n in new_e.sc ==> n !in eb.bg.NodeKind
-    requires new_c.NodeKind.Keys == eb.c.NodeKind.Keys + new_e.sc
+    requires SimpleInsertion(eb.c, new_c, new_e)
     ensures IslandBundleValid(r.0)
     ensures r.1 < |r.0.es|
     ensures r.0.es[r.1].Some?
     ensures r.0.es[r.1].value == new_e
   {
+    reveal IslandBundleValid();
     AddEntityCorrect(eb, new_c, new_e);
     AddEntityImpl(eb, new_c, new_e)
   }
@@ -515,6 +509,73 @@ module IslandBundle {
       reveal IslandBundleValid();
     }
     new_eb
+  }
+
+  function IBInsert(ib: IslandBundle, ei: EntityInserter): (r: (IslandBundle, nat))
+    requires IslandBundleValid(ib)
+    requires ei.Valid()
+    ensures IslandBundleValid(r.0)
+    ensures r.1 < |r.0.es|
+    ensures r.0.es[r.1].Some?
+    ensures SimpleInsertion(ib.c, r.0.c, r.0.es[r.1].value)
+  {
+    reveal IslandBundleValid();
+    ei.ValidForCircuit(ib.c);
+    var (new_c, e) := ei.fn(ib.c);
+    AddEntity(ib, new_c, e)
+  }
+
+  function InsertTwoInSeries(c: Circuit, ei_a: EntityInserter, ei_b: EntityInserter): (r: (Circuit, Entity))
+    requires CircuitValid(c)
+    requires ei_a.Valid()
+    requires ei_b.Valid()
+    requires ei_a.rf.output_width == ei_b.rf.input_width
+    ensures SimpleInsertion(c, r.0, r.1)
+    ensures
+      reveal EntityInserter.Valid();
+      CombineSeriesRF(ei_a.rf, ei_b.rf).MFConsistent(r.1.mf)
+  {
+    var join_width := ei_a.rf.output_width;
+
+    var ib := IslandBundleFromCircuit(c);
+    var (ib_a, ref_a) := IBInsert(ib, ei_a);
+    var e_a := ib_a.es[ref_a].value;
+    assert ei_a.rf.Valid() && ei_a.rf.MFConsistent(e_a.mf) by {
+      reveal EntityInserter.Valid();
+      ei_a.ValidForCircuit(ib.c);
+    }
+    assert |e_a.mf.outputs| == join_width by {
+      reveal EntityInserter.Valid();
+      reveal RFunction.MFConsistent();
+    }
+
+    var (ib_b, ref_b) := IBInsert(ib_a, ei_b);
+    assert e_a == ib_b.es[ref_a].value;
+    var e_b := ib_b.es[ref_b].value;
+    assert |e_b.mf.inputs| == join_width by {
+      reveal EntityInserter.Valid();
+      reveal RFunction.MFConsistent();
+    }
+    assert ei_b.rf.Valid() && ei_b.rf.MFConsistent(e_b.mf) by {
+      reveal EntityInserter.Valid();
+      ei_b.ValidForCircuit(ib_a.c);
+    }
+
+    assert CombineSeriesEntitiesRequirements(ib_b.c, e_a, e_b) by {
+      reveal IslandBundleValid();
+    }
+    var (ib_combined, ref_combined) := IBCombineSeriesEntities(ib_b, ref_a, ref_b);
+    var e_combined := ib_combined.es[ref_combined].value;
+    assert e_combined.mf == SeriesCombiner(e_a.mf, e_b.mf).mf();
+
+    assert CombineSeriesRF(ei_a.rf, ei_b.rf).MFConsistent(e_combined.mf) by {
+      reveal RFunction.MFConsistent();
+      reveal MapFunction.Valid();
+    }
+
+    reveal IslandBundleValid();
+
+    (ib_combined.c, e_combined)
   }
 
 }

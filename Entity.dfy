@@ -279,6 +279,17 @@ module Entity {
     r
   }
 
+  function EntitySwapRF(c: Circuit, e: Entity, rf: RFunction): (r: Entity)
+    requires CircuitValid(c)
+    requires EntityValid(c, e)
+    requires rf.Valid()
+    requires rf.MFConsistent(e.mf)
+    ensures EntityValid(c, r)
+  {
+    var mf := rf.ReplacementMF(e.mf);
+    EntitySwapMF(c, e, mf)
+  }
+
   const NullEntity := Entity({}, NullMF)
 
   lemma NullEntityValid(c: Circuit)

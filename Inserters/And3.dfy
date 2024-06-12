@@ -1,4 +1,4 @@
-module Build.And3 {
+module Inserters.And3{
 
   import opened Std.Wrappers
 
@@ -14,7 +14,7 @@ module Build.And3 {
   import opened Subcircuit
   import opened MapConnection
 
-  import opened AndBuilder
+  import opened And
 
   function InsertAnd3Impl(c: Circuit): (r: (Circuit, Entity))
     requires CircuitValid(c)

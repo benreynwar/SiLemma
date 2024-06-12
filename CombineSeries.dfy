@@ -448,4 +448,34 @@ module CombineSeries {
     }
     (e12, conn)
   }
+
+  function CombinerSeriesSF(rf_a: RFunction, rf_b: RFunction, si: SI): (so: SO)
+    requires rf_a.Valid()
+    requires rf_b.Valid()
+    requires rf_a.output_width == rf_b.input_width
+    requires |si.inputs| == rf_a.input_width && |si.state| == rf_a.state_width + rf_b.state_width
+  {
+    reveal RFunction.Valid();
+    var si_a := SI(si.inputs, si.state[..rf_a.state_width]);
+    var so_a := rf_a.sf(si_a);
+    var si_b := SI(so_a.outputs, si.state[rf_a.state_width..]);
+    var so_b := rf_b.sf(si_b);
+    var so := SO(so_b.outputs, so_a.state + so_b.state);
+    so
+  }
+
+  function CombineSeriesRF(rf_a: RFunction, rf_b: RFunction): (rf: RFunction)
+    requires rf_a.Valid()
+    requires rf_b.Valid()
+    requires rf_a.output_width == rf_b.input_width
+    ensures rf.Valid()
+  {
+    reveal RFunction.Valid();
+    RFunction(
+      rf_a.input_width, rf_b.output_width, rf_a.state_width + rf_b.state_width,
+      (si: SI) requires |si.inputs| == rf_a.input_width && |si.state| == rf_a.state_width + rf_b.state_width =>
+        CombinerSeriesSF(rf_a, rf_b, si)
+    )
+  }
+
 }

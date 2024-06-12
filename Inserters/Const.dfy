@@ -1,4 +1,4 @@
-module Build.ConstBuilder {
+module Inserters.Const{
 
   import opened Circ
   import opened Eval

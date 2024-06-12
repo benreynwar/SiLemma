@@ -1,4 +1,4 @@
-module Build.AndTree {
+module Inserters.AndTree{
 
   import opened Std.Wrappers
 
@@ -16,9 +16,9 @@ module Build.AndTree {
   import opened CombineParallel
   import opened CombineSeries
 
-  import opened AndBuilder
-  import opened IdentBuilder
-  import opened ConstBuilder
+  import opened And
+  import opened Ident
+  import opened Const
 
   function AndTreeBehav(a: seq<bool>): bool
   {

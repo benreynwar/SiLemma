@@ -1,4 +1,4 @@
-module Build.AndN {
+module Inserters.AndN{
 
   import opened Std.Wrappers
 
@@ -14,9 +14,9 @@ module Build.AndN {
   import opened Subcircuit
   import opened MapConnection
 
-  import opened AndBuilder
-  import opened IdentBuilder
-  import opened ConstBuilder
+  import opened And
+  import opened Ident
+  import opened Const
 
   function AndNBehav(a: seq<bool>): bool
   {

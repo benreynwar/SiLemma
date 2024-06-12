@@ -1,11 +1,12 @@
-module Build.RegBuilder {
+module Inserters.Reg {
 
   import opened MapFunction
   import opened Circ
   import opened Entity
   import opened CombineManyParallel
-  import opened SeqBuilder
   import opened ConservedSubcircuit
+
+  import opened Seq
 
   function RegSF(n: nat, si: SI): (so: SO)
     requires |si.inputs| == n
@@ -30,11 +31,16 @@ module Build.RegBuilder {
     requires MFIsParallelCopies(old_mf, SeqRF(), n)
     ensures mf.Valid()
     ensures MapFunctionsEquiv(old_mf, mf)
+    ensures RegRF(n).MFConsistent(mf)
   {
     var mf := MapFunction(
       old_mf.inputs, old_mf.outputs, old_mf.state,
       (si: SI) requires SIValid(si, old_mf.inputs, old_mf.state) =>
       RegSF(n, si));
+    assert RegRF(n).MFConsistent(mf) by {
+      reveal RFunction.MFConsistent();
+      reveal MapFunction.Valid();
+    }
     assert mf.Valid() by {
       reveal MapFunction.Valid();
       reveal EntityInserter.Valid();
@@ -58,6 +64,7 @@ module Build.RegBuilder {
 
   function InsertReg(c: Circuit, n: nat): (r: (Circuit, Entity))
     requires CircuitValid(c)
+    ensures RegRF(n).MFConsistent(r.1.mf)
     ensures SimpleInsertion(c, r.0, r.1)
   {
     var inserter := SeqInserter();
@@ -69,7 +76,37 @@ module Build.RegBuilder {
     var mf := InsertRegMF(e.mf, n);
     var new_e := EntitySwapMF(new_c, e, mf);
     StillSimpleInsertionAfterEntitySwapMF(c, new_c, e, mf);
+    reveal RFunction.MFConsistent();
     (new_c, new_e)
+  }
+
+
+  function RegRF(n: nat): (r: RFunction)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    RFunction(n, n, n, (si: SI) requires |si.inputs| == n && |si.state| == n => RegSF(n, si))
+  }
+
+  function RegInserter(n: nat): (r: EntityInserter)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    reveal EntityInserter.Valid();
+    var rf := RegRF(n);
+    var ei := EntityInserter(RegRF(n), (c: Circuit) requires CircuitValid(c) => InsertReg(c, n));
+    assert ei.Valid() by {
+      assert rf.Valid();
+      forall c: Circuit | CircuitValid(c)
+        ensures ei.SpecificValid(c)
+      {
+        assert ei.fn.requires(c);
+        var (new_c, e) := ei.fn(c);
+        assert ei.rf.MFConsistent(e.mf);
+        assert SimpleInsertion(c, new_c, e);
+      }
+    }
+    EntityInserter(RegRF(n), (c: Circuit) requires CircuitValid(c) => InsertReg(c, n))
   }
 
 }

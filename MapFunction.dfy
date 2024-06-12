@@ -484,12 +484,12 @@ module MapFunction {
     state_width: nat,
     sf: SI --> SO
   ) {
-    predicate SIValid(si: SI)
+    predicate SIVal(si: SI)
     {
       && (|si.inputs| == input_width)
       && (|si.state| == state_width)
     }
-    predicate SOValid(so: SO)
+    predicate SOVal(so: SO)
     {
       && (|so.outputs| == output_width)
       && (|so.state| == state_width)
@@ -497,14 +497,14 @@ module MapFunction {
 
     opaque ghost predicate Valid()
     {
-      && forall si: SI :: SIValid(si) ==> (sf.requires(si) && SOValid(sf(si)))
+      && forall si: SI :: SIVal(si) ==> (sf.requires(si) && SOVal(sf(si)))
     }
 
     lemma SFBehaves(si: SI)
       requires Valid()
-      requires SIValid(si)
+      requires SIVal(si)
       ensures sf.requires(si)
-      ensures SOValid(sf(si))
+      ensures SOVal(sf(si))
     {
       reveal Valid();
     }
@@ -516,7 +516,27 @@ module MapFunction {
       && (|mf.inputs| == input_width)
       && (|mf.outputs| == output_width)
       && (|mf.state| == state_width)
-      && (forall si :: SIValid(si) ==> mf.sf.requires(si) && mf.sf(si) == sf(si))
+      && (forall si :: SIVal(si) ==> mf.sf.requires(si) && mf.sf(si) == sf(si))
+    }
+
+    function ReplacementMF(old_mf: MapFunction): (new_mf: MapFunction)
+      requires Valid()
+      requires old_mf.Valid()
+      requires MFConsistent(old_mf)
+      ensures new_mf.Valid()
+      ensures MapFunctionsEquiv(old_mf, new_mf)
+      ensures MFConsistent(new_mf)
+    {
+      reveal Valid();
+      reveal MapFunction.Valid();
+      reveal MFConsistent();
+      reveal MapFunctionsEquiv();
+      MapFunction(
+        old_mf.inputs,
+        old_mf.outputs,
+        old_mf.state,
+        (si: SI) requires SIVal(si) => sf(si)
+      )
     }
   }
 
@@ -528,8 +548,22 @@ module MapFunction {
     && rf1.input_width == rf2.input_width
     && rf1.output_width == rf2.output_width
     && rf1.state_width == rf2.state_width
-    && (forall si: SI :: rf1.SIValid(si) ==> rf1.sf(si) == rf2.sf(si))
+    && (forall si: SI :: rf1.SIVal(si) ==> rf1.sf(si) == rf2.sf(si))
   }
+
+  lemma MFConsistentEquiv(rf1: RFunction, rf2: RFunction, mf: MapFunction)
+    requires rf1.Valid()
+    requires rf2.Valid()
+    requires mf.Valid()
+    requires RFunctionEquiv(rf1, rf2) || RFunctionEquiv(rf2, rf1)
+    requires rf1.MFConsistent(mf)
+    ensures rf2.MFConsistent(mf)
+  {
+    reveal RFunctionEquiv();
+    reveal RFunction.MFConsistent();
+  }
+
+
 
   const NullMF := MapFunction(
     [], [], [],

@@ -1,4 +1,4 @@
-module Build.IdentBuilder {
+module Inserters.Seq {
 
   import opened Circ
   import opened Eval
@@ -8,7 +8,14 @@ module Build.IdentBuilder {
   import opened ConservedSubcircuit
   import opened MapFunction
 
-  function InsertIdentImpl(c: Circuit): (r: (Circuit, Entity))
+  function SeqSF(si: SI): (so: SO)
+    requires |si.inputs| == 1
+    requires |si.state| == 1
+  {
+    SO([si.state[0]], [si.inputs[0]])
+  }
+
+  function InsertSeqImpl(c: Circuit): (r: (Circuit, Entity))
     requires CircuitValid(c)
     ensures CircuitValid(r.0)
     ensures EntitySomewhatValid(r.0, r.1)
@@ -18,17 +25,15 @@ module Build.IdentBuilder {
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
-      NodeKind := c.NodeKind[new_node := CIden],
+      NodeKind := c.NodeKind[new_node := CSeq],
       PortSource := c.PortSource
     );
     var i_0 := NP(new_node, INPUT_0);
     var o_0 := NP(new_node, OUTPUT_0);
     var inputs := [i_0];
     var outputs := [o_0];
-    var state := [];
-    var mf := MapFunction(inputs, outputs, state, (si: SI) requires SIValid(si, inputs, state) =>
-      reveal Seq.ToSet();
-      SO([si.inputs[0]], []));
+    var state := [new_node];
+    var mf := MapFunction(inputs, outputs, state, SeqSF);
     var e := Entity({new_node}, mf);
     assert EntitySomewhatValid(new_c, e) by {
       reveal EntitySomewhatValid();
@@ -50,15 +55,16 @@ module Build.IdentBuilder {
     (new_c, e)
   }
 
-  lemma InsertIdentCorrect(c: Circuit)
+  lemma InsertSeqCorrect(c: Circuit)
     requires CircuitValid(c)
     ensures
-      var (new_c, e) := InsertIdentImpl(c);
+      var (new_c, e) := InsertSeqImpl(c);
       && EntityValid(new_c, e)
   {
-    var (new_c, e) := InsertIdentImpl(c);
+    var (new_c, e) := InsertSeqImpl(c);
     var o := e.mf.outputs[0];
     var i_0 := e.mf.inputs[0];
+    var os_0 := NP(e.mf.state[0], OUTPUT_0);
     var path := [e.mf.outputs[0]];
     assert PathValid(new_c, path) && PathValid(new_c, [o, i_0]) by {
       reveal PathValid();
@@ -68,23 +74,20 @@ module Build.IdentBuilder {
     reveal Seq.ToSet();
     forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
       ensures
-        var iv_0 := fi.inputs[i_0];
+        var sv_0 := fi.state[os_0.n];
         && FICircuitValid(new_c, fi)
-        && (EvaluateONP(new_c, o, fi) == EvalOk(iv_0))
+        && (EvaluateONP(new_c, o, fi) == EvalOk(sv_0))
     {
       var iv_0 := fi.inputs[i_0];
+      var sv_0 := fi.state[os_0.n];
       assert Seq.HasNoDuplicates(path);
       assert FICircuitValid(new_c, fi) by {
         reveal MapFunction.Valid();
         reveal FICircuitValid();
       }
-      assert EvaluateONP(new_c, o, fi) == EvaluateONPUnary(new_c, [o], fi);
+      assert EvaluateONP(new_c, o, fi) == EvalOk(sv_0);
       reveal Seq.HasNoDuplicates();
-      assert EvaluateINPInner(new_c, [o, i_0], fi) == EvalOk(iv_0);
-      assert EvaluateONPUnary(new_c, [o], fi) == EvalOk(iv_0);
-      assert EvaluateONPInner(new_c, [o], fi) == EvalOk(iv_0);
-      assert EvaluateONP(new_c, o, fi) == EvalOk(iv_0);
-      assert Evaluate(new_c, o, fi) == EvalOk(iv_0);
+      assert Evaluate(new_c, o, fi) == EvalOk(sv_0);
       assert Evaluate(new_c, o, fi) == EvalOk(e.mf.f(fi).outputs[o]) by {
         reveal MapMatchesSeqs();
       }
@@ -99,17 +102,17 @@ module Build.IdentBuilder {
     assert EntityValid(new_c, e);
   }
 
-  lemma InsertIdentConserves(c: Circuit)
+  lemma InsertSeqConserves(c: Circuit)
     requires CircuitValid(c)
-    ensures CircuitConserved(c, InsertIdentImpl(c).0)
-    ensures CircuitUnconnected(c, InsertIdentImpl(c).0)
+    ensures CircuitConserved(c, InsertSeqImpl(c).0)
+    ensures CircuitUnconnected(c, InsertSeqImpl(c).0)
     ensures
-      var (new_c, e) := InsertIdentImpl(c);
+      var (new_c, e) := InsertSeqImpl(c);
       IsIsland(new_c, e.sc)
   {
     reveal CircuitConserved();
     reveal CircuitUnconnected();
-    var (new_c, e) := InsertIdentImpl(c);
+    var (new_c, e) := InsertSeqImpl(c);
     reveal CircuitValid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
@@ -118,20 +121,44 @@ module Build.IdentBuilder {
     reveal IsIsland();
   }
 
-  function InsertIdent(c: Circuit): (r: (Circuit, Entity))
+  lemma InsertSeqMFConsistent(c: Circuit)
     requires CircuitValid(c)
     ensures
-      var (new_c, e) := r;
-      && r == InsertIdentImpl(c)
-      && CircuitValid(r.0)
-      && EntityValid(new_c, e)
-      && CircuitConserved(c, r.0)
-      && CircuitUnconnected(c, r.0)
-      && IsIsland(new_c, e.sc)
+      var (new_c, e) := InsertSeqImpl(c);
+      SeqRF().MFConsistent(e.mf)
   {
-    InsertIdentCorrect(c);
-    InsertIdentConserves(c);
-    InsertIdentImpl(c)
+    reveal RFunction.MFConsistent();
+  }
+
+  function InsertSeq(c: Circuit): (r: (Circuit, Entity))
+    requires CircuitValid(c)
+    ensures SimpleInsertion(c, r.0, r.1)
+    ensures SeqRF().MFConsistent(r.1.mf)
+  {
+    InsertSeqCorrect(c);
+    InsertSeqConserves(c);
+    InsertSeqMFConsistent(c);
+    InsertSeqImpl(c)
+  }
+
+  const SeqRFConst := RFunction(1, 1, 1, SeqSF)
+
+  function SeqRF(): (r: RFunction)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    SeqRFConst
+  }
+
+  const SeqInserterConst := EntityInserter(SeqRF(), InsertSeq)
+
+  function SeqInserter(): (r: EntityInserter)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    reveal EntityInserter.Valid();
+    var rf := SeqRF();
+    SeqInserterConst
   }
 
 }
