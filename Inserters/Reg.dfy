@@ -67,6 +67,7 @@ module Inserters.Reg {
     ensures RegRF(n).MFConsistent(r.1.mf)
     ensures SimpleInsertion(c, r.0, r.1)
   {
+    reveal SimpleInsertion();
     var inserter := SeqInserter();
     var (new_c, e) := InsertInParallel(c, inserter, n);
     assert |e.mf.inputs| == n && |e.mf.state| == n && |e.mf.outputs| == n by {

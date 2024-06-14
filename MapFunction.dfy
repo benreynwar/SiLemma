@@ -80,6 +80,15 @@ module MapFunction {
       Seq.ToSet(inputs) + Seq.ToSet(outputs) + StateONPs(state) + StateINPs(state)
     }
 
+    function rf(): (r: RFunction)
+      requires Valid()
+      ensures r.Valid()
+    {
+      reveal MapFunction.Valid();
+      reveal RFunction.Valid();
+      RFunction(|inputs|, |outputs|, |state|, sf)
+    }
+
     lemma InputsHasNoDuplicates()
       requires Valid()
       ensures Seq.HasNoDuplicates(inputs)
@@ -563,8 +572,6 @@ module MapFunction {
     reveal RFunction.MFConsistent();
   }
 
-
-
   const NullMF := MapFunction(
     [], [], [],
     (si: SI) requires |si.inputs| == 0 && |si.state| == 0 => SO([], []))
@@ -576,5 +583,62 @@ module MapFunction {
     reveal Seq.ToSet();
     reveal Seq.HasNoDuplicates();
   }
+
+  datatype DelayFunction = DelayFunction(
+    latency: nat,
+    input_width: nat,
+    output_width: nat,
+    bf: seq<bool> --> seq<bool>
+  ) {
+    predicate BIVal(bi: seq<bool>)
+    {
+      |bi| == input_width 
+    }
+    predicate BOVal(bo: seq<bool>)
+    {
+      |bo| == output_width 
+    }
+    ghost predicate Valid()
+    {
+      forall bi :: BIVal(bi) ==> bf.requires(bi) && BOVal(bf(bi))
+    }
+  }
+
+  ghost predicate RFWillOutput(rf: RFunction, delay: nat, state: seq<bool>, bo: seq<bool>)
+    requires rf.Valid()
+    requires |bo| == rf.output_width
+    requires |state| == rf.state_width
+  {
+    reveal RFunction.Valid();
+    forall si :: rf.SIVal(si) && si.state == state ==> (
+      if delay == 0 then
+        rf.sf(si).outputs == bo
+      else
+        var new_state := rf.sf(si).state;
+        RFWillOutput(rf, delay-1, new_state, bo)
+    )
+  } 
+
+  ghost predicate DelayREquiv(df: DelayFunction, rf: RFunction)
+    requires df.Valid()
+    requires rf.Valid()
+  {
+    reveal RFunction.Valid();
+    && (df.input_width == rf.input_width)
+    && (df.output_width == rf.output_width)
+    && (forall si :: rf.SIVal(si) ==>
+          var bi := si.inputs;
+          var bo := df.bf(bi);
+          var so := rf.sf(si);
+          if df.latency == 0 then
+              bo == so.outputs
+          else
+            RFWillOutput(rf, df.latency-1, so.state, bo)
+      )
+  }
+
+  // How can we be more generic about something that places a constaint on how inputs and outputs and state are related over time.
+  // An explict RF is a full description.
+  // What we want is a way to relate that to something else.
 
 }

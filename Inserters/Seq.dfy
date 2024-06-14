@@ -135,6 +135,7 @@ module Inserters.Seq {
     ensures SimpleInsertion(c, r.0, r.1)
     ensures SeqRF().MFConsistent(r.1.mf)
   {
+    reveal SimpleInsertion();
     InsertSeqCorrect(c);
     InsertSeqConserves(c);
     InsertSeqMFConsistent(c);

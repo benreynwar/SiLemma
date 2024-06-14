@@ -339,6 +339,7 @@ module Inserters.AndN{
     if n == 0 then
       InsertConst(c, true)
     else
+      reveal SimpleInsertion();
       var eb1 := IslandBundleFromCircuit(c);
       var (c1, e1) := InsertAndNImpl(c, n-1);
       assert c1.NodeKind.Keys == c.NodeKind.Keys + e1.sc;

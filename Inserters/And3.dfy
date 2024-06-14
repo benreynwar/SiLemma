@@ -21,6 +21,8 @@ module Inserters.And3{
     ensures CircuitValid(r.0)
     ensures EntityValid(r.0, r.1)
   {
+    reveal SimpleInsertion();
+
     var eb1 := IslandBundleFromCircuit(c);
     var (c1, e1) := InsertAnd(c);
     var (eb2, a_ref) := AddEntity(eb1, c1, e1);

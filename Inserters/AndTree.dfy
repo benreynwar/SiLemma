@@ -20,6 +20,18 @@ module Inserters.AndTree{
   import opened Ident
   import opened Const
 
+  function SubTreeSizes(n: nat): (r: (nat, nat))
+    requires n > 2
+    ensures r.0 + r.1 == n
+    ensures r.0 > 0
+    ensures r.1 > 0
+    ensures r.1 >= r.0
+  {
+    var p := if n % 2 == 0 then n/2 else (n-1)/2;
+    var q := n - p;
+    (p, q)
+  }
+
   function AndTreeBehav(a: seq<bool>): bool
   {
     if |a| == 0 then
@@ -30,7 +42,7 @@ module Inserters.AndTree{
       a[0] && a[1]
     else
       var n := |a|;
-      var p := if n % 2 == 0 then n/2 else (n-1)/2;
+      var p := SubTreeSizes(n).0;
       AndTreeBehav(a[..p]) && AndTreeBehav(a[p..])
   }
 
@@ -44,7 +56,7 @@ module Inserters.AndTree{
   ghost predicate MFReqs(n: nat, mf_a: MapFunction, mf_b: MapFunction, mf_and: MapFunction, mf_combined: MapFunction)
   {
     && n > 2
-    && var p := if n % 2 == 0 then n/2 else (n-1)/2;
+    && var p := SubTreeSizes(n).0;
     && AndTreeMFValid(p, mf_a)
     && AndTreeMFValid(n-p, mf_b)
     && AndMFValid(mf_and)
@@ -86,7 +98,8 @@ module Inserters.AndTree{
 
   function AndTreeMFFromEntities(c: Circuit, n: nat, e_left: Entity, e_right: Entity, e_and: Entity): (mf: MapFunction)
     requires
-      var p := if n % 2 == 0 then n/2 else (n-1)/2;
+      && n > 2
+      && var p := SubTreeSizes(n).0;
       && CircuitValid(c)
       && (e_left.sc !! e_right.sc)
       && (e_left.sc !! e_and.sc)
@@ -147,7 +160,8 @@ module Inserters.AndTree{
     // Show the equivalence of a map function that gets built by doing combine parallel and combine series
     // and the simpler map function that we'd like to replace it with.
     requires
-      var p := if n % 2 == 0 then n/2 else (n-1)/2;
+      && n > 2
+      && var p := SubTreeSizes(n).0;
       && AndTreeMFValid(p, mf_left)
       && AndTreeMFValid(n-p, mf_right)
       && AndTreeMFValid(n, mf)
@@ -167,7 +181,7 @@ module Inserters.AndTree{
       && mf_final.Valid()
       && MapFunctionsEquiv(mf_final, mf)
   {
-    var p := if n % 2 == 0 then n/2 else (n-1)/2;
+    var p := SubTreeSizes(n).0;
     reveal Seq.ToSet();
     var mf_top := ParallelCombiner(mf_left, mf_right).mf();
     var series_combiner := SeriesCombiner(mf_top, mf_and);
@@ -226,11 +240,12 @@ module Inserters.AndTree{
     ensures |r.2.outputs| == 1
     ensures r.2.Valid()
     ensures MapFunctionsEquiv(r.1.mf, r.2)
-    //ensures AndTreeMFValid(n, r.1.mf)
     ensures AndTreeMFValid(n, r.2)
     decreases n, 0
   {
-    var p := if n % 2 == 0 then n/2 else (n-1)/2;
+    reveal SimpleInsertion();
+
+    var p := SubTreeSizes(n).0;
     var eb1 := IslandBundleFromCircuit(c);
 
     // Insert the left part of the tree.
@@ -322,7 +337,7 @@ module Inserters.AndTree{
     else if n == 2 then
       InsertAnd(c)
     else
-      var p := if n % 2 == 0 then n/2 else (n-1)/2;
+      var p := SubTreeSizes(n).0;
 
       var (new_c, e, mf) := InsertAndTreeHelper(c, n);
 

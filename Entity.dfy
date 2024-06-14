@@ -285,6 +285,7 @@ module Entity {
     requires rf.Valid()
     requires rf.MFConsistent(e.mf)
     ensures EntityValid(c, r)
+    ensures rf.MFConsistent(r.mf)
   {
     var mf := rf.ReplacementMF(e.mf);
     EntitySwapMF(c, e, mf)

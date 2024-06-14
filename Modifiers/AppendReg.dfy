@@ -52,20 +52,39 @@ module AppendReg {
     requires CircuitValid(c)
     requires ei.Valid()
     ensures SimpleInsertion(c, r.0, r.1)
+    ensures
+      reveal EntityInserter.Valid();
+      AppendRegRF(ei.rf).MFConsistent(r.1.mf)
   {
     var reg_width := ei.rf.output_width;
     var ei_reg := RegInserter(reg_width);
     var (c_a, e_a) := InsertTwoInSeries(c, ei, ei_reg);
-    reveal EntityInserter.Valid();
+    assert ei.rf.Valid() by {
+      reveal EntityInserter.Valid();
+    }
     var new_rf := AppendRegRF(ei.rf);
     RFEquiv(ei.rf);
     var rf_combined := CombineSeriesRF(ei.rf, ei_reg.rf);
-    assert RFunctionEquiv(new_rf, rf_combined);
-    assert rf_combined.MFConsistent(e_a.mf);
+    assert CircuitValid(c_a) && EntityValid(c_a, e_a) && e_a.mf.Valid() by {
+      reveal SimpleInsertion();
+    }
     MFConsistentEquiv(rf_combined, new_rf, e_a.mf);
-    assert new_rf.MFConsistent(e_a.mf);
     var e_b := EntitySwapRF(c_a, e_a, new_rf);
-    (c_a, e_a)
+    assert SimpleInsertion(c, c_a, e_b) by {
+      reveal SimpleInsertion();
+    }
+    (c_a, e_b)
+  }
+
+  function AppendRegInserter(ei_base: EntityInserter): (ei: EntityInserter)
+    requires ei_base.Valid()
+    ensures ei.Valid()
+  {
+    reveal EntityInserter.Valid();
+    EntityInserter(
+      AppendRegRF(ei_base.rf),
+      (c: Circuit) requires CircuitValid(c) => AppendReg(c, ei_base)
+    )
   }
 
 }

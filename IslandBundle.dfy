@@ -167,6 +167,7 @@ module IslandBundle {
     ensures r.0.es[r.1].value == new_e
   {
     reveal IslandBundleValid();
+    reveal SimpleInsertion();
     AddEntityCorrect(eb, new_c, new_e);
     AddEntityImpl(eb, new_c, new_e)
   }
@@ -555,9 +556,11 @@ module IslandBundle {
     assert |e_b.mf.inputs| == join_width by {
       reveal EntityInserter.Valid();
       reveal RFunction.MFConsistent();
+      reveal SimpleInsertion();
     }
     assert ei_b.rf.Valid() && ei_b.rf.MFConsistent(e_b.mf) by {
       reveal EntityInserter.Valid();
+      reveal SimpleInsertion();
       ei_b.ValidForCircuit(ib_a.c);
     }
 
@@ -572,8 +575,10 @@ module IslandBundle {
       reveal RFunction.MFConsistent();
       reveal MapFunction.Valid();
     }
-
-    reveal IslandBundleValid();
+    assert SimpleInsertion(c, ib_combined.c, e_combined) by {
+      reveal IslandBundleValid();
+      reveal SimpleInsertion();
+    }
 
     (ib_combined.c, e_combined)
   }

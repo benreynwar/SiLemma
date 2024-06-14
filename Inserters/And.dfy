@@ -159,4 +159,24 @@ module Inserters.And{
     InsertAndImpl(c)
   }
 
+  const AndRFConst := RFunction(1, 0, 1, AndSF)
+
+  function AndRF(): (r: RFunction)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    AndRFConst
+  }
+
+  const AndInserterConst := EntityInserter(AndRF(), InsertAnd)
+
+  function AndInserter(): (r: EntityInserter)
+    ensures r.Valid()
+  {
+    reveal RFunction.Valid();
+    reveal EntityInserter.Valid();
+    var rf := AndRF();
+    AndInserterConst
+  }
+
 }

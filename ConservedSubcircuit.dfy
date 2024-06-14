@@ -432,7 +432,7 @@ module ConservedSubcircuit {
     }
   }
 
-  ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Entity)
+  opaque ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Entity)
   {
     && CircuitValid(new_c)
     && EntityValid(new_c, e)
@@ -476,11 +476,15 @@ module ConservedSubcircuit {
   lemma StillSimpleInsertionAfterEntitySwapMF(old_c: Circuit, new_c: Circuit, e: Entity, mf: MapFunction)
     requires SimpleInsertion(old_c, new_c, e)
     requires mf.Valid()
-    requires MapFunctionsEquiv(e.mf, mf)
+    requires
+      reveal SimpleInsertion();
+      MapFunctionsEquiv(e.mf, mf)
     ensures
+      reveal SimpleInsertion();
       var new_e := EntitySwapMF(new_c, e, mf);
       SimpleInsertion(old_c, new_c, new_e)
   {
+    reveal SimpleInsertion();
   }
   
 

@@ -38,204 +38,6 @@ module CombineManyParallel {
       SO(nm1_so.outputs + n_so.outputs, nm1_so.state + n_so.state)
   }
 
-  //function ChunkedInputs(ib: IslandBundle): (r: seq<seq<NP>>)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures NoDuplicatesNoIntersections(r)
-  //{
-  //  var chunked_inputs := seq(|ib.es|, (index: nat) requires index < |ib.es| => ib.es[index].value.mf.inputs);
-  //  assert NoDuplicatesNoIntersections(chunked_inputs) by {
-  //    forall index: nat | index < |ib.es|
-  //      ensures Seq.HasNoDuplicates(ib.es[index].value.mf.inputs)
-  //    {
-  //      reveal MapFunction.Valid();
-  //      reveal IslandBundleValid();
-  //      var mf := ib.es[index].value.mf;
-  //    }
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es| && index1 != index2
-  //      ensures SeqsNoIntersection(ib.es[index1].value.mf.inputs, ib.es[index2].value.mf.inputs)
-  //    {
-  //      reveal IslandBundleValid();
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      assert e1.sc !! e2.sc;
-  //      FInputsInSc(ib.c, e1);
-  //      FInputsInSc(ib.c, e2);
-  //      ScNoIntersectionNPsNoIntersection(e1.sc, e2.sc, Seq.ToSet(e1.mf.inputs), Seq.ToSet(e2.mf.inputs));
-  //    }
-  //  }
-  //  chunked_inputs
-  //}
-
-  //function ChunkedOutputs(ib: IslandBundle): (r: seq<seq<NP>>)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures NoDuplicatesNoIntersections(r)
-  //{
-  //  var chunked_outputs := seq(|ib.es|, (index: nat) requires index < |ib.es| => ib.es[index].value.mf.outputs);
-  //  assert NoDuplicatesNoIntersections(chunked_outputs) by {
-  //    forall index: nat | index < |ib.es|
-  //      ensures Seq.HasNoDuplicates(ib.es[index].value.mf.outputs)
-  //    {
-  //      reveal MapFunction.Valid();
-  //      reveal IslandBundleValid();
-  //      var mf := ib.es[index].value.mf;
-  //    }
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es| && index1 != index2
-  //      ensures SeqsNoIntersection(ib.es[index1].value.mf.outputs, ib.es[index2].value.mf.outputs)
-  //    {
-  //      reveal IslandBundleValid();
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      assert e1.sc !! e2.sc;
-  //      FOutputsInSc(ib.c, e1);
-  //      FOutputsInSc(ib.c, e2);
-  //      ScNoIntersectionNPsNoIntersection(e1.sc, e2.sc, Seq.ToSet(e1.mf.outputs), Seq.ToSet(e2.mf.outputs));
-  //    }
-  //  }
-  //  chunked_outputs
-  //}
-
-  //function ChunkedState(ib: IslandBundle): (r: seq<seq<CNode>>)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures NoDuplicatesNoIntersections(r)
-  //{
-  //  var chunked_state := seq(|ib.es|, (index: nat) requires index < |ib.es| => ib.es[index].value.mf.state);
-  //  assert NoDuplicatesNoIntersections(chunked_state) by {
-  //    forall index: nat | index < |ib.es|
-  //      ensures Seq.HasNoDuplicates(ib.es[index].value.mf.state)
-  //    {
-  //      reveal MapFunction.Valid();
-  //      reveal IslandBundleValid();
-  //    }
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es| && index1 != index2
-  //      ensures SeqsNoIntersection(ib.es[index1].value.mf.state, ib.es[index2].value.mf.state)
-  //    {
-  //      reveal IslandBundleValid();
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      assert e1.sc !! e2.sc;
-  //      StateInSc(ib.c, e1);
-  //      StateInSc(ib.c, e2);
-  //    }
-  //  }
-  //  chunked_state
-  //}
-
-  //function ChunkedStateONPs(ib: IslandBundle): (r: seq<seq<NP>>)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures NoDuplicatesNoIntersections(r)
-  //{
-  //  var chunked_state_onps := seq(|ib.es|, (index: nat) requires index < |ib.es| => StateONPsSeq(ib.es[index].value.mf.state));
-  //  assert NoDuplicatesNoIntersections(chunked_state_onps) by {
-  //    forall index: nat | index < |ib.es|
-  //      ensures Seq.HasNoDuplicates(StateONPsSeq(ib.es[index].value.mf.state))
-  //    {
-  //      reveal MapFunction.Valid();
-  //      reveal IslandBundleValid();
-  //      StateONPsSeqNoDuplicates(ib.es[index].value.mf.state);
-  //    }
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es| && index1 != index2
-  //      ensures SeqsNoIntersection(StateONPsSeq(ib.es[index1].value.mf.state), StateONPsSeq(ib.es[index2].value.mf.state))
-  //    {
-  //      reveal IslandBundleValid();
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      StateInSc(ib.c, e1);
-  //      StateInSc(ib.c, e2);
-  //      SeqsNoIntersectionEquiv(e1.mf.state, e2.mf.state);
-  //      SeqsNoIntersectionEquiv(StateONPsSeq(e1.mf.state), StateONPsSeq(e2.mf.state));
-  //    }
-  //  }
-  //  chunked_state_onps
-  //}
-
-  //function ChunkedStateINPs(ib: IslandBundle): (r: seq<seq<NP>>)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures NoDuplicatesNoIntersections(r)
-  //{
-  //  var chunked_state_inps := seq(|ib.es|, (index: nat) requires index < |ib.es| => StateINPsSeq(ib.es[index].value.mf.state));
-  //  assert NoDuplicatesNoIntersections(chunked_state_inps) by {
-  //    forall index: nat | index < |ib.es|
-  //      ensures Seq.HasNoDuplicates(StateINPsSeq(ib.es[index].value.mf.state))
-  //    {
-  //      reveal MapFunction.Valid();
-  //      reveal IslandBundleValid();
-  //      StateINPsSeqNoDuplicates(ib.es[index].value.mf.state);
-  //    }
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es| && index1 != index2
-  //      ensures SeqsNoIntersection(StateINPsSeq(ib.es[index1].value.mf.state), StateINPsSeq(ib.es[index2].value.mf.state))
-  //    {
-  //      reveal IslandBundleValid();
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      StateInSc(ib.c, e1);
-  //      StateInSc(ib.c, e2);
-  //      SeqsNoIntersectionEquiv(e1.mf.state, e2.mf.state);
-  //      SeqsNoIntersectionEquiv(StateINPsSeq(e1.mf.state), StateINPsSeq(e2.mf.state));
-  //    }
-  //  }
-  //  chunked_state_inps
-  //}
-
-  //lemma ChunkedNoIntersections(ib: IslandBundle)
-  //  requires IslandBundleValid(ib)
-  //  requires (forall e :: e in ib.es ==> e.Some?)
-  //  ensures
-  //    var chunked_inputs := ChunkedInputs(ib);
-  //    var chunked_outputs := ChunkedOutputs(ib);
-  //    var chunked_state_inps := ChunkedStateINPs(ib);
-  //    var chunked_state_onps := ChunkedStateONPs(ib);
-  //    forall index1: nat, index2: nat :: index1 < |ib.es| && index2 < |ib.es| ==> (
-  //      && SeqsNoIntersection(chunked_inputs[index1], chunked_outputs[index2])
-  //      && SeqsNoIntersection(chunked_state_onps[index1], chunked_inputs[index2])
-  //      && SeqsNoIntersection(chunked_state_inps[index1], chunked_outputs[index2])
-  //    )
-  //  {
-  //    var chunked_inputs := ChunkedInputs(ib);
-  //    var chunked_outputs := ChunkedOutputs(ib);
-  //    var chunked_state_inps := ChunkedStateINPs(ib);
-  //    var chunked_state_onps := ChunkedStateONPs(ib);
-  //    forall index1: nat, index2: nat | index1 < |ib.es| && index2 < |ib.es|
-  //      ensures SeqsNoIntersection(chunked_inputs[index1], chunked_outputs[index2])
-  //      ensures SeqsNoIntersection(chunked_state_onps[index1], chunked_inputs[index2])
-  //      ensures SeqsNoIntersection(chunked_state_inps[index1], chunked_outputs[index2])
-  //    {
-  //      var e1 := ib.es[index1].value;
-  //      var e2 := ib.es[index2].value;
-  //      if (index1 == index2) {
-  //        reveal IslandBundleValid();
-  //        reveal MapFunction.Valid();
-  //      } else {
-  //        reveal IslandBundleValid();
-  //        FAllInSc(ib.c, e1);
-  //        FAllInSc(ib.c, e2);
-  //        reveal NPsInSc();
-  //        reveal MapFunction.Valid();
-  //        StateONPsSeqSame(e1.mf.state);
-  //        StateINPsSeqSame(e1.mf.state);
-  //        ScNoIntersectionNPsNoIntersection(e1.sc, e2.sc, Seq.ToSet(chunked_inputs[index1]), Seq.ToSet(chunked_outputs[index2]));
-  //        ScNoIntersectionNPsNoIntersection(e2.sc, e1.sc, Seq.ToSet(chunked_inputs[index2]), Seq.ToSet(chunked_state_onps[index1]));
-  //        ScNoIntersectionNPsNoIntersection(e2.sc, e1.sc, Seq.ToSet(chunked_outputs[index2]), Seq.ToSet(chunked_state_inps[index1]));
-  //      }
-  //    }
-  //  }
-
-  //lemma UnchunkedStateINPsONPsEquiv(ib: IslandBundle, rf: RFunction)
-  //  requires CombineManyParallelEntitiesRequirements(ib, rf)
-  //  ensures
-  //    var chunked_state := ChunkedState(ib);
-  //    var state := UnchunkSeq(chunked_state, |ib.es|, rf.state_width);
-  //    var chunked_state_inps := ChunkedStateINPs(ib);
-  //    var chunked_state_onps := ChunkedStateONPs(ib);
-  //    && (StateINPsSeq(state) == UnchunkSeq(chunked_state_inps, |ib.es|, rf.state_width))
-  //    && (StateONPsSeq(state) == UnchunkSeq(chunked_state_onps, |ib.es|, rf.state_width))
-  //{
-  //}
-
   opaque ghost predicate MFIsParallelCopies(mf: MapFunction, rf: RFunction, n: nat)
     requires mf.Valid()
     requires rf.Valid()
@@ -282,6 +84,7 @@ module CombineManyParallel {
     requires ei.Valid()
     ensures
       reveal EntityInserter.Valid();
+      reveal SimpleInsertion();
       MFIsParallelCopies(ei.fn(c).1.mf, ei.rf, 1)
   {
     reveal EntityInserter.Valid();
@@ -326,6 +129,10 @@ module CombineManyParallel {
       assert so_other == so;
       assert so_other == ManyParallelSF(rf, 1, si);
     }
+    reveal SimpleInsertion();
+    assert MFIsParallelCopies(ei.fn(c).1.mf, ei.rf, 1) by {
+      reveal MFIsParallelCopies();
+    }
 
   }
 
@@ -335,10 +142,12 @@ module CombineManyParallel {
     ensures SimpleInsertion(c, r.0, r.1)
     ensures
       reveal EntityInserter.Valid();
+      reveal SimpleInsertion();
       MFIsParallelCopies(r.1.mf, ei.rf, n)
   {
     reveal EntityInserter.Valid();
     reveal MFIsParallelCopies();
+    reveal SimpleInsertion();
     if n == 0 then
       var r := (c, NullEntity);
       NullEntityValid(c);
