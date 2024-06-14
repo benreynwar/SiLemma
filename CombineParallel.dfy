@@ -416,7 +416,7 @@ module CombineParallel {
   }
 
   ghost predicate CombineParallelEntitiesRequirements(c: Circuit, e1: Entity, e2: Entity) {
-    && CircuitValid(c)
+    && c.Valid()
     && EntityValid(c, e1)
     && EntityValid(c, e2)
     && e1.sc !! e2.sc

@@ -54,19 +54,19 @@ module Subcircuit {
   }
 
   opaque function ConnInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
     ensures INPsValid(c, r)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal NPsInSc();
     reveal INPsValid();
     (set np: NP | np.n in sc && np in c.PortSource && c.PortSource[np].n !in sc :: np)
   }
 
   opaque function UnconnInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
     ensures INPsValid(c, r)
@@ -78,7 +78,7 @@ module Subcircuit {
   }
 
   lemma UnconnInputsAdd(c: Circuit, sc1: set<CNode>, sc2: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc1)
     requires ScValid(c, sc2)
     ensures ScValid(c, sc1 + sc2)
@@ -89,13 +89,13 @@ module Subcircuit {
   }
 
   opaque function ConnOutputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures NPsInSc(sc, r)
     ensures ONPsValid(c, r)
   {
     reveal NPsInSc();
     reveal ONPsValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     (set np: NP | np.n !in sc && np in c.PortSource && c.PortSource[np].n in sc ::
       c.PortSource[np])
   }
@@ -154,7 +154,7 @@ module Subcircuit {
   }
   
   function AllInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     ensures NPsInSc(sc, r)
     ensures INPsValid(c, r)
@@ -167,7 +167,7 @@ module Subcircuit {
   }
 
   function ConnFromTo(c: Circuit, sca: set<CNode>, scb: set<CNode>): (r: set<NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sca)
     requires ScValid(c, scb)
     ensures NPsInSc(scb, r)
@@ -178,7 +178,7 @@ module Subcircuit {
   }
 
   opaque predicate NoConnFromTo(c: Circuit, sca: set<CNode>, scb: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sca)
     requires ScValid(c, scb)
   {
@@ -191,7 +191,7 @@ module Subcircuit {
   }
 
   lemma InScOrComplement(c: Circuit, sc: set<CNode>, n: CNode)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     requires NodeValid(c, n)
     ensures
@@ -200,7 +200,7 @@ module Subcircuit {
       !((n in sc) && (n in sccomp))
   {
     var sccomp := SubcircuitComplement(c, sc);
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     assert (n in sc) || (n in sccomp);
     assert !((n in sc) && (n in sccomp));
@@ -213,14 +213,14 @@ module Subcircuit {
   }
 
   lemma IsIslandNoConns(c: Circuit, sc1: set<CNode>, sc2: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc1)
     requires ScValid(c, sc2)
     requires SetsNoIntersection(sc1, sc2)
     requires IsIsland(c, sc1)
     ensures NoConnFromTo(c, sc1, sc2) && NoConnFromTo(c, sc2, sc1)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal IsIsland();
     reveal NoConnFromTo();
@@ -240,7 +240,7 @@ module Subcircuit {
   }
 
   lemma NoConnsToComplementIsIsland(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     requires
       var sccomp := SubcircuitComplement(c, sc);
@@ -248,7 +248,7 @@ module Subcircuit {
     ensures
       IsIsland(c, sc)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal NoConnFromTo();
     reveal IsIsland();
@@ -281,23 +281,23 @@ module Subcircuit {
   }
 
   lemma SubcircuitComplementOwnInverse(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     ensures SubcircuitComplement(c, SubcircuitComplement(c, sc)) == sc
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
   }
 
 
   lemma IsIslandComplementIsIsland(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     requires IsIsland(c, sc)
     ensures IsIsland(c, SubcircuitComplement(c, sc))
   {
     reveal IsIsland();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     var sccomp := SubcircuitComplement(c, sc);
     IsIslandNoConns(c, sc, sccomp);
@@ -309,24 +309,24 @@ module Subcircuit {
   }
 
   lemma IsIslandNoOutputs(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     requires IsIsland(c, sc)
     ensures |ConnOutputs(c, sc)| == 0
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal IsIsland();
     reveal ConnOutputs();
   }
 
   lemma IsIslandNoInputs(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     requires IsIsland(c, sc)
     ensures |ConnInputs(c, sc)| == 0
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal IsIsland();
     reveal ConnInputs();

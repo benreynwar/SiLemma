@@ -24,12 +24,12 @@ module Circ {
   datatype Circuit = Circuit(
     NodeKind: map<CNode, CNodeKind>,
     PortSource: map<NP, NP>
-  )
-
-  opaque predicate CircuitValid(c: Circuit)
-  {
-    && (forall np :: np in c.PortSource.Values ==> ONPValid(c, np))
-    && (forall np :: np in c.PortSource.Keys ==> INPValid(c, np))
+  ) {
+    opaque predicate Valid()
+    {
+      && (forall np :: np in PortSource.Values ==> ONPValid(this, np))
+      && (forall np :: np in PortSource.Keys ==> INPValid(this, np))
+    }
   }
 
   function GetNewNodeInternal(c: Circuit, m: CNode, remaining_nodes: set<CNode>): (r: CNode)
@@ -204,13 +204,13 @@ module Circ {
   }
 
   function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires inp !in c.PortSource
     requires INPValid(c, inp)
     requires ONPValid(c, onp)
-    ensures CircuitValid(r)
+    ensures r.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     var new_c := Circuit(
       c.NodeKind,
       c.PortSource[inp := onp]
@@ -218,7 +218,7 @@ module Circ {
     assert forall np :: np in new_c.PortSource.Keys ==> (np in c.PortSource.Keys) || np == inp;
     assert forall np :: np in new_c.PortSource.Keys ==> INPValid(new_c, np);
     assert forall np :: np in new_c.PortSource.Values ==> (np in c.PortSource.Values) || np == onp;
-    assert CircuitValid(new_c);
+    assert new_c.Valid();
     new_c
   }
 
@@ -294,7 +294,7 @@ module Circ {
   }
 
   lemma AllINPsConnectedInternallyOrInBoundary(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, sc)
     ensures
       reveal ScValid();

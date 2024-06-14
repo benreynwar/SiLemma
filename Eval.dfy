@@ -6,7 +6,7 @@ module Eval {
 
   ghost predicate EvaluateConstRequirements(c: Circuit, fi: FI)
   {
-    && CircuitValid(c)
+    && c.Valid()
     && FICircuitValid(c, fi)
   }
 
@@ -75,7 +75,7 @@ module Eval {
         if onp in path then
           EvalError({}, {path + [onp]})
         else
-          reveal CircuitValid();
+          reveal Circuit.Valid();
           NodesNotInPathDecreases(c, path, onp);
           StillHasNoDuplicates(path, onp);
           AppendPathValid(c, path, onp);
@@ -213,7 +213,7 @@ module Eval {
   }
 
   function EvaluateONP(c: Circuit, np: NP, fi: FI): EvalResult
-    requires CircuitValid(c)
+    requires c.Valid()
     requires FICircuitValid(c, fi)
     requires ONPValid(c, np)
   {
@@ -224,7 +224,7 @@ module Eval {
   }
 
   function EvaluateINP(c: Circuit, np: NP, fi: FI): EvalResult
-    requires CircuitValid(c)
+    requires c.Valid()
     requires FICircuitValid(c, fi)
     requires INPValid(c, np)
   {
@@ -235,7 +235,7 @@ module Eval {
   }
   
   function Evaluate(c: Circuit, np: NP, fi: FI): EvalResult
-    requires CircuitValid(c)
+    requires c.Valid()
     requires FICircuitValid(c, fi)
     requires ONPValid(c, np) || INPValid(c, np)
   {

@@ -49,7 +49,7 @@ module AppendReg {
   }
 
   function AppendReg(c: Circuit, ei: EntityInserter): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ei.Valid()
     ensures SimpleInsertion(c, r.0, r.1)
     ensures
@@ -65,7 +65,7 @@ module AppendReg {
     var new_rf := AppendRegRF(ei.rf);
     RFEquiv(ei.rf);
     var rf_combined := CombineSeriesRF(ei.rf, ei_reg.rf);
-    assert CircuitValid(c_a) && EntityValid(c_a, e_a) && e_a.mf.Valid() by {
+    assert c_a.Valid() && EntityValid(c_a, e_a) && e_a.mf.Valid() by {
       reveal SimpleInsertion();
     }
     MFConsistentEquiv(rf_combined, new_rf, e_a.mf);
@@ -83,7 +83,7 @@ module AppendReg {
     reveal EntityInserter.Valid();
     EntityInserter(
       AppendRegRF(ei_base.rf),
-      (c: Circuit) requires CircuitValid(c) => AppendReg(c, ei_base)
+      (c: Circuit) requires c.Valid() => AppendReg(c, ei_base)
     )
   }
 

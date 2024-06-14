@@ -16,12 +16,12 @@ module Inserters.Seq {
   }
 
   function InsertSeqImpl(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntitySomewhatValid(r.0, r.1)
     ensures r.1.mf.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
@@ -56,7 +56,7 @@ module Inserters.Seq {
   }
 
   lemma InsertSeqCorrect(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := InsertSeqImpl(c);
       && EntityValid(new_c, e)
@@ -70,7 +70,7 @@ module Inserters.Seq {
       reveal PathValid();
     }
     LengthOneNoDuplicates(path);
-    assert CircuitValid(new_c);
+    assert new_c.Valid();
     reveal Seq.ToSet();
     forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
       ensures
@@ -103,7 +103,7 @@ module Inserters.Seq {
   }
 
   lemma InsertSeqConserves(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures CircuitConserved(c, InsertSeqImpl(c).0)
     ensures CircuitUnconnected(c, InsertSeqImpl(c).0)
     ensures
@@ -113,7 +113,7 @@ module Inserters.Seq {
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     var (new_c, e) := InsertSeqImpl(c);
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n in e.sc ==> new_c.PortSource[np].n in e.sc);
@@ -122,7 +122,7 @@ module Inserters.Seq {
   }
 
   lemma InsertSeqMFConsistent(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := InsertSeqImpl(c);
       SeqRF().MFConsistent(e.mf)
@@ -131,7 +131,7 @@ module Inserters.Seq {
   }
 
   function InsertSeq(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures SimpleInsertion(c, r.0, r.1)
     ensures SeqRF().MFConsistent(r.1.mf)
   {

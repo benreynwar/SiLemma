@@ -19,7 +19,7 @@ module Connection {
   }
 
   lemma ConnectionValuesInE1(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e1)
     requires EntityValid(c, e2)
     requires ConnectionValid(c, e1, e2, connection)
@@ -32,7 +32,7 @@ module Connection {
   }
 
   lemma ConnectionKeysInE2(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e1)
     requires EntityValid(c, e2)
     requires ConnectionValid(c, e1, e2, connection)
@@ -45,7 +45,7 @@ module Connection {
   }
 
   lemma ConnectionKeysINPs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e1)
     requires EntityValid(c, e2)
     requires ConnectionValid(c, e1, e2, connection)
@@ -60,7 +60,7 @@ module Connection {
   }
 
   lemma ConnectionValuesONPs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e1)
     requires EntityValid(c, e2)
     requires ConnectionValid(c, e1, e2, connection)
@@ -75,7 +75,7 @@ module Connection {
   }
 
   lemma IsIslandInputsNotInPortSource(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     requires IsIsland(c, e.sc)
     ensures Seq.ToSet(e.mf.inputs) !! c.PortSource.Keys
@@ -87,7 +87,7 @@ module Connection {
   }
 
   ghost predicate ConnectEntitiesRequirements(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection) {
-    && CircuitValid(c)
+    && c.Valid()
     && EntityValid(c, e1)
     && EntityValid(c, e2)
     && e1.sc !! e2.sc
@@ -129,11 +129,11 @@ module Connection {
   }
 
   function ConnectCircuit(c: Circuit, connection: map<NP, NP>): (r: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
-    ensures CircuitValid(r)
+    ensures r.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ConnectCircuitRequirements();
     var new_c := Circuit(
       c.NodeKind,
@@ -146,7 +146,7 @@ module Connection {
   }
 
   lemma ConnectCircuitOtherIsIsland(c: Circuit, connection: map<NP, NP>, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
     requires EntityValid(c, e)
     requires IsIsland(c, e.sc)
@@ -179,7 +179,7 @@ module Connection {
     }
 
   lemma ConnectEntitiesOtherConnUnchanged(c: Circuit, connection: map<NP, NP>, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
     requires EntityValid(c, e)
     requires NPsNotInSc(e.sc, connection.Keys)
@@ -249,7 +249,7 @@ module Connection {
   }
 
   lemma ConnectCircuitOtherEntityValid(c: Circuit, connection: map<NP, NP>, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
     requires EntityValid(c, e)
     requires NPsNotInSc(e.sc, connection.Keys)
@@ -292,7 +292,7 @@ module Connection {
   }
 
   lemma ConnectCircuitConservesSubcircuit(c: Circuit, connection: map<NP, NP>, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
     requires ScValid(c, sc)
     requires NoInternalConnections(connection, sc)
@@ -337,7 +337,7 @@ module Connection {
 
 
   lemma ConnectCircuitEntitiesStillValid(c: Circuit, connection: map<NP, NP>, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
     requires EntityValid(c, e)
     requires ConnectionsEntityCompatible(connection, e)
@@ -397,7 +397,7 @@ module Connection {
       ensures np.n in sc1+sc2 ==> new_c.PortSource[np].n in sc1+sc2
       ensures np.n !in sc1+sc2 ==> new_c.PortSource[np].n !in sc1+sc2
     {
-      reveal CircuitValid();
+      reveal Circuit.Valid();
       reveal ConnectionValid();
       reveal IsIsland();
       reveal ConnectEntitiesImpl();
@@ -467,7 +467,7 @@ module Connection {
   opaque function ConnectEntitiesImpl(
       c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection): (r: Circuit)
     requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    ensures CircuitValid(r)
+    ensures r.Valid()
     ensures r.NodeKind == c.NodeKind
   {
     var connection := conn.GetConnection();

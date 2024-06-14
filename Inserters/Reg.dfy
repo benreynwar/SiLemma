@@ -63,7 +63,7 @@ module Inserters.Reg {
   }
 
   function InsertReg(c: Circuit, n: nat): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures RegRF(n).MFConsistent(r.1.mf)
     ensures SimpleInsertion(c, r.0, r.1)
   {
@@ -95,10 +95,10 @@ module Inserters.Reg {
     reveal RFunction.Valid();
     reveal EntityInserter.Valid();
     var rf := RegRF(n);
-    var ei := EntityInserter(RegRF(n), (c: Circuit) requires CircuitValid(c) => InsertReg(c, n));
+    var ei := EntityInserter(RegRF(n), (c: Circuit) requires c.Valid() => InsertReg(c, n));
     assert ei.Valid() by {
       assert rf.Valid();
-      forall c: Circuit | CircuitValid(c)
+      forall c: Circuit | c.Valid()
         ensures ei.SpecificValid(c)
       {
         assert ei.fn.requires(c);
@@ -107,7 +107,7 @@ module Inserters.Reg {
         assert SimpleInsertion(c, new_c, e);
       }
     }
-    EntityInserter(RegRF(n), (c: Circuit) requires CircuitValid(c) => InsertReg(c, n))
+    EntityInserter(RegRF(n), (c: Circuit) requires c.Valid() => InsertReg(c, n))
   }
 
 }

@@ -80,7 +80,7 @@ module CombineManyParallel {
   }
 
   lemma MFIsParallelCopiesForSingle(c: Circuit, ei: EntityInserter)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ei.Valid()
     ensures
       reveal EntityInserter.Valid();
@@ -137,7 +137,7 @@ module CombineManyParallel {
   }
 
   opaque function InsertInParallel(c: Circuit, ei: EntityInserter, n: nat): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ei.Valid()
     ensures SimpleInsertion(c, r.0, r.1)
     ensures
@@ -185,7 +185,7 @@ module CombineManyParallel {
       }
       var (ib4, ref_combined) := IBCombineParallelEntities(ib3, ref_intermed, ref_inserted);
       var e_combined := ib4.es[ref_combined].value;
-      assert CircuitValid(ib4.c) by {
+      assert ib4.c.Valid() by {
         reveal IslandBundleValid();
       }
       assert EntityValid(ib4.c, e_combined) by {

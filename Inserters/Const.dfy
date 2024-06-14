@@ -9,12 +9,12 @@ module Inserters.Const{
   import opened MapFunction
 
   function InsertConstImpl(c: Circuit, v: bool): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntitySomewhatValid(r.0, r.1)
     ensures r.1.mf.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
@@ -50,7 +50,7 @@ module Inserters.Const{
   }
 
   lemma InsertConstCorrect(c: Circuit, v: bool)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := InsertConstImpl(c, v);
       && EntityValid(new_c, e)
@@ -96,7 +96,7 @@ module Inserters.Const{
   }
 
   lemma InsertConstConserves(c: Circuit, v: bool)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures CircuitConserved(c, InsertConstImpl(c, v).0)
     ensures CircuitUnconnected(c, InsertConstImpl(c, v).0)
     ensures
@@ -106,7 +106,7 @@ module Inserters.Const{
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     var (new_c, e) := InsertConstImpl(c, v);
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n in e.sc ==> new_c.PortSource[np].n in e.sc);
@@ -115,11 +115,11 @@ module Inserters.Const{
   }
 
   function InsertConst(c: Circuit, v: bool): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := r;
       && r == InsertConstImpl(c, v)
-      && CircuitValid(r.0)
+      && r.0.Valid()
       && EntityValid(new_c, e)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)

@@ -13,7 +13,7 @@ module Entity {
   )
 
   opaque predicate EntitySomewhatValid(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
   {
     && ScValid(c, e.sc)
     && (AllONPs(c, e.sc) >= Seq.ToSet(e.mf.outputs) >= ConnOutputs(c, e.sc))
@@ -22,7 +22,7 @@ module Entity {
   }
 
   lemma EntityFInputsAreValid(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures forall np :: np in e.mf.inputs ==> INPValid(c, np)
     ensures forall np :: np in StateONPs(e.mf.state) ==> ONPValid(c, np)
@@ -45,7 +45,7 @@ module Entity {
   }
 
   lemma EntityFOutputsAreValid(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures forall np :: np in e.mf.outputs ==> ONPValid(c, np)
     ensures forall np :: np in StateINPs(e.mf.state) ==> INPValid(c, np)
@@ -65,7 +65,7 @@ module Entity {
   }
 
   ghost opaque predicate EntityEvaluatesCorrectly(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, e.sc)
     requires e.mf.Valid()
     requires EntitySomewhatValid(c, e)
@@ -81,7 +81,7 @@ module Entity {
   }
 
   ghost opaque predicate EntitySeqEvaluatesCorrectly(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ScValid(c, e.sc)
     requires e.mf.Valid()
     requires EntitySomewhatValid(c, e)
@@ -97,7 +97,7 @@ module Entity {
   }
 
   ghost predicate EntityValid(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
   {
     && EntitySomewhatValid(c, e)
     && e.mf.Valid()
@@ -106,7 +106,7 @@ module Entity {
   }
 
   lemma FInputsInSc(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures NPsInSc(e.sc, Seq.ToSet(e.mf.inputs))
     ensures NPsInSc(e.sc, StateONPs(e.mf.state))
@@ -119,7 +119,7 @@ module Entity {
   }
 
   lemma FOutputsInSc(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures NPsInSc(e.sc, Seq.ToSet(e.mf.outputs))
     ensures NPsInSc(e.sc, StateINPs(e.mf.state))
@@ -132,7 +132,7 @@ module Entity {
   }
 
   lemma FAllInSc(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures NPsInSc(e.sc, e.mf.NPs())
   {
@@ -142,7 +142,7 @@ module Entity {
   }
 
   lemma StateInSc(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     ensures Seq.ToSet(e.mf.state) <= e.sc
   {
@@ -150,7 +150,7 @@ module Entity {
   }
 
   lemma StaysInSc(c: Circuit, e: Entity, np: NP)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     requires INPValid(c, np)
     requires np.n in e.sc
@@ -158,7 +158,7 @@ module Entity {
     ensures np in c.PortSource
     ensures c.PortSource[np].n in e.sc
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal EntitySomewhatValid();
     reveal UnconnInputs();
     reveal ConnInputs();
@@ -167,13 +167,13 @@ module Entity {
   }
 
   predicate OutputsInFOutputs(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
   {
     Seq.ToSet(e.mf.outputs) >= ConnOutputs(c, e.sc)
   }
 
   lemma InputsOfIslandNotInPortSource(c: Circuit, e: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires IsIsland(c, e.sc)
     requires EntityValid(c, e)
     ensures SetsNoIntersection(Seq.ToSet(e.mf.inputs), c.PortSource.Keys)
@@ -188,7 +188,7 @@ module Entity {
   }
 
   lemma NPInFInputsOfIslandNotInPortSource(c: Circuit, e: Entity, np: NP) 
-    requires CircuitValid(c)
+    requires c.Valid()
     requires IsIsland(c, e.sc)
     requires EntityValid(c, e)
     requires np in e.mf.inputs
@@ -216,7 +216,7 @@ module Entity {
   }
 
   lemma EntityValidFiValidToFICircuitValid(c: Circuit, e: Entity, fi: FI)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e)
     requires FIValid(fi, e.mf.inputs, e.mf.state)
     ensures FICircuitValid(c, fi)
@@ -238,7 +238,7 @@ module Entity {
   }
 
   lemma EntitiesSeparate(c: Circuit, e1: Entity, e2: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntitySomewhatValid(c, e1)
     requires EntitySomewhatValid(c, e2)
     requires e1.sc !! e2.sc
@@ -260,7 +260,7 @@ module Entity {
   }
 
   function EntitySwapMF(c: Circuit, e: Entity, mf: MapFunction): (r: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e)
     requires mf.Valid()
     requires MapFunctionsEquiv(e.mf, mf)
@@ -280,7 +280,7 @@ module Entity {
   }
 
   function EntitySwapRF(c: Circuit, e: Entity, rf: RFunction): (r: Entity)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e)
     requires rf.Valid()
     requires rf.MFConsistent(e.mf)
@@ -294,7 +294,7 @@ module Entity {
   const NullEntity := Entity({}, NullMF)
 
   lemma NullEntityValid(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures EntityValid(c, NullEntity)
   {
     var e := NullEntity;

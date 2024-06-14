@@ -9,12 +9,12 @@ module Inserters.Ident{
   import opened MapFunction
 
   function InsertIdentImpl(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntitySomewhatValid(r.0, r.1)
     ensures r.1.mf.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
@@ -51,7 +51,7 @@ module Inserters.Ident{
   }
 
   lemma InsertIdentCorrect(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := InsertIdentImpl(c);
       && EntityValid(new_c, e)
@@ -64,7 +64,7 @@ module Inserters.Ident{
       reveal PathValid();
     }
     LengthOneNoDuplicates(path);
-    assert CircuitValid(new_c);
+    assert new_c.Valid();
     reveal Seq.ToSet();
     forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
       ensures
@@ -100,7 +100,7 @@ module Inserters.Ident{
   }
 
   lemma InsertIdentConserves(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures CircuitConserved(c, InsertIdentImpl(c).0)
     ensures CircuitUnconnected(c, InsertIdentImpl(c).0)
     ensures
@@ -110,7 +110,7 @@ module Inserters.Ident{
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     var (new_c, e) := InsertIdentImpl(c);
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n in e.sc ==> new_c.PortSource[np].n in e.sc);
@@ -119,11 +119,11 @@ module Inserters.Ident{
   }
 
   function InsertIdent(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := r;
       && r == InsertIdentImpl(c)
-      && CircuitValid(r.0)
+      && r.0.Valid()
       && EntityValid(new_c, e)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)

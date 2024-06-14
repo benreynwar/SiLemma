@@ -25,7 +25,7 @@ module IslandBundle {
   )
 
   ghost opaque predicate IslandBundleValid(eb: IslandBundle) {
-    && CircuitValid(eb.c)
+    && eb.c.Valid()
     && (forall e :: e in eb.es && e.Some? ==> EntityValid(eb.c, e.value))
     // All Equivs are islands (i.e. not connections in or out)
     && (forall e :: e in eb.es && e.Some? ==> IsIsland(eb.c, e.value.sc))
@@ -43,7 +43,7 @@ module IslandBundle {
   }
 
   function IslandBundleFromCircuit(c: Circuit): (eb: IslandBundle)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures IslandBundleValid(eb)
   {
     var eb := IslandBundle(c, c, [], map[]);
@@ -68,11 +68,11 @@ module IslandBundle {
   }
 
   lemma IsIslandToNoScOutputs(c: Circuit, sc: set<CNode>)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires IsIsland(c, sc)
     ensures ScOutputBoundary(c, sc) == {}
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal IsIsland();
   }
 
@@ -80,7 +80,7 @@ module IslandBundle {
     requires IslandBundleValid(eb)
     requires CircuitConserved(eb.c, new_c)
     requires CircuitUnconnected(eb.c, new_c)
-    requires CircuitValid(new_c)
+    requires new_c.Valid()
     requires EntityValid(new_c, new_e)
     requires IsIsland(new_c, new_e.sc)
     requires forall n :: n in new_e.sc ==> n !in eb.NodeEquiv
@@ -89,7 +89,7 @@ module IslandBundle {
     ensures IslandBundleValid(AddEntityImpl(eb, new_c, new_e).0)
   {
     var (new_eb, ref) := AddEntityImpl(eb, new_c, new_e);
-    assert CircuitValid(eb.c) && CircuitValid(new_eb.c) by {
+    assert eb.c.Valid() && new_eb.c.Valid() by {
       reveal IslandBundleValid();
     }
     forall index: nat | index < |eb.es| && eb.es[index].Some?
@@ -139,7 +139,7 @@ module IslandBundle {
     requires IslandBundleValid(eb)
     requires CircuitConserved(eb.c, new_c)
     requires CircuitUnconnected(eb.c, new_c)
-    requires CircuitValid(new_c)
+    requires new_c.Valid()
     requires EntityValid(new_c, new_e)
     requires IsIsland(new_c, new_e.sc)
     requires forall n :: n in new_e.sc ==> n !in eb.NodeEquiv
@@ -277,7 +277,7 @@ module IslandBundle {
     }
     var (ib, e_index) := IBConnectEntitiesImpl(eb, e1_index, e2_index, e12, conn);
     reveal IslandBundleValid();
-    assert CircuitValid(ib.c);
+    assert ib.c.Valid();
     assert ib.NodeEquiv == (map n | n in eb.NodeEquiv :: if eb.NodeEquiv[n] == e1_index || eb.NodeEquiv[n] == e2_index
       then |ib.es|-1 else eb.NodeEquiv[n]);
     forall index: nat | index < |ib.es|
@@ -496,7 +496,7 @@ module IslandBundle {
     ensures IslandBundleValid(r)
   {
     var e := eb.es[e_index].value;
-    assert CircuitValid(eb.c) && EntityValid(eb.c, e) by {
+    assert eb.c.Valid() && EntityValid(eb.c, e) by {
       reveal IslandBundleValid();
     }
     var new_e := EntitySwapMF(eb.c, e, mf);
@@ -527,7 +527,7 @@ module IslandBundle {
   }
 
   function InsertTwoInSeries(c: Circuit, ei_a: EntityInserter, ei_b: EntityInserter): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     requires ei_a.Valid()
     requires ei_b.Valid()
     requires ei_a.rf.output_width == ei_b.rf.input_width

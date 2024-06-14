@@ -21,13 +21,13 @@ module ConservedSubcircuit {
   }
 
   lemma CircuitConservedToSubcircuitConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
+    requires ca.Valid()
+    requires cb.Valid()
     requires CircuitConserved(ca, cb)
     requires ScValid(ca, sc)
     ensures SubcircuitConserved(ca, cb, sc)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal CircuitConserved();
     reveal SubcircuitConserved();
     reveal ScValid();
@@ -70,8 +70,8 @@ module ConservedSubcircuit {
   }
 
   lemma EntitySomewhatValidConserved(ca: Circuit, cb: Circuit, e: Entity)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
+    requires ca.Valid()
+    requires cb.Valid()
     requires EntitySomewhatValid(ca, e)
     requires ScValid(ca, e.sc)
     requires SubcircuitConserved(ca, cb, e.sc)
@@ -88,7 +88,7 @@ module ConservedSubcircuit {
     reveal SeqInputs();
     reveal UnconnInputs();
     reveal ConnInputs();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal AllSeq();
   }
 
@@ -99,14 +99,14 @@ module ConservedSubcircuit {
   }
 
   lemma IsIslandConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
-    requires CircuitValid(ca)
+    requires ca.Valid()
     requires ScValid(ca, sc)
     requires IsIsland(ca, sc)
     requires CircuitConserved(ca, cb)
     requires CircuitUnconnected(ca, cb)
     ensures IsIsland(cb, sc)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal IsIsland();
     reveal CircuitConserved();
@@ -114,14 +114,14 @@ module ConservedSubcircuit {
   }
   
   lemma CircuitConservedSubcircuitConserved(ca: Circuit, cb: Circuit)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
+    requires ca.Valid()
+    requires cb.Valid()
     requires CircuitConserved(ca, cb)
     ensures
       && ScValid(ca, ca.NodeKind.Keys)
       && SubcircuitConserved(ca, cb, ca.NodeKind.Keys)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal CircuitConserved();
     reveal SubcircuitConserved();
     reveal ScValid();
@@ -150,8 +150,8 @@ module ConservedSubcircuit {
 
   ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Entity, fi: FI)
   {
-    && CircuitValid(ca)
-    && CircuitValid(cb)
+    && ca.Valid()
+    && cb.Valid()
     && EntityValid(ca, e)
     && SubcircuitConserved(ca, cb, e.sc)
     && (Seq.ToSet(e.mf.inputs) == fi.inputs.Keys)
@@ -169,8 +169,8 @@ module ConservedSubcircuit {
     requires INPValid(ca, Seq.Last(path))
     ensures PathValid(cb, path)
     ensures
-      && CircuitValid(ca)
-      && CircuitValid(cb)
+      && ca.Valid()
+      && cb.Valid()
       && INPValid(cb, Seq.Last(path))
       && FICircuitValid(ca, fi)
       && FICircuitValid(cb, fi)
@@ -180,7 +180,7 @@ module ConservedSubcircuit {
     decreases |NodesNotInPath(ca, path)|, 2
   {
     reveal PathValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal SubcircuitConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := Seq.Last(path);
@@ -197,7 +197,7 @@ module ConservedSubcircuit {
         var onp := ca.PortSource[head];
         if onp in path {
         } else {
-          reveal CircuitValid();
+          reveal Circuit.Valid();
           NodesNotInPathDecreases(ca, path, onp);
           StillHasNoDuplicates(path, onp);
           assert onp.n in e.sc;
@@ -221,8 +221,8 @@ module ConservedSubcircuit {
     requires Seq.HasNoDuplicates(path)
     ensures PathValid(cb, path)
     ensures
-      && CircuitValid(ca)
-      && CircuitValid(cb)
+      && ca.Valid()
+      && cb.Valid()
       && ONPValid(cb, Seq.Last(path))
       && var nk := cb.NodeKind[Seq.Last(path).n];
       && (nk.CXor? || nk.CAnd?)
@@ -232,7 +232,7 @@ module ConservedSubcircuit {
     decreases |NodesNotInPath(ca, path)|, 3
   {
     reveal PathValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal SubcircuitConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var nk := ca.NodeKind[path[|path|-1].n];
@@ -265,8 +265,8 @@ module ConservedSubcircuit {
     requires Seq.HasNoDuplicates(path)
     ensures PathValid(cb, path)
     ensures
-      && CircuitValid(ca)
-      && CircuitValid(cb)
+      && ca.Valid()
+      && cb.Valid()
       && ONPValid(cb, Seq.Last(path))
       && var nk := cb.NodeKind[Seq.Last(path).n];
       && (nk.CInv? || nk.CIden?)
@@ -276,7 +276,7 @@ module ConservedSubcircuit {
     decreases |NodesNotInPath(ca, path)|, 3
   {
     reveal PathValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal SubcircuitConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := path[|path|-1];
@@ -304,8 +304,8 @@ module ConservedSubcircuit {
     requires forall np :: np in path ==> np.n in e.sc
     ensures PathValid(cb, path)
     ensures
-      && CircuitValid(ca)
-      && CircuitValid(cb)
+      && ca.Valid()
+      && cb.Valid()
       && ONPValid(cb, Seq.Last(path))
       && FICircuitValid(ca, fi)
       && FICircuitValid(cb, fi)
@@ -313,7 +313,7 @@ module ConservedSubcircuit {
     decreases |NodesNotInPath(ca, path)|, 4
   {
     reveal PathValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal SubcircuitConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := path[|path|-1];
@@ -336,14 +336,14 @@ module ConservedSubcircuit {
     requires INPValid(ca, o) || ONPValid(ca, o)
     ensures INPValid(cb, o) || ONPValid(cb, o)
     ensures
-      && CircuitValid(ca)
-      && CircuitValid(cb)
+      && ca.Valid()
+      && cb.Valid()
       && FICircuitValid(ca, fi)
       && FICircuitValid(cb, fi)
       && (Evaluate(ca, o, fi) == Evaluate(cb, o, fi))
   {
     reveal PathValid();
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal SubcircuitConserved();
     assert PathValid(ca, [o]);
     FICircuitValidFromConservedValid(ca, cb, e, fi);
@@ -356,8 +356,8 @@ module ConservedSubcircuit {
   }
 
   lemma EntityConserved2(ca: Circuit, cb: Circuit, e: Entity)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
+    requires ca.Valid()
+    requires cb.Valid()
     requires CircuitConserved(ca, cb)
     requires EntityValid(ca, e)
     requires ScValid(cb, e.sc)
@@ -372,15 +372,15 @@ module ConservedSubcircuit {
   }
 
   lemma EntityConserved(ca: Circuit, cb: Circuit, e: Entity)
-    requires CircuitValid(ca)
-    requires CircuitValid(cb)
+    requires ca.Valid()
+    requires cb.Valid()
     requires EntityValid(ca, e)
     requires SubcircuitConserved(ca, cb, e.sc)
     requires ScValid(cb, e.sc)
     requires OutputsInFOutputs(cb, e)
     ensures EntityValid(cb, e)
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     reveal ScValid();
     reveal SubcircuitConserved();
 
@@ -434,7 +434,7 @@ module ConservedSubcircuit {
 
   opaque ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Entity)
   {
-    && CircuitValid(new_c)
+    && new_c.Valid()
     && EntityValid(new_c, e)
     && IsIsland(new_c, e.sc)
     && CircuitUnconnected(c, new_c)
@@ -449,7 +449,7 @@ module ConservedSubcircuit {
   ) {
 
     ghost predicate SpecificValid(c: Circuit)
-      requires CircuitValid(c)
+      requires c.Valid()
       requires rf.Valid()
     {
       && fn.requires(c)
@@ -460,12 +460,12 @@ module ConservedSubcircuit {
 
     opaque ghost predicate Valid() {
       && rf.Valid()
-      && (forall c: Circuit :: CircuitValid(c) ==> SpecificValid(c))
+      && (forall c: Circuit :: c.Valid() ==> SpecificValid(c))
     }
 
     lemma ValidForCircuit(c: Circuit)
       requires Valid()
-      requires CircuitValid(c)
+      requires c.Valid()
       ensures rf.Valid()
       ensures SpecificValid(c)
     {

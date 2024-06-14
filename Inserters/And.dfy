@@ -29,12 +29,12 @@ module Inserters.And{
   }
 
   function InsertAndImpl(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntitySomewhatValid(r.0, r.1)
     ensures r.1.mf.Valid()
   {
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
@@ -72,7 +72,7 @@ module Inserters.And{
   }
 
   lemma InsertAndCorrect(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := InsertAndImpl(c);
       && EntityValid(new_c, e)
@@ -86,7 +86,7 @@ module Inserters.And{
       reveal PathValid();
     }
     LengthOneNoDuplicates(path);
-    assert CircuitValid(new_c);
+    assert new_c.Valid();
     reveal Seq.ToSet();
     forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
       ensures
@@ -125,7 +125,7 @@ module Inserters.And{
   }
 
   lemma InsertAndConserves(c: Circuit)
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures CircuitConserved(c, InsertAndImpl(c).0)
     ensures CircuitUnconnected(c, InsertAndImpl(c).0)
     ensures
@@ -135,7 +135,7 @@ module Inserters.And{
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     var (new_c, e) := InsertAndImpl(c);
-    reveal CircuitValid();
+    reveal Circuit.Valid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
     assert (forall np :: np in new_c.PortSource && np.n in e.sc ==> new_c.PortSource[np].n in e.sc);
@@ -144,11 +144,11 @@ module Inserters.And{
   }
 
   function InsertAnd(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
+    requires c.Valid()
     ensures
       var (new_c, e) := r;
       && r == InsertAndImpl(c)
-      && CircuitValid(r.0)
+      && r.0.Valid()
       && EntityValid(new_c, e)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)
@@ -159,7 +159,7 @@ module Inserters.And{
     InsertAndImpl(c)
   }
 
-  const AndRFConst := RFunction(1, 0, 1, AndSF)
+  const AndRFConst := RFunction(2, 1, 0, AndSF)
 
   function AndRF(): (r: RFunction)
     ensures r.Valid()
@@ -175,8 +175,15 @@ module Inserters.And{
   {
     reveal RFunction.Valid();
     reveal EntityInserter.Valid();
+    reveal RFunction.MFConsistent();
     var rf := AndRF();
-    AndInserterConst
+    var ei := AndInserterConst;
+    assert ei.Valid() by {
+      forall c: Circuit | c.Valid() {
+        assert ei.SpecificValid(c);
+      }
+    }
+    ei
   }
 
 }

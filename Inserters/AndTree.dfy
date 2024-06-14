@@ -100,7 +100,7 @@ module Inserters.AndTree{
     requires
       && n > 2
       && var p := SubTreeSizes(n).0;
-      && CircuitValid(c)
+      && c.Valid()
       && (e_left.sc !! e_right.sc)
       && (e_left.sc !! e_and.sc)
       && (e_right.sc !! e_and.sc)
@@ -227,9 +227,9 @@ module Inserters.AndTree{
   }
 
   opaque function InsertAndTreeHelper(c: Circuit, n: nat): (r: (Circuit, Entity, MapFunction))
-    requires CircuitValid(c)
+    requires c.Valid()
     requires n > 2
-    ensures CircuitValid(r.0)
+    ensures r.0.Valid()
     ensures EntityValid(r.0, r.1)
     ensures CircuitUnconnected(c, r.0)
     ensures CircuitConserved(c, r.0)
@@ -303,7 +303,7 @@ module Inserters.AndTree{
       }
     }
 
-    assert CircuitValid(eb6.c) by {
+    assert eb6.c.Valid() by {
       reveal IslandBundleValid();
     }
     assert EntityValid(eb6.c, e_final) && IsIsland(eb6.c, e_final.sc) by {
@@ -319,8 +319,8 @@ module Inserters.AndTree{
   }
 
   opaque function InsertAndTreeImpl(c: Circuit, n: nat): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntityValid(r.0, r.1)
     ensures CircuitUnconnected(c, r.0)
     ensures CircuitConserved(c, r.0)

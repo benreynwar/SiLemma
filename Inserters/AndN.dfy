@@ -261,7 +261,7 @@ module Inserters.AndN{
   }
 
   function AndNMF(c: Circuit, e1: Entity, e2: Entity): (combined_mf: MapFunction)
-    requires CircuitValid(c)
+    requires c.Valid()
     requires EntityValid(c, e1)
     requires EntityValid(c, e2)
     requires e1.sc !! e2.sc
@@ -327,8 +327,8 @@ module Inserters.AndN{
   }
 
   function InsertAndNImpl(c: Circuit, n: nat): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntityValid(r.0, r.1)
     ensures CircuitUnconnected(c, r.0)
     ensures CircuitConserved(c, r.0)

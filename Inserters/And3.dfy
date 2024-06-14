@@ -17,8 +17,8 @@ module Inserters.And3{
   import opened And
 
   function InsertAnd3Impl(c: Circuit): (r: (Circuit, Entity))
-    requires CircuitValid(c)
-    ensures CircuitValid(r.0)
+    requires c.Valid()
+    ensures r.0.Valid()
     ensures EntityValid(r.0, r.1)
   {
     reveal SimpleInsertion();

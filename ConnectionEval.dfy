@@ -302,7 +302,7 @@ module ConnectionEval {
     assert NodeValid(new_c, head.n);
     var inp_0 := NP(head.n, INPUT_0);
     var inp_1 := NP(head.n, INPUT_1);
-    assert INPValid(new_c, inp_0) && INPValid(new_c, inp_1) by {reveal CircuitValid();}
+    assert INPValid(new_c, inp_0) && INPValid(new_c, inp_1) by {reveal Circuit.Valid();}
     NPNotInPathHelper(inp_0, e1.sc, e2.sc, prepath, path);
     NPNotInPathHelper(inp_1, e1.sc, e2.sc, prepath, path);
     if inp_0 in path {
@@ -367,7 +367,7 @@ module ConnectionEval {
     assert NodeValid(new_c, head.n);
     var inp_0 := NP(head.n, INPUT_0);
     var inp_1 := NP(head.n, INPUT_1);
-    assert INPValid(new_c, inp_0) && INPValid(new_c, inp_1) by {reveal CircuitValid();}
+    assert INPValid(new_c, inp_0) && INPValid(new_c, inp_1) by {reveal Circuit.Valid();}
     assert head.n !in fi_2.state;
     if inp_0 in path {
       assert (EvaluateONPBinary(new_c, path, fi) == EvaluateONPBinary(new_c, path, fi_2));
@@ -419,7 +419,7 @@ module ConnectionEval {
     assert head.n in e1.sc by {reveal PathInSubcircuit();}
     assert NodeValid(new_c, head.n);
     var inp_0 := NP(head.n, INPUT_0);
-    assert INPValid(new_c, inp_0) by {reveal CircuitValid();}
+    assert INPValid(new_c, inp_0) by {reveal Circuit.Valid();}
     NPNotInPathHelper(inp_0, e1.sc, e2.sc, prepath, path);
     if inp_0 in path {
       assert (EvaluateONPUnary(new_c, path, fi) == EvaluateONPUnary(new_c, path, fi_1));
@@ -510,7 +510,7 @@ module ConnectionEval {
       if np in new_c.PortSource {
         var onp := new_c.PortSource[np];
         assert ONPValid(new_c, onp) by {
-          reveal CircuitValid();
+          reveal Circuit.Valid();
         }
         assert onp.n in e1.sc by {
           reveal EntitySomewhatValid();
@@ -524,7 +524,7 @@ module ConnectionEval {
           assert && EvaluateINPInner(new_c, path, fi) == EvaluateINPInner(new_c, path, fi_1)
                  && Simpl(EvaluateINPInner(new_c, path, fi)) == Simpl(EvaluateINPInner(new_c, prepath+path, fi)) by {
             assert NPValid(new_c, onp) by {
-              reveal CircuitValid();
+              reveal Circuit.Valid();
             }
             NPNotInPathHelper(onp, e1.sc, e2.sc, prepath, path);
             StillHasNoDuplicates(path, onp);
@@ -603,7 +603,7 @@ module ConnectionEval {
           reveal Seq.ToSet();
         }
         assert ONPValid(new_c, onp) by {
-          reveal CircuitValid();
+          reveal Circuit.Valid();
         }
         assert onp !in path by {
           reveal PathInSubcircuit();
@@ -657,7 +657,7 @@ module ConnectionEval {
       if np in new_c.PortSource {
         var onp := new_c.PortSource[np];
         assert ONPValid(new_c, onp) by {
-          reveal CircuitValid();
+          reveal Circuit.Valid();
         }
         assert onp.n in e2.sc by {
           reveal Seq.ToSet();
@@ -723,7 +723,7 @@ module ConnectionEval {
       assert Simpl(EvaluateONPInner(new_c, prepath + path, fi)) == Simpl(EvaluateONPInner(new_c, path, fi));
     } else {
       assert np.n in new_c.NodeKind by {
-        reveal CircuitValid();
+        reveal Circuit.Valid();
       }
       var nk := new_c.NodeKind[np.n];
       match nk
@@ -1106,7 +1106,7 @@ module ConnectionEval {
   function ConnectEntities(
       c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection): (new_c: Circuit)
     requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    ensures CircuitValid(new_c)
+    ensures new_c.Valid()
     ensures EntityValid(new_c, e12)
     ensures IsIsland(new_c, e12.sc)
     ensures new_c.NodeKind == c.NodeKind
