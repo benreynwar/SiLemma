@@ -2,7 +2,7 @@ module ConservedSubcircuit {
 
   import opened Circ
   import opened Eval
-  import opened Entity
+  import opened Scuf
   import opened Utils
   import opened Subcircuit
   import opened MapFunction
@@ -69,17 +69,17 @@ module ConservedSubcircuit {
     && (forall np: NP :: np.n in sc && np !in ca.PortSource.Values ==> np !in cb.PortSource.Values)
   }
 
-  lemma EntitySomewhatValidConserved(ca: Circuit, cb: Circuit, e: Entity)
+  lemma ScufSomewhatValidConserved(ca: Circuit, cb: Circuit, e: Scuf)
     requires ca.Valid()
     requires cb.Valid()
-    requires EntitySomewhatValid(ca, e)
+    requires e.SomewhatValid(ca)
     requires ScValid(ca, e.sc)
     requires SubcircuitConserved(ca, cb, e.sc)
     requires OutputsInFOutputs(cb, e)
-    ensures EntitySomewhatValid(cb, e)
+    ensures e.SomewhatValid(cb)
   {
     reveal SubcircuitConserved();
-    reveal EntitySomewhatValid();
+    reveal e.SomewhatValid();
     reveal ScValid();
     reveal ConnOutputs();
     reveal SeqOutputs();
@@ -148,19 +148,19 @@ module ConservedSubcircuit {
     assert (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc && np in ca.PortSource ==> ca.PortSource[np] == cb.PortSource[np]);
   }
 
-  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Entity, fi: FI)
+  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fi: FI)
   {
     && ca.Valid()
     && cb.Valid()
-    && EntityValid(ca, e)
+    && e.Valid(ca)
     && SubcircuitConserved(ca, cb, e.sc)
-    && (Seq.ToSet(e.mf.inputs) == fi.inputs.Keys)
-    && (Seq.ToSet(e.mf.state) == fi.state.Keys)
+    && (Seq.ToSet(e.mp.inputs) == fi.inputs.Keys)
+    && (Seq.ToSet(e.mp.state) == fi.state.Keys)
     && OutputsInFOutputs(cb, e)
   }
 
   lemma EvaluateINPInnerConserved(
-    ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, fi: FI)
+    ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     requires |path| > 0
     requires forall np :: np in path ==> np.n in e.sc
@@ -188,11 +188,11 @@ module ConservedSubcircuit {
     if head in fi.inputs {
       assert EvaluateINPInner(ca, path, fi) == EvaluateINPInner(cb, path, fi);
     } else {
-      assert head !in e.mf.inputs by {
+      assert head !in e.mp.inputs by {
         reveal Seq.ToSet();
       }
       StaysInSc(ca, e, head);
-      assert fi.inputs.Keys == Seq.ToSet(e.mf.inputs);
+      assert fi.inputs.Keys == Seq.ToSet(e.mp.inputs);
       if head in ca.PortSource {
         var onp := ca.PortSource[head];
         if onp in path {
@@ -208,7 +208,7 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma EvaluateONPBinaryConserved(ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, fi: FI)
+  lemma EvaluateONPBinaryConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     requires |path| > 0
     requires ONPValid(ca, Seq.Last(path))
@@ -252,7 +252,7 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma EvaluateONPUnaryConserved(ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, fi: FI)
+  lemma EvaluateONPUnaryConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     requires |path| > 0
     requires ONPValid(ca, path[|path|-1])
@@ -289,16 +289,16 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma FICircuitValidFromConservedValid(ca: Circuit, cb: Circuit, e: Entity, fi: FI)
+  lemma FICircuitValidFromConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     ensures FICircuitValid(ca, fi) && FICircuitValid(cb, fi)
   {
-    EntityValidFiValidToFICircuitValid(ca, e, fi);
-    EntitySomewhatValidConserved(ca, cb, e);
-    EntityValidFiValidToFICircuitValid(cb, e, fi);
+    ScufValidFiValidToFICircuitValid(ca, e, fi);
+    ScufSomewhatValidConserved(ca, cb, e);
+    ScufValidFiValidToFICircuitValid(cb, e, fi);
   }
 
-  lemma EvaluateONPInnerConserved(ca: Circuit, cb: Circuit, e: Entity, path: seq<NP>, fi: FI)
+  lemma EvaluateONPInnerConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     requires EvaluateONPInnerRequirements(ca, path, fi)
     requires forall np :: np in path ==> np.n in e.sc
@@ -330,7 +330,7 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma EvaluateConserved(ca: Circuit, cb: Circuit, e: Entity, o: NP, fi: FI)
+  lemma EvaluateConserved(ca: Circuit, cb: Circuit, e: Scuf, o: NP, fi: FI)
     requires ConservedValid(ca, cb, e, fi)
     requires o.n in e.sc
     requires INPValid(ca, o) || ONPValid(ca, o)
@@ -355,30 +355,30 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma EntityConserved2(ca: Circuit, cb: Circuit, e: Entity)
+  lemma ScufConserved2(ca: Circuit, cb: Circuit, e: Scuf)
     requires ca.Valid()
     requires cb.Valid()
     requires CircuitConserved(ca, cb)
-    requires EntityValid(ca, e)
+    requires e.Valid(ca)
     requires ScValid(cb, e.sc)
     requires OutputsInFOutputs(cb, e)
-    ensures EntityValid(cb, e)
+    ensures e.Valid(cb)
   {
     CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     reveal ScValid();
-    EntityConserved(ca, cb, e);
+    ScufConserved(ca, cb, e);
   }
 
-  lemma EntityConserved(ca: Circuit, cb: Circuit, e: Entity)
+  lemma ScufConserved(ca: Circuit, cb: Circuit, e: Scuf)
     requires ca.Valid()
     requires cb.Valid()
-    requires EntityValid(ca, e)
+    requires e.Valid(ca)
     requires SubcircuitConserved(ca, cb, e.sc)
     requires ScValid(cb, e.sc)
     requires OutputsInFOutputs(cb, e)
-    ensures EntityValid(cb, e)
+    ensures e.Valid(cb)
   {
     reveal Circuit.Valid();
     reveal ScValid();
@@ -389,11 +389,11 @@ module ConservedSubcircuit {
       reveal ScValid();
     }
 
-    EntitySomewhatValidConserved(ca, cb, e);
+    ScufSomewhatValidConserved(ca, cb, e);
 
-    if EntityValid(ca, e) {
-      forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
-        ensures forall np :: np in (Seq.ToSet(e.mf.outputs) + StateINPs(e.mf.state)) ==> (
+    if e.Valid(ca) {
+      forall fi: FI | FIValid(fi, e.mp.inputs, e.mp.state)
+        ensures forall np :: np in (Seq.ToSet(e.mp.outputs) + StateINPs(e.mp.state)) ==> (
           && NPValid(ca, np)
           && NPValid(cb, np)
           && FICircuitValid(ca, fi)
@@ -401,18 +401,18 @@ module ConservedSubcircuit {
           && (Evaluate(ca, np, fi) == Evaluate(cb, np, fi))
         )
       {
-        EntityValidFiValidToFICircuitValid(ca, e, fi);
-        EntityValidFiValidToFICircuitValid(cb, e, fi);
-        forall np | np in (Seq.ToSet(e.mf.outputs) + StateINPs(e.mf.state))
+        ScufValidFiValidToFICircuitValid(ca, e, fi);
+        ScufValidFiValidToFICircuitValid(cb, e, fi);
+        forall np | np in (Seq.ToSet(e.mp.outputs) + StateINPs(e.mp.state))
           ensures
             && NPValid(ca, np) && NPValid(cb, np)
             && (Evaluate(ca, np, fi) == Evaluate(cb, np, fi))
         {
-          EntityFOutputsAreValid(ca, e);
+          ScufFOutputsAreValid(ca, e);
           FOutputsInSc(ca, e);
           reveal NPsInSc();
           assert NPValid(ca, np) by {
-            reveal EntitySomewhatValid();
+            reveal Scuf.SomewhatValid();
             reveal AllONPs();
             reveal AllSeq();
             reveal ONPsValid();
@@ -423,19 +423,19 @@ module ConservedSubcircuit {
       }
     }
 
-    assert e.mf.Valid() by {
-      reveal MapFunction.Valid();
+    assert e.uf.Valid() by {
+      reveal UpdateFunction.Valid();
     }
     assert ScValid(cb, e.sc);
-    assert EntityEvaluatesCorrectly(cb, e) by {
-      reveal EntityEvaluatesCorrectly();
+    assert e.EvaluatesCorrectly(cb) by {
+      reveal Scuf.EvaluatesCorrectly();
     }
   }
 
-  opaque ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Entity)
+  opaque ghost predicate SimpleInsertion(c: Circuit, new_c: Circuit, e: Scuf)
   {
     && new_c.Valid()
-    && EntityValid(new_c, e)
+    && e.Valid(new_c)
     && IsIsland(new_c, e.sc)
     && CircuitUnconnected(c, new_c)
     && CircuitConserved(c, new_c)
@@ -443,45 +443,45 @@ module ConservedSubcircuit {
     && (c.NodeKind.Keys !! e.sc)
   }
 
-  datatype EntityInserter = EntityInserter(
-    rf: RFunction,
-    fn: Circuit --> (Circuit, Entity)
+  datatype ScufInserter = ScufInserter(
+    uf: UpdateFunction,
+    fn: Circuit --> (Circuit, Scuf)
   ) {
 
     ghost predicate SpecificValid(c: Circuit)
       requires c.Valid()
-      requires rf.Valid()
+      requires uf.Valid()
     {
       && fn.requires(c)
       && var (new_c, e) := fn(c);
-      && rf.MFConsistent(e.mf)
+      && (e.uf == uf)
       && SimpleInsertion(c, new_c, e)
     }
 
     opaque ghost predicate Valid() {
-      && rf.Valid()
+      && uf.Valid()
       && (forall c: Circuit :: c.Valid() ==> SpecificValid(c))
     }
 
     lemma ValidForCircuit(c: Circuit)
       requires Valid()
       requires c.Valid()
-      ensures rf.Valid()
+      ensures uf.Valid()
       ensures SpecificValid(c)
     {
       reveal Valid();
     }
   }
 
-  lemma StillSimpleInsertionAfterEntitySwapMF(old_c: Circuit, new_c: Circuit, e: Entity, mf: MapFunction)
+  lemma StillSimpleInsertionAfterScufSwapMF(old_c: Circuit, new_c: Circuit, e: Scuf, uf: UpdateFunction)
     requires SimpleInsertion(old_c, new_c, e)
-    requires mf.Valid()
+    requires uf.Valid()
     requires
       reveal SimpleInsertion();
-      MapFunctionsEquiv(e.mf, mf)
+      UpdateFunctionsEquiv(e.uf, uf)
     ensures
       reveal SimpleInsertion();
-      var new_e := EntitySwapMF(new_c, e, mf);
+      var new_e := ScufSwapUF(new_c, e, uf);
       SimpleInsertion(old_c, new_c, new_e)
   {
     reveal SimpleInsertion();

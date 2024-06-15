@@ -5,6 +5,8 @@ module MapConnection {
   import opened MapFunction
   import opened Circ
   import opened Utils
+  import opened Scuf
+  import opened Subcircuit
 
   datatype ConnectionX<T(==)> = ConnectionX(
     in1: seq<T>,
@@ -160,7 +162,7 @@ module MapConnection {
 
 
   ghost predicate MakeConnectionsReqs(
-    mf_a: MapFunction, mf_b: MapFunction, mf_ab: MapFunction,
+    scuf_a: Scuf, scuf_b: Scuf, scuf_ab: Scuf,
     abi2ai: seq<nat>,
     abiao2bi: seq<(bool, nat)>,
     aobo2abo: seq<(bool, nat)>,
@@ -169,48 +171,49 @@ module MapConnection {
     asbs2abs: seq<(bool, nat)>
   )
   {
-    && ConnectionX(mf_ab.inputs, mf_a.inputs, abi2ai).Valid()
-    && ConnectionXY(mf_ab.inputs, mf_a.outputs, mf_b.inputs, true, false, abiao2bi).Valid()
-    && ConnectionXY(mf_a.outputs, mf_b.outputs, mf_ab.outputs, true, true, aobo2abo).Valid()
-    && ConnectionX(mf_ab.state, mf_a.state, abs2as).Valid()
-    && ConnectionX(mf_ab.state, mf_b.state, abs2bs).Valid()
-    && ConnectionXY(mf_a.state, mf_b.state, mf_ab.state, true, true, asbs2abs).Valid()
+    && ConnectionX(scuf_ab.mp.inputs, scuf_a.mp.inputs, abi2ai).Valid()
+    && ConnectionXY(scuf_ab.mp.inputs, scuf_a.mp.outputs, scuf_b.mp.inputs, true, false, abiao2bi).Valid()
+    && ConnectionXY(scuf_a.mp.outputs, scuf_b.mp.outputs, scuf_ab.mp.outputs, true, true, aobo2abo).Valid()
+    && ConnectionX(scuf_ab.mp.state, scuf_a.mp.state, abs2as).Valid()
+    && ConnectionX(scuf_ab.mp.state, scuf_b.mp.state, abs2bs).Valid()
+    && ConnectionXY(scuf_a.mp.state, scuf_b.mp.state, scuf_ab.mp.state, true, true, asbs2abs).Valid()
 
-    && mf_a.Valid()
-    && mf_b.Valid()
-    && mf_ab.Valid()
+    && scuf_a.MapValid()
+    && scuf_b.MapValid()
+    && scuf_ab.MapValid()
 
   }
 
   function MakeConnections(
-    mf_a: MapFunction, mf_b: MapFunction, mf_ab: MapFunction,
+    scuf_a: Scuf, scuf_b: Scuf, scuf_ab: Scuf,
     abi2ai: seq<nat>,
     abiao2bi: seq<(bool, nat)>,
     aobo2abo: seq<(bool, nat)>,
     abs2as: seq<nat>,
     abs2bs: seq<nat>,
     asbs2abs: seq<(bool, nat)>
-  ): (r: MFConnection)
-    requires MakeConnectionsReqs(mf_a, mf_b, mf_ab, abi2ai, abiao2bi, aobo2abo, abs2as, abs2bs, asbs2abs)
+  ): (r: ScufConnection)
+    requires MakeConnectionsReqs(scuf_a, scuf_b, scuf_ab, abi2ai, abiao2bi, aobo2abo,
+      abs2as, abs2bs, asbs2abs)
     ensures r.SomewhatValid()
   {
-    var conn := MFConnection(
-      mf_a, mf_b, mf_ab,
-      ConnectionX(mf_ab.inputs, mf_a.inputs, abi2ai),
-      ConnectionXY(mf_ab.inputs, mf_a.outputs, mf_b.inputs, true, false, abiao2bi),
-      ConnectionXY(mf_a.outputs, mf_b.outputs, mf_ab.outputs, true, true, aobo2abo),
-      ConnectionX(mf_ab.state, mf_a.state, abs2as),
-      ConnectionX(mf_ab.state, mf_b.state, abs2bs),
-      ConnectionXY(mf_a.state, mf_b.state, mf_ab.state, true, true, asbs2abs)
+    var conn := ScufConnection(
+      scuf_a, scuf_b, scuf_ab,
+      ConnectionX(scuf_ab.mp.inputs, scuf_a.mp.inputs, abi2ai),
+      ConnectionXY(scuf_ab.mp.inputs, scuf_a.mp.outputs, scuf_b.mp.inputs, true, false, abiao2bi),
+      ConnectionXY(scuf_a.mp.outputs, scuf_b.mp.outputs, scuf_ab.mp.outputs, true, true, aobo2abo),
+      ConnectionX(scuf_ab.mp.state, scuf_a.mp.state, abs2as),
+      ConnectionX(scuf_ab.mp.state, scuf_b.mp.state, abs2bs),
+      ConnectionXY(scuf_a.mp.state, scuf_b.mp.state, scuf_ab.mp.state, true, true, asbs2abs)
     );
     assert conn.abi2ai.Valid();
     conn
   }
 
-  datatype MFConnection = MFConnection(
-    mf_a: MapFunction,
-    mf_b: MapFunction,
-    mf_ab: MapFunction,
+  datatype ScufConnection = ScufConnection(
+    scuf_a: Scuf,
+    scuf_b: Scuf,
+    scuf_ab: Scuf,
     abi2ai: ConnectionX<NP>,
     abiao2bi: ConnectionXY<NP>,
     aobo2abo: ConnectionXY<NP>,
@@ -220,51 +223,63 @@ module MapConnection {
   )
   {
     ghost predicate SomewhatValid() {
-      && abi2ai.in1 == mf_ab.inputs
-      && abi2ai.out == mf_a.inputs
+      && abi2ai.in1 == scuf_ab.mp.inputs
+      && abi2ai.out == scuf_a.mp.inputs
       && abi2ai.Valid()
 
-      && abiao2bi.in1 == mf_ab.inputs
-      && abiao2bi.in2 == mf_a.outputs
-      && abiao2bi.out == mf_b.inputs
+      && abiao2bi.in1 == scuf_ab.mp.inputs
+      && abiao2bi.in2 == scuf_a.mp.outputs
+      && abiao2bi.out == scuf_b.mp.inputs
       && abiao2bi.in1out_direct
       && !abiao2bi.in2out_direct
       && abiao2bi.Valid()
 
-      && aobo2abo.in1 == mf_a.outputs
-      && aobo2abo.in2 == mf_b.outputs
+      && aobo2abo.in1 == scuf_a.mp.outputs
+      && aobo2abo.in2 == scuf_b.mp.outputs
       && aobo2abo.in1out_direct
       && aobo2abo.in2out_direct
-      && aobo2abo.out == mf_ab.outputs
+      && aobo2abo.out == scuf_ab.mp.outputs
       && aobo2abo.Valid()
 
-      && abs2as.in1 == mf_ab.state
-      && abs2as.out == mf_a.state
+      && abs2as.in1 == scuf_ab.mp.state
+      && abs2as.out == scuf_a.mp.state
       && abs2as.Valid()
 
-      && abs2bs.in1 == mf_ab.state
-      && abs2bs.out == mf_b.state
+      && abs2bs.in1 == scuf_ab.mp.state
+      && abs2bs.out == scuf_b.mp.state
       && abs2bs.Valid()
 
-      && asbs2abs.in1 == mf_a.state
-      && asbs2abs.in2 == mf_b.state
-      && asbs2abs.out == mf_ab.state
+      && asbs2abs.in1 == scuf_a.mp.state
+      && asbs2abs.in2 == scuf_b.mp.state
+      && asbs2abs.out == scuf_ab.mp.state
       && asbs2abs.in1out_direct
       && asbs2abs.in2out_direct
       && asbs2abs.Valid()
 
-      && mf_a.Valid()
-      && mf_b.Valid()
-      && mf_ab.Valid()
+      && scuf_a.MapValid()
+      && scuf_b.MapValid()
+      && scuf_ab.MapValid()
 
     }
 
     predicate ABValid()
       requires SomewhatValid()
     {
-      && (Seq.ToSet(mf_ab.state) == Seq.ToSet(mf_a.state) + Seq.ToSet(mf_b.state))
-      && (Seq.ToSet(mf_ab.inputs) == Seq.ToSet(mf_a.inputs) + (Seq.ToSet(mf_b.inputs) - GetConnection().Keys))
-      && (Seq.ToSet(mf_ab.outputs) <= Seq.ToSet(mf_a.outputs) + Seq.ToSet(mf_b.outputs))
+      && (Seq.ToSet(scuf_ab.mp.state) == Seq.ToSet(scuf_a.mp.state) + Seq.ToSet(scuf_b.mp.state))
+      && (Seq.ToSet(scuf_ab.mp.inputs) == Seq.ToSet(scuf_a.mp.inputs) + (Seq.ToSet(scuf_b.mp.inputs) - GetConnection().Keys))
+      && (Seq.ToSet(scuf_ab.mp.outputs) <= Seq.ToSet(scuf_a.mp.outputs) + Seq.ToSet(scuf_b.mp.outputs))
+      && (scuf_a.sc !! scuf_b.sc)
+      && (scuf_ab.sc == scuf_a.sc + scuf_b.sc)
+    }
+
+    ghost predicate ValidInCircuit(c: Circuit)
+      requires c.Valid()
+    {
+      && scuf_a.Valid(c)
+      && scuf_b.Valid(c)
+      && GetConnection().Keys !! c.PortSource.Keys
+      && IsIsland(c, this.scuf_a.sc)
+      && IsIsland(c, this.scuf_b.sc)
     }
 
     ghost predicate Valid() {
@@ -278,23 +293,23 @@ module MapConnection {
     //  requires SeqEvaluatesCorrectly()
     //  ensures EvaluatesCorrectly()
     //{
-    //  forall fi: FI | FIValid(fi, mf_ab.inputs, mf_ab.state)
+    //  forall fi: FI | FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
     //  {
-    //    var si := mf_ab.fi2si(fi);
-    //    assert SIValid(si, mf_ab.inputs, mf_ab.state);
-    //    reveal mf_ab.Valid();
-    //    assert SeqEvaluateSeparately(si) == mf_ab.sf(si) by {
+    //    var si := scuf_ab.fi2si(fi);
+    //    assert SIValid(si, scuf_ab.mp.inputs, scuf_ab.mp.state);
+    //    reveal scuf_ab.Valid();
+    //    assert SeqEvaluateSeparately(si) == scuf_ab.sf(si) by {
     //      reveal SeqEvaluatesCorrectly();
     //    }
-    //    assert EvaluateSeparately(fi) == mf_ab.f(fi);
+    //    assert EvaluateSeparately(fi) == scuf_ab.f(fi);
     //  }
     //}
 
     ghost opaque predicate EvaluatesCorrectly()
       requires SomewhatValid()
     {
-      reveal MapFunction.Valid();
-      forall fi: FI :: FIValid(fi, mf_ab.inputs, mf_ab.state) ==> EvaluateSeparately(fi) == mf_ab.f(fi)
+      //reveal MapFunction.Valid();
+      forall fi: FI :: FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state) ==> EvaluateSeparately(fi) == scuf_ab.f(fi)
     }
 
     lemma LemmaEvaluatesCorrectly()
@@ -303,55 +318,55 @@ module MapConnection {
     {
       reveal SeqEvaluatesCorrectly();
       reveal EvaluatesCorrectly();
-      forall fi: FI | FIValid(fi, mf_ab.inputs, mf_ab.state)
-        ensures EvaluateSeparately(fi) == mf_ab.f(fi)
+      forall fi: FI | FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+        ensures EvaluateSeparately(fi) == scuf_ab.f(fi)
       {
-        var si := mf_ab.fi2si(fi);
-        assert fi == mf_ab.si2fi(si) by {
-          mf_ab.fi2si2fi(fi);
+        var si := scuf_ab.mp.fi2si(fi);
+        assert fi == scuf_ab.mp.si2fi(si) by {
+          scuf_ab.mp.fi2si2fi(fi);
         }
-        reveal mf_ab.Valid();
-        assert SeqEvaluateSeparately(si) == mf_ab.sf(si);
+        reveal UpdateFunction.Valid();
+        assert SeqEvaluateSeparately(si) == scuf_ab.uf.sf(si);
         var si_a := si2sia(si);
         var si_b := si2sib(si);
-        var so_a := mf_a.sf(si_a);
-        var so_b := mf_b.sf(si_b);
+        var so_a := scuf_a.uf.sf(si_a);
+        var so_b := scuf_b.uf.sf(si_b);
         var so := soasob2so(so_a, so_b);
-        assert so == mf_ab.sf(si);
+        assert so == scuf_ab.uf.sf(si);
 
         var fi_a := fi2fia(fi);
         var fi_b := fi2fib(fi);
-        var fo_a := mf_a.f(fi_a);
-        var fo_b := mf_b.f(fi_b);
+        var fo_a := scuf_a.f(fi_a);
+        var fo_b := scuf_b.f(fi_b);
         var fo := foafob2fo(fo_a, fo_b);
         assert EvaluateSeparately(fi) == fo;
 
-        assert fi_a == mf_a.si2fi(si_a);
+        assert fi_a == scuf_a.mp.si2fi(si_a);
 
-        assert so_a == mf_a.fo2so(fo_a) by {
-          assert fi_a == mf_a.si2fi(si_a);
+        assert so_a == scuf_a.mp.fo2so(fo_a) by {
+          assert fi_a == scuf_a.mp.si2fi(si_a);
           calc {
-            mf_a.fo2so(fo_a);
-            mf_a.fo2so(mf_a.f(fi_a));
-            mf_a.fo2so(mf_a.so2fo(mf_a.sf(mf_a.fi2si(fi_a))));
-            {mf_a.so2fo2so(mf_a.sf(mf_a.fi2si(fi_a)));}
-            (mf_a.sf(mf_a.fi2si(fi_a)));
-            {mf_a.si2fi2si(si_a);}
-            (mf_a.sf(si_a));
+            scuf_a.mp.fo2so(fo_a);
+            scuf_a.mp.fo2so(scuf_a.f(fi_a));
+            scuf_a.mp.fo2so(scuf_a.mp.so2fo(scuf_a.uf.sf(scuf_a.mp.fi2si(fi_a))));
+            {scuf_a.mp.so2fo2so(scuf_a.uf.sf(scuf_a.mp.fi2si(fi_a)));}
+            (scuf_a.uf.sf(scuf_a.mp.fi2si(fi_a)));
+            {scuf_a.mp.si2fi2si(si_a);}
+            (scuf_a.uf.sf(si_a));
             so_a;
           }
         }
 
-        assert so_b == mf_b.fo2so(fo_b) by {
-          assert fi_b == mf_b.si2fi(si_b);
+        assert so_b == scuf_b.mp.fo2so(fo_b) by {
+          assert fi_b == scuf_b.mp.si2fi(si_b);
           calc {
-            mf_b.fo2so(fo_b);
-            mf_b.fo2so(mf_b.f(fi_b));
-            mf_b.fo2so(mf_b.so2fo(mf_b.sf(mf_b.fi2si(fi_b))));
-            {mf_b.so2fo2so(mf_b.sf(mf_b.fi2si(fi_b)));}
-            (mf_b.sf(mf_b.fi2si(fi_b)));
-            {mf_b.si2fi2si(si_b);}
-            (mf_b.sf(si_b));
+            scuf_b.mp.fo2so(fo_b);
+            scuf_b.mp.fo2so(scuf_b.f(fi_b));
+            scuf_b.mp.fo2so(scuf_b.mp.so2fo(scuf_b.uf.sf(scuf_b.mp.fi2si(fi_b))));
+            {scuf_b.mp.so2fo2so(scuf_b.uf.sf(scuf_b.mp.fi2si(fi_b)));}
+            (scuf_b.uf.sf(scuf_b.mp.fi2si(fi_b)));
+            {scuf_b.mp.si2fi2si(si_b);}
+            (scuf_b.uf.sf(si_b));
             so_b;
           }
         }
@@ -359,35 +374,37 @@ module MapConnection {
         calc {
           EvaluateSeparately(fi);
           foafob2fo(fo_a, fo_b);
-          mf_ab.so2fo(soasob2so(mf_a.fo2so(fo_a), mf_b.fo2so(fo_b)));
+          scuf_ab.mp.so2fo(soasob2so(scuf_a.mp.fo2so(fo_a), scuf_b.mp.fo2so(fo_b)));
           {
-            assert so_a == mf_a.fo2so(fo_a);
-            assert so_b == mf_b.fo2so(fo_b);
+            assert so_a == scuf_a.mp.fo2so(fo_a);
+            assert so_b == scuf_b.mp.fo2so(fo_b);
           }
-          mf_ab.so2fo(soasob2so(so_a, so_b));
-          mf_ab.so2fo(so);
-          mf_ab.so2fo(mf_ab.sf(si));
+          scuf_ab.mp.so2fo(soasob2so(so_a, so_b));
+          scuf_ab.mp.so2fo(so);
+          scuf_ab.mp.so2fo(scuf_ab.uf.sf(si));
           {
-            assert si == mf_ab.fi2si(fi);
-            reveal mf_ab.Valid();
+            assert si == scuf_ab.mp.fi2si(fi);
+            //reveal scuf_ab.Valid();
           }
-          mf_ab.so2fo(mf_ab.sf(mf_ab.fi2si(fi)));
-          {reveal mf_ab.Valid();}
-          mf_ab.f(fi);
+          scuf_ab.mp.so2fo(scuf_ab.uf.sf(scuf_ab.mp.fi2si(fi)));
+          {
+            //reveal scuf_ab.Valid();
+          }
+          scuf_ab.f(fi);
         }
       }
     }
 
     function EvaluateSeparately(fi: FI): (fo: FO)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      ensures FOValid(fo, mf_ab.outputs, mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures FOValid(fo, scuf_ab.mp.outputs, scuf_ab.mp.state)
     {
-      reveal MapFunction.Valid();
+      //reveal MapFunction.Valid();
       var fi_a := fi2fia(fi);
       var fi_b := fi2fib(fi);
-      var fo_a := mf_a.f(fi_a);
-      var fo_b := mf_b.f(fi_b);
+      var fo_a := scuf_a.f(fi_a);
+      var fo_b := scuf_b.f(fi_b);
       var fo := foafob2fo(fo_a, fo_b);
       fo
     }
@@ -395,45 +412,46 @@ module MapConnection {
     ghost opaque predicate SeqEvaluatesCorrectly()
       requires SomewhatValid()
     {
-      reveal MapFunction.Valid();
-      forall si: SI :: SIValid(si, mf_ab.inputs, mf_ab.state) ==> SeqEvaluateSeparately(si) == mf_ab.sf(si)
+      reveal UpdateFunction.Valid();
+      forall si: SI :: SIValid(si, scuf_ab.mp.inputs, scuf_ab.mp.state) ==>
+        SeqEvaluateSeparately(si) == scuf_ab.uf.sf(si)
     }
 
     function SeqEvaluateSeparately(si: SI): (so: SO)
       requires SomewhatValid()
-      requires SIValid(si, mf_ab.inputs, mf_ab.state)
-      ensures SOValid(so, mf_ab.outputs, mf_ab.state)
+      requires SIValid(si, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures SOValid(so, scuf_ab.mp.outputs, scuf_ab.mp.state)
     {
-      reveal MapFunction.Valid();
       var si_a := si2sia(si);
       var si_b := si2sib(si);
-      var so_a := mf_a.sf(si_a);
-      var so_b := mf_b.sf(si_b);
+      reveal UpdateFunction.Valid();
+      var so_a := scuf_a.uf.sf(si_a);
+      var so_b := scuf_b.uf.sf(si_b);
       var so := soasob2so(so_a, so_b);
       so
     }
 
     function GetConnectionInternal(start: nat): (r: map<NP, NP>)
       requires SomewhatValid()
-      requires start <= |mf_b.inputs|
-      ensures r.Keys == Seq.ToSet(mf_b.inputs[start..]) - Seq.ToSet(mf_ab.inputs)
-      ensures r.Values <= Seq.ToSet(mf_a.outputs)
+      requires start <= |scuf_b.mp.inputs|
+      ensures r.Keys == Seq.ToSet(scuf_b.mp.inputs[start..]) - Seq.ToSet(scuf_ab.mp.inputs)
+      ensures r.Values <= Seq.ToSet(scuf_a.mp.outputs)
       ensures ConnectionCorrect(r)
-      decreases |mf_b.inputs| - start
+      decreases |scuf_b.mp.inputs| - start
     {
       reveal ConnectionX<NP>.Valid();
       reveal ConnectionXY<NP>.Valid();
       reveal Seq.HasNoDuplicates();
       reveal Seq.ToSet();
       reveal ConnectionCorrect();
-      if start == |mf_b.inputs| then
+      if start == |scuf_b.mp.inputs| then
         map[]
       else
         var smaller_m := GetConnectionInternal(start+1);
         var el := abiao2bi.conn[start];
         if el.0 then
-          var new_key := mf_b.inputs[start];
-          var new_value := mf_a.outputs[el.1];
+          var new_key := scuf_b.mp.inputs[start];
+          var new_value := scuf_a.mp.outputs[el.1];
           assert ConnectionKeyValueCorrect(new_key, new_value);
           smaller_m[new_key := new_value]
         else
@@ -442,10 +460,10 @@ module MapConnection {
 
     predicate ConnectionKeyValueCorrect(np: NP, onp: NP)
     {
-        && (np in mf_b.inputs)
-        && (onp in mf_a.outputs)
-        && var index_out := Seq.IndexOf(mf_b.inputs, np);
-        && var index_in2 := Seq.IndexOf(mf_a.outputs, onp);
+        && (np in scuf_b.mp.inputs)
+        && (onp in scuf_a.mp.outputs)
+        && var index_out := Seq.IndexOf(scuf_b.mp.inputs, np);
+        && var index_in2 := Seq.IndexOf(scuf_a.mp.outputs, onp);
         && (index_out < |abiao2bi.conn|)
         && (abiao2bi.conn[index_out] == (true, index_in2))
     }
@@ -460,8 +478,8 @@ module MapConnection {
 
     function GetConnection(): (r: map<NP, NP>)
       requires SomewhatValid()
-      ensures r.Values <= Seq.ToSet(mf_a.outputs)
-      ensures r.Keys == Seq.ToSet(mf_b.inputs) - Seq.ToSet(mf_ab.inputs)
+      ensures r.Values <= Seq.ToSet(scuf_a.mp.outputs)
+      ensures r.Keys == Seq.ToSet(scuf_b.mp.inputs) - Seq.ToSet(scuf_ab.mp.inputs)
       ensures ConnectionCorrect(r)
     {
       GetConnectionInternal(0)
@@ -469,42 +487,42 @@ module MapConnection {
 
     function fi2fia(fi: FI): (fi_a: FI)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      ensures FIValid(fi_a, mf_a.inputs, mf_a.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures FIValid(fi_a, scuf_a.mp.inputs, scuf_a.mp.state)
     {
-      var si := mf_ab.fi2si(fi);
+      var si := scuf_ab.mp.fi2si(fi);
       var si_a := si2sia(si);
-      var fi_a := mf_a.si2fi(si_a);
+      var fi_a := scuf_a.mp.si2fi(si_a);
       fi_a
-      //FI(abi2ai.MapMap(fi.inputs), abs2as.MapMap(fi.state))
+      //FI(abi2ai.MapMap(fi.mp.inputs), abs2as.MapMap(fi.mp.state))
     }
 
     function si2sia(si: SI): (si_a: SI)
       requires SomewhatValid()
-      requires SIValid(si, mf_ab.inputs, mf_ab.state)
-      ensures SIValid(si_a, mf_a.inputs, mf_a.state)
+      requires SIValid(si, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures SIValid(si_a, scuf_a.mp.inputs, scuf_a.mp.state)
     {
-      reveal MapFunction.Valid();
-      mf_a.InputsHasNoDuplicates();
+      //reveal MapFunction.Valid();
+      //scuf_a.InputsHasNoDuplicates();
       SI(abi2ai.MapSeq(si.inputs), abs2as.MapSeq(si.state))
     }
 
     function fi2fib(fi: FI): (fi_b: FI)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      ensures FIValid(fi_b, mf_b.inputs, mf_b.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures FIValid(fi_b, scuf_b.mp.inputs, scuf_b.mp.state)
     {
-      reveal MapFunction.Valid();
+      //reveal MapFunction.Valid();
       reveal ConnectionX<CNode>.Valid();
-      var si := mf_ab.fi2si(fi);
+      var si := scuf_ab.mp.fi2si(fi);
       var si_b := si2sib(si);
-      var fi_b := mf_b.si2fi(si_b);
+      var fi_b := scuf_b.mp.si2fi(si_b);
       fi_b
     }
 
     lemma fi2fiaInfo(fi: FI)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
       ensures
         var fi_a := fi2fia(fi);
         && (forall np :: np in fi_a.inputs && np in fi.inputs ==> fi.inputs[np] == fi_a.inputs[np])
@@ -529,12 +547,12 @@ module MapConnection {
 
     lemma foafob2foInfo(fi: FI)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
       ensures
         var fi_a := fi2fia(fi);
         var fi_b := fi2fib(fi);
-        var fo_a := mf_a.f(fi_a);
-        var fo_b := mf_b.f(fi_b);
+        var fo_a := scuf_a.f(fi_a);
+        var fo_b := scuf_b.f(fi_b);
         var fo := foafob2fo(fo_a, fo_b);
         && (forall np :: np in fo_a.outputs && np in fo.outputs ==> fo.outputs[np] == fo_a.outputs[np])
         && (forall n :: n in fo_a.state && n in fo.state ==> fo.state[n] == fo_a.state[n])
@@ -543,8 +561,8 @@ module MapConnection {
     {
       var fi_a := fi2fia(fi);
       var fi_b := fi2fib(fi);
-      var fo_a := mf_a.f(fi_a);
-      var fo_b := mf_b.f(fi_b);
+      var fo_a := scuf_a.f(fi_a);
+      var fo_b := scuf_b.f(fi_b);
       var fo := foafob2fo(fo_a, fo_b);
       reveal aobo2abo.Valid();
       reveal Seq.ToSet();
@@ -553,7 +571,7 @@ module MapConnection {
 
     lemma fi2fibInfo(fi: FI)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
       ensures
         var fi_b := fi2fib(fi);
         && (forall np :: np in fi_b.inputs && np in fi.inputs ==> fi.inputs[np] == fi_b.inputs[np])
@@ -578,105 +596,104 @@ module MapConnection {
 
     lemma ConnectionInfo(fi: FI, np: NP)
       requires SomewhatValid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      requires np in mf_b.inputs
-      requires np !in mf_ab.inputs
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      requires np in scuf_b.mp.inputs
+      requires np !in scuf_ab.mp.inputs
       ensures
         var fi_a := fi2fia(fi);
         var fi_b := fi2fib(fi);
         var connection := GetConnection();
         && np in connection
         && var onp := connection[np];
-        && (onp in mf_a.f(fi_a).outputs)
-        && (fi_b.inputs[np] == mf_a.f(fi_a).outputs[onp])
+        && (onp in scuf_a.f(fi_a).outputs)
+        && (fi_b.inputs[np] == scuf_a.f(fi_a).outputs[onp])
     {
       var fi_a := fi2fia(fi);
       var fi_b := fi2fib(fi);
       reveal Seq.ToSet();
       var connection := GetConnection();
-      assert connection.Keys == Seq.ToSet(mf_b.inputs) - Seq.ToSet(mf_ab.inputs);
-      assert connection.Values <= Seq.ToSet(mf_a.outputs);
+      assert connection.Keys == Seq.ToSet(scuf_b.mp.inputs) - Seq.ToSet(scuf_ab.mp.inputs);
+      assert connection.Values <= Seq.ToSet(scuf_a.mp.outputs);
       var onp := connection[np];
-      var si := mf_ab.fi2si(fi);
+      var si := scuf_ab.mp.fi2si(fi);
       var si_a := si2sia(si);
-      assert fi_a == mf_a.si2fi(si_a);
-      reveal mf_a.Valid();
-      var so_a := mf_a.sf(si_a);
+      assert fi_a == scuf_a.mp.si2fi(si_a);
+      reveal UpdateFunction.Valid();
+      var so_a := scuf_a.uf.sf(si_a);
       assert onp in connection.Values;
-      assert onp in mf_a.outputs;
-      var index_in2 := Seq.IndexOf(mf_a.outputs, onp);
-      var index_out := Seq.IndexOf(mf_b.inputs, np);
+      assert onp in scuf_a.mp.outputs;
+      var index_in2 := Seq.IndexOf(scuf_a.mp.outputs, onp);
+      var index_out := Seq.IndexOf(scuf_b.mp.inputs, np);
       reveal MapMatchesSeqs();
       reveal ConnectionCorrect();
       assert abiao2bi.conn[index_out] == (true, index_in2);
       calc {
-        mf_a.f(fi_a);
-        mf_a.f(fi_a);
-        mf_a.so2fo(mf_a.sf(mf_a.fi2si(fi_a)));
+        scuf_a.f(fi_a);
+        scuf_a.f(fi_a);
+        scuf_a.mp.so2fo(scuf_a.uf.sf(scuf_a.mp.fi2si(fi_a)));
         {
-          assert fi_a == mf_a.si2fi(si_a);
-          mf_a.si2fi2si(si_a);
+          assert fi_a == scuf_a.mp.si2fi(si_a);
+          scuf_a.mp.si2fi2si(si_a);
         }
-        mf_a.so2fo(mf_a.sf(si_a));
+        scuf_a.mp.so2fo(scuf_a.uf.sf(si_a));
       }
     }
 
     function si2sib(si: SI): (si_b: SI)
       requires SomewhatValid()
-      requires SIValid(si, mf_ab.inputs, mf_ab.state)
-      ensures SIValid(si_b, mf_b.inputs, mf_b.state)
+      requires SIValid(si, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      ensures SIValid(si_b, scuf_b.mp.inputs, scuf_b.mp.state)
     {
-      reveal MapFunction.Valid();
-      mf_b.InputsHasNoDuplicates();
+      reveal UpdateFunction.Valid();
       reveal ConnectionX<CNode>.Valid();
       reveal Seq.HasNoDuplicates();
       var si_a := si2sia(si);
-      var so_a := mf_a.sf(si_a);
+      var so_a := scuf_a.uf.sf(si_a);
       assert abs2bs.Valid();
-      assert |si.state| == |mf_ab.state|;
+      assert |si.state| == |scuf_ab.mp.state|;
       SI(abiao2bi.MapSeq(si.inputs, so_a.outputs), abs2bs.MapSeq(si.state))
     }
 
     function foafob2fo(fo_a: FO, fo_b: FO): (fo: FO)
       requires SomewhatValid()
-      requires FOValid(fo_a, mf_a.outputs, mf_a.state)
-      requires FOValid(fo_b, mf_b.outputs, mf_b.state)
-      ensures FOValid(fo, mf_ab.outputs, mf_ab.state)
+      requires FOValid(fo_a, scuf_a.mp.outputs, scuf_a.mp.state)
+      requires FOValid(fo_b, scuf_b.mp.outputs, scuf_b.mp.state)
+      ensures FOValid(fo, scuf_ab.mp.outputs, scuf_ab.mp.state)
     {
-      var so_a := mf_a.fo2so(fo_a);
-      var so_b := mf_b.fo2so(fo_b);
+      var so_a := scuf_a.mp.fo2so(fo_a);
+      var so_b := scuf_b.mp.fo2so(fo_b);
       var so := soasob2so(so_a, so_b);
-      var fo := mf_ab.so2fo(so);
+      var fo := scuf_ab.mp.so2fo(so);
       fo
     }
 
     function soasob2so(so_a: SO, so_b: SO): (so: SO)
       requires SomewhatValid()
-      requires SOValid(so_a, mf_a.outputs, mf_a.state)
-      requires SOValid(so_b, mf_b.outputs, mf_b.state)
-      ensures SOValid(so, mf_ab.outputs, mf_ab.state)
+      requires SOValid(so_a, scuf_a.mp.outputs, scuf_a.mp.state)
+      requires SOValid(so_b, scuf_b.mp.outputs, scuf_b.mp.state)
+      ensures SOValid(so, scuf_ab.mp.outputs, scuf_ab.mp.state)
     {
-      mf_ab.OutputsHasNoDuplicates();
-      reveal mf_ab.Valid();
+      //scuf_ab.mp.OutputsHasNoDuplicates();
+      //reveal scuf_ab.Valid();
       SO(aobo2abo.MapSeq(so_a.outputs, so_b.outputs), asbs2abs.MapSeq(so_a.state, so_b.state))
     }
 
     lemma MFABMFAConsistentOutputs(fi: FI, np: NP)
       requires Valid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      requires np in mf_a.outputs
-      requires np in mf_ab.outputs
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      requires np in scuf_a.mp.outputs
+      requires np in scuf_ab.mp.outputs
       ensures 
         var fi_1 := fi2fia(fi);
-        MFLookupOutput(mf_a, fi_1, np) == MFLookupOutput(mf_ab, fi, np)
+        MFLookupOutput(scuf_a, fi_1, np) == MFLookupOutput(scuf_ab, fi, np)
     {
       var fi_1 := fi2fia(fi);
-      var fo_1 := mf_a.f(fi_1);
+      var fo_1 := scuf_a.f(fi_1);
       var fi_2 := fi2fib(fi);
-      var fo_2 := mf_b.f(fi_2);
-      var fo := mf_ab.f(fi);
+      var fo_2 := scuf_b.f(fi_2);
+      var fo := scuf_ab.f(fi);
       LemmaEvaluatesCorrectly();
-      assert EvaluateSeparately(fi) == mf_ab.f(fi) by {
+      assert EvaluateSeparately(fi) == scuf_ab.f(fi) by {
         reveal EvaluatesCorrectly();
       }
       assert fo == foafob2fo(fo_1, fo_2);
@@ -690,20 +707,20 @@ module MapConnection {
 
     lemma MFABMFAConsistentState(fi: FI, np: NP)
       requires Valid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      requires np in StateINPs(mf_a.state)
-      requires np in StateINPs(mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      requires np in StateINPs(scuf_a.mp.state)
+      requires np in StateINPs(scuf_ab.mp.state)
       ensures 
         var fi_1 := fi2fia(fi);
-        MFLookupState(mf_a, fi_1, np) == MFLookupState(mf_ab, fi, np)
+        MFLookupState(scuf_a, fi_1, np) == MFLookupState(scuf_ab, fi, np)
     {
       var fi_1 := fi2fia(fi);
-      var fo_1 := mf_a.f(fi_1);
+      var fo_1 := scuf_a.f(fi_1);
       var fi_2 := fi2fib(fi);
-      var fo_2 := mf_b.f(fi_2);
-      var fo := mf_ab.f(fi);
+      var fo_2 := scuf_b.f(fi_2);
+      var fo := scuf_ab.f(fi);
       LemmaEvaluatesCorrectly();
-      assert EvaluateSeparately(fi) == mf_ab.f(fi) by {
+      assert EvaluateSeparately(fi) == scuf_ab.f(fi) by {
         reveal EvaluatesCorrectly();
       }
       assert fo == foafob2fo(fo_1, fo_2);
@@ -713,26 +730,26 @@ module MapConnection {
       assert fo_1.state[np.n] == fo.state[np.n] by {
         foafob2foInfo(fi);
       }
-      assert MFLookupState(mf_a, fi_1, np) == fo_1.state[np.n];
-      assert MFLookupState(mf_ab, fi, np) == fo.state[np.n];
+      assert MFLookupState(scuf_a, fi_1, np) == fo_1.state[np.n];
+      assert MFLookupState(scuf_ab, fi, np) == fo.state[np.n];
     }
 
     lemma MFABMFBConsistentOutputs(fi: FI, np: NP)
       requires Valid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      requires np in mf_b.outputs
-      requires np in mf_ab.outputs
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      requires np in scuf_b.mp.outputs
+      requires np in scuf_ab.mp.outputs
       ensures 
         var fi_2 := fi2fib(fi);
-        MFLookupOutput(mf_b, fi_2, np) == MFLookupOutput(mf_ab, fi, np)
+        MFLookupOutput(scuf_b, fi_2, np) == MFLookupOutput(scuf_ab, fi, np)
     {
       var fi_1 := fi2fia(fi);
-      var fo_1 := mf_a.f(fi_1);
+      var fo_1 := scuf_a.f(fi_1);
       var fi_2 := fi2fib(fi);
-      var fo_2 := mf_b.f(fi_2);
-      var fo := mf_ab.f(fi);
+      var fo_2 := scuf_b.f(fi_2);
+      var fo := scuf_ab.f(fi);
       LemmaEvaluatesCorrectly();
-      assert EvaluateSeparately(fi) == mf_ab.f(fi) by {
+      assert EvaluateSeparately(fi) == scuf_ab.f(fi) by {
         reveal EvaluatesCorrectly();
       }
       assert fo == foafob2fo(fo_1, fo_2);
@@ -746,20 +763,20 @@ module MapConnection {
 
     lemma MFABMFBConsistentState(fi: FI, np: NP)
       requires Valid()
-      requires FIValid(fi, mf_ab.inputs, mf_ab.state)
-      requires np in StateINPs(mf_b.state)
-      requires np in StateINPs(mf_ab.state)
+      requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
+      requires np in StateINPs(scuf_b.mp.state)
+      requires np in StateINPs(scuf_ab.mp.state)
       ensures 
         var fi_2 := fi2fib(fi);
-        MFLookupState(mf_b, fi_2, np) == MFLookupState(mf_ab, fi, np)
+        MFLookupState(scuf_b, fi_2, np) == MFLookupState(scuf_ab, fi, np)
     {
       var fi_1 := fi2fia(fi);
-      var fo_1 := mf_a.f(fi_1);
+      var fo_1 := scuf_a.f(fi_1);
       var fi_2 := fi2fib(fi);
-      var fo_2 := mf_b.f(fi_2);
-      var fo := mf_ab.f(fi);
+      var fo_2 := scuf_b.f(fi_2);
+      var fo := scuf_ab.f(fi);
       LemmaEvaluatesCorrectly();
-      assert EvaluateSeparately(fi) == mf_ab.f(fi) by {
+      assert EvaluateSeparately(fi) == scuf_ab.f(fi) by {
         reveal EvaluatesCorrectly();
       }
       assert fo == foafob2fo(fo_1, fo_2);
@@ -769,8 +786,8 @@ module MapConnection {
       assert fo_2.state[np.n] == fo.state[np.n] by {
         foafob2foInfo(fi);
       }
-      assert MFLookupState(mf_b, fi_2, np) == fo_2.state[np.n];
-      assert MFLookupState(mf_ab, fi, np) == fo.state[np.n];
+      assert MFLookupState(scuf_b, fi_2, np) == fo_2.state[np.n];
+      assert MFLookupState(scuf_ab, fi, np) == fo.state[np.n];
     }
 
   }

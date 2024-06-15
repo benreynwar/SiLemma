@@ -19,6 +19,7 @@ module Circ {
   const INPUT_1: CPort := 2
   const OUTPUT_0: CPort := 1
 
+  // An `NP` is a given port on a node.
   datatype NP = NP(n: CNode, p: CPort)
 
   datatype Circuit = Circuit(
@@ -45,6 +46,8 @@ module Circ {
   }
 
   function GetNewNode(c: Circuit): (r: CNode)
+    // Gets a new unused `Node` identifier.
+    // Used when adding nodes to the graph.
     ensures r !in c.NodeKind
   {
     GetNewNodeInternal(c, 0, c.NodeKind.Keys)
@@ -56,6 +59,7 @@ module Circ {
   }
 
   function AllNPfromNode(c: Circuit, node: CNode): (r: set<NP>)
+    // All the `NP`s on a node.
     requires NodeValid(c, node)
     ensures forall np :: NPValid(c, np) && np.n == node ==> np in r
   {
@@ -70,6 +74,7 @@ module Circ {
   }
 
   function AllNPFromNodes(c: Circuit, nodes: set<CNode>): (r: set<NP>)
+    // All the `NP`s on a set of nodes.
     requires ScValid(c, nodes)
     ensures forall np :: np in r ==> NPValid(c, np) && np.n in nodes
     ensures forall np :: NPValid(c, np) && (np.n in nodes) ==> np in r
@@ -109,6 +114,7 @@ module Circ {
   }
 
   function AllNP(c: Circuit): set<NP>
+    // Returns all the `NP` in a circuit.
     ensures forall np :: np in AllNP(c) <==> NPValid(c, np)
   {
     var all_nodes := (set n | n in c.NodeKind);
@@ -116,11 +122,15 @@ module Circ {
   }
 
   function AllNodes(c: Circuit): set<CNode>
+    // Returns all the `Node` in a circuit.
   {
     c.NodeKind.Keys
   }
 
   opaque predicate PathValid(c: Circuit, p: seq<NP>)
+    // Whether a path is valid.
+    // Here this is purely determined by whether the `NP` are valid.
+    // It doesn't consider connectivity at all.
   {
     forall np :: np in p ==> NPValid(c, np)
   }
@@ -134,6 +144,9 @@ module Circ {
   }
 
   ghost function NodesNotInPath(c: Circuit, p: seq<NP>): set<NP>
+    // All the nodes in a circuit that are not in the path.
+    // When we're tracing paths in the circuit, this can help us prove termination
+    // since the size of this will decrease as the path gets longer.
     requires PathValid(c, p)
   {
     var all_np := AllNP(c);
@@ -143,10 +156,15 @@ module Circ {
   }
 
   datatype EvalResult =
+    // When evaluating the circuit this is the return type.
+    // An error is returned if we encounter a loop or if we encounter an input that
+    // is missing.
     | EvalOk(bool)
     | EvalError(missing: set<NP>, loops: set<seq<NP>>)
 
   datatype SimpleEvalResult =
+    // Sometimes it's easier to prove this if we don't return detailed error information.
+    // i.e. Makes some things equivalent that wouldn't be otherwise.
     | SimpleEvalOk(bool)
     | SimpleEvalError
 
@@ -180,6 +198,7 @@ module Circ {
   }
 
   predicate ONPValid(c: Circuit, np: NP)
+    // Whether an `NP` is a valid output port on a node.
   {
     np.n in c.NodeKind &&
     var nk := c.NodeKind[np.n];
@@ -187,6 +206,7 @@ module Circ {
   }
 
   predicate INPValid(c: Circuit, np: NP)
+    // Whether an `NP` is a valid input port on a node.
   {
     np.n in c.NodeKind &&
     var nk := c.NodeKind[np.n];
@@ -203,52 +223,44 @@ module Circ {
     INPValid(c, np) || ONPValid(c, np)
   }
 
-  function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
-    requires c.Valid()
-    requires inp !in c.PortSource
-    requires INPValid(c, inp)
-    requires ONPValid(c, onp)
-    ensures r.Valid()
-  {
-    reveal Circuit.Valid();
-    var new_c := Circuit(
-      c.NodeKind,
-      c.PortSource[inp := onp]
-    );
-    assert forall np :: np in new_c.PortSource.Keys ==> (np in c.PortSource.Keys) || np == inp;
-    assert forall np :: np in new_c.PortSource.Keys ==> INPValid(new_c, np);
-    assert forall np :: np in new_c.PortSource.Values ==> (np in c.PortSource.Values) || np == onp;
-    assert new_c.Valid();
-    new_c
-  }
+  //function Connect(c: Circuit, inp: NP, onp: NP): (r: Circuit)
+  //  requires c.Valid()
+  //  requires inp !in c.PortSource
+  //  requires INPValid(c, inp)
+  //  requires ONPValid(c, onp)
+  //  ensures r.Valid()
+  //{
+  //  reveal Circuit.Valid();
+  //  var new_c := Circuit(
+  //    c.NodeKind,
+  //    c.PortSource[inp := onp]
+  //  );
+  //  assert forall np :: np in new_c.PortSource.Keys ==> (np in c.PortSource.Keys) || np == inp;
+  //  assert forall np :: np in new_c.PortSource.Keys ==> INPValid(new_c, np);
+  //  assert forall np :: np in new_c.PortSource.Values ==> (np in c.PortSource.Values) || np == onp;
+  //  assert new_c.Valid();
+  //  new_c
+  //}
 
-  function Replace(np: NP, f: map<NP, bool> -> bool, g: map<NP, bool> -> bool): (r: map<NP, bool> -> bool)
-  {
-    x =>
-      var np_val := g(x);
-      var new_x := x[np := np_val];
-      f(new_x)
-  }
+  //function Replace(np: NP, f: map<NP, bool> -> bool, g: map<NP, bool> -> bool): (r: map<NP, bool> -> bool)
+  //{
+  //  x =>
+  //    var np_val := g(x);
+  //    var new_x := x[np := np_val];
+  //    f(new_x)
+  //}
 
-  predicate SourceNotInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
-    requires INPValid(c, np)
-  {
-    np !in c.PortSource || c.PortSource[np].n !in sc
-  }
+  //predicate SourceNotInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+  //  requires INPValid(c, np)
+  //{
+  //  np !in c.PortSource || c.PortSource[np].n !in sc
+  //}
 
-  predicate SourceInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
-    requires INPValid(c, np)
-  {
-    np !in c.PortSource || c.PortSource[np].n in sc
-  }
-
-  function SubcircuitComplement(c: Circuit, sc: set<CNode>): (r: set<CNode>)
-    ensures ScValid(c, r)
-  {
-    var all_nodes := AllNodes(c);
-    reveal ScValid();
-    all_nodes - sc
-  }
+  //predicate SourceInSubcircuit(c: Circuit, sc: set<CNode>, np: NP)
+  //  requires INPValid(c, np)
+  //{
+  //  np !in c.PortSource || c.PortSource[np].n in sc
+  //}
 
   function NPBetweenSubcircuits(c: Circuit, sc1: set<CNode>, sc2: set<CNode>): set<NP>
     requires ScValid(c, sc1)

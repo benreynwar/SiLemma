@@ -3,6 +3,14 @@ module Subcircuit {
   import opened Circ
   import opened Utils
 
+  function SubcircuitComplement(c: Circuit, sc: set<CNode>): (r: set<CNode>)
+    ensures ScValid(c, r)
+  {
+    var all_nodes := AllNodes(c);
+    reveal ScValid();
+    all_nodes - sc
+  }
+
   opaque predicate NPsInSc(sc: set<CNode>, nps: set<NP>)
   {
     forall np :: np in nps ==> np.n in sc

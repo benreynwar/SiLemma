@@ -2,26 +2,26 @@ module Connection {
 
   import opened Circ
   import opened Utils
-  import opened Entity
+  import opened Scuf
   import opened Subcircuit
   import opened Eval
   import opened ConservedSubcircuit
   import opened MapFunction
   import opened MapConnection
 
-  opaque ghost predicate ConnectionValid(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+  opaque ghost predicate ConnectionValid(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires ScValid(c, e1.sc)
     requires ScValid(c, e2.sc)
   {
-    && (connection.Keys <= Seq.ToSet(e2.mf.inputs))
-    && (connection.Values <= Seq.ToSet(e1.mf.outputs))
+    && (connection.Keys <= Seq.ToSet(e2.mp.inputs))
+    && (connection.Values <= Seq.ToSet(e1.mp.outputs))
     && SetsNoIntersection(connection.Keys, c.PortSource.Keys)
   }
 
-  lemma ConnectionValuesInE1(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+  lemma ConnectionValuesInE1(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires c.Valid()
-    requires EntityValid(c, e1)
-    requires EntityValid(c, e2)
+    requires e1.Valid(c)
+    requires e2.Valid(c)
     requires ConnectionValid(c, e1, e2, connection)
     ensures NPsInSc(e1.sc, connection.Values)
   {
@@ -31,10 +31,10 @@ module Connection {
     FOutputsInSc(c, e1);
   }
 
-  lemma ConnectionKeysInE2(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+  lemma ConnectionKeysInE2(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires c.Valid()
-    requires EntityValid(c, e1)
-    requires EntityValid(c, e2)
+    requires e1.Valid(c)
+    requires e2.Valid(c)
     requires ConnectionValid(c, e1, e2, connection)
     ensures NPsInSc(e2.sc, connection.Keys)
   {
@@ -44,10 +44,10 @@ module Connection {
     FInputsInSc(c, e2);
   }
 
-  lemma ConnectionKeysINPs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+  lemma ConnectionKeysINPs(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires c.Valid()
-    requires EntityValid(c, e1)
-    requires EntityValid(c, e2)
+    requires e1.Valid(c)
+    requires e2.Valid(c)
     requires ConnectionValid(c, e1, e2, connection)
     ensures INPsValid(c, connection.Keys)
   {
@@ -55,14 +55,14 @@ module Connection {
     reveal ConnectionValid();
     reveal NPsInSc();
     reveal INPsValid();
-    reveal EntitySomewhatValid();
-    EntityFInputsAreValid(c, e2);
+    reveal Scuf.SomewhatValid();
+    ScufFInputsAreValid(c, e2);
   }
 
-  lemma ConnectionValuesONPs(c: Circuit, e1: Entity, e2: Entity, connection: map<NP, NP>)
+  lemma ConnectionValuesONPs(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires c.Valid()
-    requires EntityValid(c, e1)
-    requires EntityValid(c, e2)
+    requires e1.Valid(c)
+    requires e2.Valid(c)
     requires ConnectionValid(c, e1, e2, connection)
     ensures ONPsValid(c, connection.Values)
   {
@@ -70,56 +70,47 @@ module Connection {
     reveal ConnectionValid();
     reveal NPsInSc();
     reveal ONPsValid();
-    reveal EntitySomewhatValid();
-    EntityFOutputsAreValid(c, e1);
+    reveal Scuf.SomewhatValid();
+    ScufFOutputsAreValid(c, e1);
   }
 
-  lemma IsIslandInputsNotInPortSource(c: Circuit, e: Entity)
+  lemma IsIslandInputsNotInPortSource(c: Circuit, e: Scuf)
     requires c.Valid()
-    requires EntitySomewhatValid(c, e)
+    requires e.SomewhatValid(c)
     requires IsIsland(c, e.sc)
-    ensures Seq.ToSet(e.mf.inputs) !! c.PortSource.Keys
+    ensures Seq.ToSet(e.mp.inputs) !! c.PortSource.Keys
   {
     reveal IsIsland();
-    reveal EntitySomewhatValid();
+    reveal Scuf.SomewhatValid();
     reveal ConnInputs();
     reveal UnconnInputs();
   }
 
-  ghost predicate ConnectEntitiesRequirements(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection) {
+  ghost predicate ConnectEntitiesRequirements(c: Circuit, conn: ScufConnection) {
     && c.Valid()
-    && EntityValid(c, e1)
-    && EntityValid(c, e2)
-    && e1.sc !! e2.sc
-    && e12.sc == e1.sc + e2.sc
     && conn.Valid()
-    && conn.mf_a == e1.mf
-    && conn.mf_b == e2.mf
-    && conn.mf_ab == e12.mf
-    && conn.GetConnection().Keys !! c.PortSource.Keys
-    && IsIsland(c, e1.sc)
-    && IsIsland(c, e2.sc)
+    && conn.ValidInCircuit(c)
   }
 
-  lemma ConnectionInSc(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectionInSc(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures
       var connection := conn.GetConnection();
-      && NPsInSc(e2.sc, connection.Keys)
-      && NPsInSc(e1.sc, connection.Values)
-      && NPsNotInSc(e2.sc, connection.Values)
-      && NPsNotInSc(e1.sc, connection.Keys)
+      && NPsInSc(conn.scuf_b.sc, connection.Keys)
+      && NPsInSc(conn.scuf_a.sc, connection.Values)
+      && NPsNotInSc(conn.scuf_b.sc, connection.Values)
+      && NPsNotInSc(conn.scuf_a.sc, connection.Keys)
   {
     var connection := conn.GetConnection();
-    assert connection.Values <= Seq.ToSet(e1.mf.outputs);
-    assert connection.Keys == Seq.ToSet(e2.mf.inputs) - Seq.ToSet(e12.mf.inputs);
+    assert connection.Values <= Seq.ToSet(conn.scuf_a.mp.outputs);
+    assert connection.Keys == Seq.ToSet(conn.scuf_b.mp.inputs) - Seq.ToSet(conn.scuf_ab.mp.inputs);
     reveal NPsInSc();
     reveal NPsNotInSc();
     reveal Seq.ToSet();
-    FOutputsInSc(c, e1);
-    FOutputsInSc(c, e2);
-    FInputsInSc(c, e1);
-    FInputsInSc(c, e2);
+    FOutputsInSc(c, conn.scuf_a);
+    FOutputsInSc(c, conn.scuf_b);
+    FInputsInSc(c, conn.scuf_a);
+    FInputsInSc(c, conn.scuf_b);
   }
 
   opaque predicate ConnectCircuitRequirements(c: Circuit, connection: map<NP, NP>)
@@ -145,10 +136,10 @@ module Connection {
     new_c
   }
 
-  lemma ConnectCircuitOtherIsIsland(c: Circuit, connection: map<NP, NP>, e: Entity)
+  lemma ConnectCircuitOtherIsIsland(c: Circuit, connection: map<NP, NP>, e: Scuf)
     requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
-    requires EntityValid(c, e)
+    requires e.Valid(c)
     requires IsIsland(c, e.sc)
     requires NPsNotInSc(e.sc, connection.Keys)
     requires NPsNotInSc(e.sc, connection.Values)
@@ -178,10 +169,10 @@ module Connection {
       assert (forall np :: np in new_c.PortSource && np.n !in e.sc ==> new_c.PortSource[np].n !in e.sc);
     }
 
-  lemma ConnectEntitiesOtherConnUnchanged(c: Circuit, connection: map<NP, NP>, e: Entity)
+  lemma ConnectEntitiesOtherConnUnchanged(c: Circuit, connection: map<NP, NP>, e: Scuf)
     requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
-    requires EntityValid(c, e)
+    requires e.Valid(c)
     requires NPsNotInSc(e.sc, connection.Keys)
     requires NPsNotInSc(e.sc, connection.Values)
     ensures
@@ -248,15 +239,15 @@ module Connection {
     reveal ConnOutputs();
   }
 
-  lemma ConnectCircuitOtherEntityValid(c: Circuit, connection: map<NP, NP>, e: Entity)
+  lemma ConnectCircuitOtherScufValid(c: Circuit, connection: map<NP, NP>, e: Scuf)
     requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
-    requires EntityValid(c, e)
+    requires e.Valid(c)
     requires NPsNotInSc(e.sc, connection.Keys)
     requires NPsNotInSc(e.sc, connection.Values)
     ensures
       var new_c := ConnectCircuit(c, connection);
-      && EntityValid(new_c, e)
+      && e.Valid(new_c)
   {
     ConnectEntitiesOtherConnUnchanged(c, connection, e);
 
@@ -265,15 +256,15 @@ module Connection {
       reveal ScValid();
     }
 
-    assert EntitySomewhatValid(new_c, e) by {
-      reveal EntitySomewhatValid();
+    assert e.SomewhatValid(new_c) by {
+      reveal Scuf.SomewhatValid();
       assert ScValid(new_c, e.sc);
-      assert (AllONPs(new_c, e.sc) >= Seq.ToSet(e.mf.outputs) >= ConnOutputs(new_c, e.sc)) by {
+      assert (AllONPs(new_c, e.sc) >= Seq.ToSet(e.mp.outputs) >= ConnOutputs(new_c, e.sc)) by {
         reveal AllONPs();
         assert new_c.NodeKind == c.NodeKind;
       }
-      assert (Seq.ToSet(e.mf.inputs) == AllInputs(new_c, e.sc));
-      assert (Seq.ToSet(e.mf.state) == AllSeq(new_c, e.sc)) by {
+      assert (Seq.ToSet(e.mp.inputs) == AllInputs(new_c, e.sc));
+      assert (Seq.ToSet(e.mp.state) == AllSeq(new_c, e.sc)) by {
         reveal AllSeq();
       }
     }
@@ -283,12 +274,12 @@ module Connection {
     }
     ConnectCircuitConservesSubcircuit(c, connection, e.sc);
     assert OutputsInFOutputs(new_c, e) by {
-      reveal EntitySomewhatValid();
+      reveal Scuf.SomewhatValid();
       assert OutputsInFOutputs(c, e);
       reveal ConnOutputs();
       assert ConnOutputs(new_c, e.sc) == ConnOutputs(c, e.sc);
     }
-    EntityConserved(c, new_c, e);
+    ScufConserved(c, new_c, e);
   }
 
   lemma ConnectCircuitConservesSubcircuit(c: Circuit, connection: map<NP, NP>, sc: set<CNode>)
@@ -316,19 +307,19 @@ module Connection {
     && (forall np :: np in connection.Keys && np.n in sc ==> connection[np].n !in sc)
   }
 
-  // opaque predicate ConnectionValuesInFOutputs(connection: map<NP, NP>, e: Entity)
+  // opaque predicate ConnectionValuesInFOutputs(connection: map<NP, NP>, e: Scuf)
   // {
   //   && (forall np :: np in connection.Values && np.n in e.sc ==> np in e.mf.outputs)
   // }
 
-  predicate ConnectionsEntityCompatible(connection: map<NP, NP>, e: Entity)
+  predicate ConnectionsScufCompatible(connection: map<NP, NP>, e: Scuf)
   {
     // for e1
     && NoInternalConnections(connection, e.sc)
-    && connection.Values <= Seq.ToSet(e.mf.outputs)
+    && connection.Values <= Seq.ToSet(e.mp.outputs)
   }
 
-  predicate ConnectionsEntity2Compatible(connection: map<NP, NP>, e: Entity)
+  predicate ConnectionsScuf2Compatible(connection: map<NP, NP>, e: Scuf)
   {
     // for e2
     && NoInternalConnections(connection, e.sc)
@@ -336,12 +327,12 @@ module Connection {
   }
 
 
-  lemma ConnectCircuitEntitiesStillValid(c: Circuit, connection: map<NP, NP>, e: Entity)
+  lemma ConnectCircuitEntitiesStillValid(c: Circuit, connection: map<NP, NP>, e: Scuf)
     requires c.Valid()
     requires ConnectCircuitRequirements(c, connection)
-    requires EntityValid(c, e)
-    requires ConnectionsEntityCompatible(connection, e)
-    ensures EntityValid(ConnectCircuit(c, connection), e)
+    requires e.Valid(c)
+    requires ConnectionsScufCompatible(connection, e)
+    ensures e.Valid(ConnectCircuit(c, connection))
   {
     reveal NoInternalConnections();
     var new_c := ConnectCircuit(c, connection);
@@ -351,24 +342,27 @@ module Connection {
     }
     assert OutputsInFOutputs(new_c, e) by {
       reveal ConnOutputs();
-      reveal EntitySomewhatValid();
+      reveal Scuf.SomewhatValid();
       assert OutputsInFOutputs(c, e);
       //reveal ConnectionValuesInFOutputs();
       //assert ConnectionValuesInFOutputs(connection, e);
     }
-    EntityConserved(c, new_c, e);
+    ScufConserved(c, new_c, e);
   }
 
-  lemma ConnectEntitiesIsIsland(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectEntitiesIsIsland(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures
-      var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-      IsIsland(new_c, e12.sc)
+      var new_c := ConnectEntitiesImpl(c, conn);
+      IsIsland(new_c, conn.scuf_ab.sc)
   {
     reveal NPsInSc();
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-    var sc1 := e1.sc;
-    var sc2 := e2.sc;
+    var new_c := ConnectEntitiesImpl(c, conn);
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
+    var e12 := conn.scuf_ab;
+    var sc1 := conn.scuf_a.sc;
+    var sc2 := conn.scuf_b.sc;
     assert ScValid(c, sc1 + sc2) by {
       reveal ScValid();
     }
@@ -447,16 +441,16 @@ module Connection {
     assert IsIsland(new_c, e12.sc);
   }
 
-  lemma ConnectCircuitReqFromConnectEntitiesReq(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectCircuitReqFromConnectEntitiesReq(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures ConnectCircuitRequirements(c, conn.GetConnection())
   {
     reveal ConnectionValid();
-    reveal EntitySomewhatValid();
+    reveal Scuf.SomewhatValid();
     reveal ConnectCircuitRequirements();
     var connection := conn.GetConnection();
-    ConnectionKeysINPs(c, e1, e2, connection);
-    ConnectionValuesONPs(c, e1, e2, connection);
+    ConnectionKeysINPs(c, conn.scuf_a, conn.scuf_b, connection);
+    ConnectionValuesONPs(c, conn.scuf_a, conn.scuf_b, connection);
     reveal INPsValid();
     reveal ONPsValid();
     SetsNoIntersectionDuh(connection.Keys, c.PortSource.Keys);
@@ -465,27 +459,29 @@ module Connection {
   }
 
   opaque function ConnectEntitiesImpl(
-      c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection): (r: Circuit)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+      c: Circuit, conn: ScufConnection): (r: Circuit)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures r.Valid()
     ensures r.NodeKind == c.NodeKind
   {
     var connection := conn.GetConnection();
 
     assert ConnectCircuitRequirements(c, connection) by {
-      ConnectCircuitReqFromConnectEntitiesReq(c, e1, e2, e12, conn);
+      ConnectCircuitReqFromConnectEntitiesReq(c, conn);
     }
     var new_c := ConnectCircuit(c, connection);
     new_c
   }
 
-  lemma NPSetsNoIntersection(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, nps1: set<NP>, nps2: set<NP>)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    requires NPsInSc(e1.sc, nps1)
-    requires NPsInSc(e2.sc, nps2)
+  lemma NPSetsNoIntersection(c: Circuit, conn: ScufConnection, nps1: set<NP>, nps2: set<NP>)
+    requires ConnectEntitiesRequirements(c, conn)
+    requires NPsInSc(conn.scuf_a.sc, nps1)
+    requires NPsInSc(conn.scuf_b.sc, nps2)
     ensures SetsNoIntersection(nps1, nps2)
   {
     reveal NPsInSc();
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
     if exists np :: np in nps1 && np in nps2 {
       var np :| np in nps1 && np in nps2;
       assert np.n in e1.sc && np.n in e2.sc;
@@ -511,53 +507,56 @@ module Connection {
     assert !exists x :: x in a && x in c;
   }
 
-  lemma ConnectEntitiesSomewhatValid(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectEntitiesSomewhatValid(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures
-      var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-      EntitySomewhatValid(new_c, e12)
+      var new_c := ConnectEntitiesImpl(c, conn);
+      conn.scuf_ab.SomewhatValid(new_c)
   {
-    ConnectEntitiesEntitiesStillValid(c, e1, e2, e12, conn);
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
+    var e12 := conn.scuf_ab;
+    ConnectEntitiesEntitiesStillValid(c, conn);
+    var new_c := ConnectEntitiesImpl(c, conn);
     var connection := conn.GetConnection();
     assert ScValid(new_c, e12.sc) && ScValid(new_c, e1.sc) && ScValid(new_c, e2.sc) by {
       reveal ScValid();
       reveal ConnectEntitiesImpl();
     }
-    assert (AllONPs(new_c, e12.sc) >= Seq.ToSet(e12.mf.outputs)) by {
+    assert (AllONPs(new_c, e12.sc) >= Seq.ToSet(e12.mp.outputs)) by {
       reveal AllONPs();
       reveal Seq.ToSet();
       assert AllONPs(new_c, e12.sc) == AllONPs(new_c, e1.sc) + AllONPs(new_c, e2.sc);
-      assert Seq.ToSet(e12.mf.outputs) <= Seq.ToSet(e1.mf.outputs) + Seq.ToSet(e2.mf.outputs);
+      assert Seq.ToSet(e12.mp.outputs) <= Seq.ToSet(e1.mp.outputs) + Seq.ToSet(e2.mp.outputs);
       calc {
         AllONPs(new_c, e12.sc);
         ==
         AllONPs(new_c, e1.sc) + AllONPs(new_c, e2.sc);
         >=
         {
-          reveal EntitySomewhatValid();
-          assert AllONPs(new_c, e1.sc) >= Seq.ToSet(e1.mf.outputs);
-          assert AllONPs(new_c, e2.sc) >= Seq.ToSet(e2.mf.outputs);
+          reveal Scuf.SomewhatValid();
+          assert AllONPs(new_c, e1.sc) >= Seq.ToSet(e1.mp.outputs);
+          assert AllONPs(new_c, e2.sc) >= Seq.ToSet(e2.mp.outputs);
         }
-        Seq.ToSet(e1.mf.outputs) + Seq.ToSet(e2.mf.outputs);
+        Seq.ToSet(e1.mp.outputs) + Seq.ToSet(e2.mp.outputs);
         >=
-        Seq.ToSet(e12.mf.outputs);
+        Seq.ToSet(e12.mp.outputs);
       }
     }
-    assert (Seq.ToSet(e12.mf.outputs) >= ConnOutputs(new_c, e12.sc)) by {
-      ConnectEntitiesIsIsland(c, e1, e2, e12, conn);
+    assert (Seq.ToSet(e12.mp.outputs) >= ConnOutputs(new_c, e12.sc)) by {
+      ConnectEntitiesIsIsland(c, conn);
       IsIslandNoOutputs(new_c, e12.sc);
       assert |ConnOutputs(new_c, e12.sc)| == 0;
     }
-    assert (Seq.ToSet(e12.mf.state) == AllSeq(new_c, e12.sc)) by {
+    assert (Seq.ToSet(e12.mp.state) == AllSeq(new_c, e12.sc)) by {
       reveal Seq.ToSet();
       reveal AllSeq();
       reveal ConnectEntitiesImpl();
-      reveal EntitySomewhatValid();
+      reveal Scuf.SomewhatValid();
     }
     //ConnectEntitiesFOutputsCorrect(c, e1, e2, connection);
 
-    assert (Seq.ToSet(e12.mf.inputs) == AllInputs(new_c, e12.sc)) by {
+    assert (Seq.ToSet(e12.mp.inputs) == AllInputs(new_c, e12.sc)) by {
       calc {
         AllInputs(new_c, e12.sc);
         UnconnInputs(new_c, e12.sc) + ConnInputs(new_c, e12.sc);
@@ -569,7 +568,7 @@ module Connection {
         }
         (UnconnInputs(c, e12.sc)-connection.Keys) + ConnInputs(new_c, e12.sc);
         {
-          ConnectEntitiesIsIsland(c, e1, e2, e12, conn);
+          ConnectEntitiesIsIsland(c, conn);
           IsIslandNoInputs(new_c, e12.sc);
           reveal IsIsland();
           reveal ConnInputs();
@@ -593,7 +592,7 @@ module Connection {
             reveal ConnectionValid();
           }
           ConnectionKeysInE2(c, e1, e2, connection);
-          NPSetsNoIntersection(c, e1, e2, e12, conn, UnconnInputs(c, e1.sc), connection.Keys);
+          NPSetsNoIntersection(c, conn, UnconnInputs(c, e1.sc), connection.Keys);
           assert |UnconnInputs(c, e1.sc) * connection.Keys| == 0;
           ReorderSets2(UnconnInputs(c, e1.sc), UnconnInputs(c, e2.sc), connection.Keys);
         }
@@ -614,30 +613,32 @@ module Connection {
         }
         AllInputs(c, e1.sc) + (AllInputs(c, e2.sc) - connection.Keys);
         {
-          reveal EntitySomewhatValid();
+          reveal Scuf.SomewhatValid();
         }
-        Seq.ToSet(e1.mf.inputs) + (Seq.ToSet(e2.mf.inputs) - connection.Keys);
+        Seq.ToSet(e1.mp.inputs) + (Seq.ToSet(e2.mp.inputs) - connection.Keys);
         {
           reveal ConnectEntitiesImpl();
         }
-        Seq.ToSet(e12.mf.inputs);
+        Seq.ToSet(e12.mp.inputs);
       }
     }
-    reveal EntitySomewhatValid();
+    reveal Scuf.SomewhatValid();
   }
 
-  lemma ConnectEntitiesEntitiesStillValid(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectEntitiesEntitiesStillValid(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures
       && ConnectCircuitRequirements(c, conn.GetConnection())
-      && var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-      && EntityValid(new_c, e1)
-      && EntityValid(new_c, e2)
+      && var new_c := ConnectEntitiesImpl(c, conn);
+      && conn.scuf_a.Valid(new_c)
+      && conn.scuf_b.Valid(new_c)
   {
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-    ConnectCircuitReqFromConnectEntitiesReq(c, e1, e2, e12, conn);
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
+    var new_c := ConnectEntitiesImpl(c, conn);
+    ConnectCircuitReqFromConnectEntitiesReq(c, conn);
     var connection := conn.GetConnection();
-    assert connection.Values <= Seq.ToSet(e1.mf.outputs);
+    assert connection.Values <= Seq.ToSet(e1.mp.outputs);
     assert new_c == ConnectCircuit(c, connection) by {
       reveal ConnectEntitiesImpl();
     }
@@ -655,11 +656,11 @@ module Connection {
         InThisNotInThat(np.n, e2.sc, e1.sc);
       }
     }
-    assert connection.Values <= Seq.ToSet(e1.mf.outputs) by {
+    assert connection.Values <= Seq.ToSet(e1.mp.outputs) by {
       reveal ConnectionValid();
     }
     ConnectCircuitEntitiesStillValid(c, connection, e1);
-    assert ConnectionsEntityCompatible(connection, e1);
+    assert ConnectionsScufCompatible(connection, e1);
     assert NoInternalConnections(connection, e2.sc) by {
       reveal NoInternalConnections();
       reveal ConnectionValid();
@@ -679,11 +680,11 @@ module Connection {
     }
     assert OutputsInFOutputs(new_c, e2) by {
       assert OutputsInFOutputs(c, e2) by {
-        reveal EntitySomewhatValid();
+        reveal Scuf.SomewhatValid();
       }
-      assert connection.Values <= Seq.ToSet(conn.mf_a.outputs);
-      assert AllONPs(c, e1.sc) >= Seq.ToSet(e1.mf.outputs) by {
-        reveal EntitySomewhatValid();
+      assert connection.Values <= Seq.ToSet(conn.scuf_a.mp.outputs);
+      assert AllONPs(c, e1.sc) >= Seq.ToSet(e1.mp.outputs) by {
+        reveal Scuf.SomewhatValid();
       }
       assert NPsInSc(e1.sc, connection.Values) by {
         reveal AllONPs();
@@ -698,7 +699,7 @@ module Connection {
         reveal ConnOutputs();
       }
     }
-    EntityConserved(c, new_c, e2);
+    ScufConserved(c, new_c, e2);
   }
 
 }
