@@ -18,6 +18,17 @@ module Connection {
     && SetsNoIntersection(connection.Keys, c.PortSource.Keys)
   }
 
+  lemma GetConnectionValid(c: Circuit, conn: ScufConnection)
+    requires c.Valid()
+    requires conn.SomewhatValid()
+    requires conn.ValidInCircuit(c)
+    ensures
+      var connection := conn.GetConnection();
+      ConnectionValid(c, conn.scuf_a, conn.scuf_b, connection)
+  {
+    reveal ConnectionValid();
+  }
+
   lemma ConnectionValuesInE1(c: Circuit, e1: Scuf, e2: Scuf, connection: map<NP, NP>)
     requires c.Valid()
     requires e1.Valid(c)

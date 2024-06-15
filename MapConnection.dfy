@@ -274,6 +274,7 @@ module MapConnection {
 
     ghost predicate ValidInCircuit(c: Circuit)
       requires c.Valid()
+      requires SomewhatValid()
     {
       && scuf_a.Valid(c)
       && scuf_b.Valid(c)

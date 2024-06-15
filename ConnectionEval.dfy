@@ -5,7 +5,7 @@ module ConnectionEval {
   import opened Circ
   import opened Eval
   import opened Utils
-  import opened Entity
+  import opened Scuf
   import opened Connection
   import opened Subcircuit
   import opened MapFunction
@@ -13,10 +13,7 @@ module ConnectionEval {
 
   datatype CESummary = CESummary(
     c: Circuit,              // The original circuit
-    e1: Entity,
-    e2: Entity,
-    e12: Entity,
-    conn: MFConnection,      // Connection from entity 1 to entity 2
+    conn: ScufConnection,      // Connection from entity 1 to entity 2
     fi: FI,                  // The inputs into the combined entity
 
     // The below items can be derived from the above but it's tidier to
@@ -29,88 +26,94 @@ module ConnectionEval {
 
   ghost predicate CESummaryValid(s: CESummary)
   {
-    && ConnectEntitiesRequirements(s.c, s.e1, s.e2, s.e12, s.conn)
-    && FIValid(s.fi, s.e12.mf.inputs, s.e12.mf.state)
-    && ConnectEntitiesRequirementsBonus(s.c, s.e1, s.e2, s.e12, s.conn, s.fi)
-    && (s.new_c == ConnectEntitiesImpl(s.c, s.e1, s.e2, s.e12, s.conn))
+    && ConnectEntitiesRequirements(s.c, s.conn)
+    && FIValid(s.fi, s.conn.scuf_ab.mp.inputs, s.conn.scuf_ab.mp.state)
+    && ConnectEntitiesRequirementsBonus(s.c, s.conn, s.fi)
+    && (s.new_c == ConnectEntitiesImpl(s.c, s.conn))
     && (s.fi_1 == s.conn.fi2fia(s.fi))
     && (s.fi_2 == s.conn.fi2fib(s.fi))
   }
 
-  function MakeCESSummary(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, fi: FI): (s: CESummary)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    requires FIValid(fi, e12.mf.inputs, e12.mf.state)
+  function MakeCESSummary(c: Circuit, conn: ScufConnection, fi: FI): (s: CESummary)
+    requires ConnectEntitiesRequirements(c, conn)
+    requires FIValid(fi, conn.scuf_ab.mp.inputs, conn.scuf_ab.mp.state)
     ensures CESummaryValid(s)
   {
-    ConnectEntitiesRequirementsUpgrade(c, e1, e2, e12, conn, fi);
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
+    ConnectEntitiesRequirementsUpgrade(c, conn, fi);
+    var new_c := ConnectEntitiesImpl(c,conn);
     var fi_1 := conn.fi2fia(fi);
     var fi_2 := conn.fi2fib(fi);
-    CESummary(c, e1, e2, e12, conn, fi, new_c, fi_1, fi_2)
+    CESummary(c, conn, fi, new_c, fi_1, fi_2)
   }
 
   // Things that are easy to prove but we can give them in the requirements so the ensure
   // statements can depend on them.
-  ghost predicate ConnectEntitiesRequirementsPlus(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, fi: FI)
+  ghost predicate ConnectEntitiesRequirementsPlus(c: Circuit, conn: ScufConnection, fi: FI)
   {
     // These actually are requirementss.
-    && ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    && FIValid(fi, e12.mf.inputs, e12.mf.state)
+    && ConnectEntitiesRequirements(c, conn)
+    && FIValid(fi, conn.scuf_ab.mp.inputs, conn.scuf_ab.mp.state)
     // These are all easily proven consequences of the requirements that are easier to just
     // pass in as requirements.
-    && ConnectEntitiesRequirementsBonus(c, e1, e2, e12, conn, fi)
+    && ConnectEntitiesRequirementsBonus(c, conn, fi)
   }
   
-  ghost predicate ConnectEntitiesRequirementsBonus(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, fi: FI)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    requires FIValid(fi, e12.mf.inputs, e12.mf.state)
+  ghost predicate ConnectEntitiesRequirementsBonus(c: Circuit, conn: ScufConnection, fi: FI)
+    requires ConnectEntitiesRequirements(c, conn)
+    requires FIValid(fi, conn.scuf_ab.mp.inputs, conn.scuf_ab.mp.state)
   {
-    //&& ConnectMapFunctionRequirement(e1.mf, e2.mf, e12.mf, conn)
+    //&& ConnectMapFunctionRequirement(e1.mp, e2.mp, e12.mp, conn)
     && var fi_1 := conn.fi2fia(fi);
     && var fi_2 := conn.fi2fib(fi);
-    && var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
+    && var new_c := ConnectEntitiesImpl(c, conn);
     && FICircuitValid(new_c, fi)
     && FICircuitValid(new_c, fi_1)
     && FICircuitValid(new_c, fi_2)
     && ConnectCircuitRequirements(c, conn.GetConnection())
-    && EntityValid(new_c, e1)
-    && EntityValid(new_c, e2)
-    //&& ConnectMapFunctionRequirement(e1.mf, e2.mf, connection)
+    && conn.scuf_a.Valid(new_c)
+    && conn.scuf_b.Valid(new_c)
+    //&& ConnectMapFunctionRequirement(e1.mp, e2.mp, connection)
   }
 
-  lemma ConnectEntitiesRequirementsUpgrade(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, fi: FI)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    requires FIValid(fi, e12.mf.inputs, e12.mf.state)
-    ensures ConnectEntitiesRequirementsBonus(c, e1, e2, e12, conn, fi)
+  lemma ConnectEntitiesRequirementsUpgrade(c: Circuit, conn: ScufConnection, fi: FI)
+    requires ConnectEntitiesRequirements(c, conn)
+    requires FIValid(fi, conn.scuf_ab.mp.inputs, conn.scuf_ab.mp.state)
+    ensures ConnectEntitiesRequirementsBonus(c, conn, fi)
   {
-    ConnectEntitiesReqToFICircuitValid(c, e1, e2, e12, conn, fi);
-    ConnectEntitiesEntitiesStillValid(c, e1, e2, e12, conn);
+    ConnectEntitiesReqToFICircuitValid(c, conn, fi);
+    ConnectEntitiesEntitiesStillValid(c, conn);
     //ConnectEntitiesReqToConnectMapFunctionReq(c, e1, e2, e12, conn);
   }
 
-  lemma ConnectEntitiesReqToFICircuitValid(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection, fi: FI)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
-    requires FIValid(fi, e12.mf.inputs, e12.mf.state)
+  lemma ConnectEntitiesReqToFICircuitValid(c: Circuit, conn: ScufConnection, fi: FI)
+    requires ConnectEntitiesRequirements(c, conn)
+    requires FIValid(fi, conn.scuf_ab.mp.inputs, conn.scuf_ab.mp.state)
     ensures
-      && var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-      //&& ConnectMapFunctionRequirement(e1.mf, e2.mf, connection)
+      && var new_c := ConnectEntitiesImpl(c, conn);
+      //&& ConnectMapFunctionRequirement(e1.mp, e2.mp, connection)
       && var fi_1 := conn.fi2fia(fi);
       && var fi_2 := conn.fi2fib(fi);
       && FICircuitValid(new_c, fi)
       && FICircuitValid(new_c, fi_1)
       && FICircuitValid(new_c, fi_2)
   {
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
+    var e12 := conn.scuf_ab;
     //ConnectEntitiesReqToConnectMapFunctionReq(c, e1, e2, connection);
-    assert EntityValid(c, e1);
-    assert EntityValid(c, e2);
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-    ConnectEntitiesSomewhatValid(c, e1, e2, e12, conn);
-    assert EntitySomewhatValid(new_c, e12);
-    EntityValidFiValidToFICircuitValid(new_c, e12, fi);
+    assert e1.Valid(c);
+    assert e2.Valid(c);
+    var new_c := ConnectEntitiesImpl(c, conn);
+    ConnectEntitiesSomewhatValid(c, conn);
+    assert e12.SomewhatValid(new_c);
+    ScufValidFiValidToFICircuitValid(new_c, e12, fi);
     assert FICircuitValid(new_c, fi);
     var fi_1 := conn.fi2fia(fi);
     var fi_2 := conn.fi2fib(fi);
     var connection := conn.GetConnection();
+    assert ConnectionValid(c, e1, e2, connection) by {
+      GetConnectionValid(c, conn);
+    }
     assert fi_1.inputs.Keys <= fi.inputs.Keys;
     assert fi_2.inputs.Keys <= fi.inputs.Keys + connection.Keys;
     assert fi_1.state.Keys <= fi.state.Keys;
@@ -129,88 +132,91 @@ module ConnectionEval {
 
   lemma Knowns2FromKnowns1(s: CESummary, np: NP)
     requires CESummaryValid(s)
-    requires np in s.e2.mf.inputs 
-    requires np !in s.e12.mf.inputs 
+    requires np in s.conn.scuf_b.mp.inputs 
+    requires np !in s.conn.scuf_ab.mp.inputs 
     ensures
       && np in s.new_c.PortSource
       && var onp := s.new_c.PortSource[np];
       && (np in s.fi_2.inputs)
-      && (s.e1.mf.f.requires(s.fi_1))
-      && (onp in s.e1.mf.f(s.fi_1).outputs)
-      && (s.fi_2.inputs[np] == s.e1.mf.f(s.fi_1).outputs[onp])
+      && (s.conn.scuf_a.f.requires(s.fi_1))
+      && (onp in s.conn.scuf_a.f(s.fi_1).outputs)
+      && (s.fi_2.inputs[np] == s.conn.scuf_a.f(s.fi_1).outputs[onp])
   {
-    ConnectCircuitReqFromConnectEntitiesReq(s.c, s.e1, s.e2, s.e12, s.conn);
+    var e1 := s.conn.scuf_a;
+    var e2 := s.conn.scuf_b;
+    var e12 := s.conn.scuf_ab;
+    ConnectCircuitReqFromConnectEntitiesReq(s.c, s.conn);
     var connection := s.conn.GetConnection();
     assert s.new_c == ConnectCircuit(s.c, connection) by {
       reveal ConnectEntitiesImpl();
     }
     assert np in connection by {
       reveal Seq.ToSet();
-      assert connection.Keys <= Seq.ToSet(s.conn.mf_b.inputs);
-      assert connection.Keys == Seq.ToSet(s.e2.mf.inputs) - Seq.ToSet(s.e12.mf.inputs);
+      assert connection.Keys <= Seq.ToSet(e2.mp.inputs);
+      assert connection.Keys == Seq.ToSet(e2.mp.inputs) - Seq.ToSet(e12.mp.inputs);
     }
     var onp := connection[np];
     assert onp == s.new_c.PortSource[np] by {
       reveal ConnectEntitiesImpl();
       reveal ConnectionValid();
     }
-    assert np !in s.e1.mf.inputs by {
+    assert np !in e1.mp.inputs by {
       reveal ConnectionValid();
       reveal Seq.ToSet();
-      ConnectionKeysInE2(s.c, s.e1, s.e2, connection);
-      FInputsInSc(s.c, s.e1);
+      ConnectionKeysInE2(s.c, e1, e2, connection);
+      FInputsInSc(s.c, e1);
       reveal NPsInSc();
-      SetsNoIntersectionSymm(s.e1.sc, s.e2.sc);
-      InThisNotInThat(np.n, s.e2.sc, s.e1.sc);
+      SetsNoIntersectionSymm(e1.sc, e2.sc);
+      InThisNotInThat(np.n, e2.sc, e1.sc);
     }
     assert np !in s.fi.inputs;
     assert np in s.fi_2.inputs;
 
     assert 
-      && (s.e1.mf.f.requires(s.fi_1))
-      && (onp in s.e1.mf.f(s.fi_1).outputs) by {
-        reveal MapFunction.Valid();
+      && (e1.f.requires(s.fi_1))
+      && (onp in e1.f(s.fi_1).outputs) by {
+        //reveal MapFunction.Valid();
     }
 
-    assert (s.fi_2.inputs[np] == s.e1.mf.f(s.fi_1).outputs[onp]) by {
+    assert (s.fi_2.inputs[np] == e1.f(s.fi_1).outputs[onp]) by {
       assert s.fi_2 == s.conn.fi2fib(s.fi);
       assert s.fi_1 == s.conn.fi2fia(s.fi);
-      var si := s.conn.mf_ab.fi2si(s.fi);
-      s.conn.mf_ab.fi2si2fi(s.fi);
-      assert s.fi == s.conn.mf_ab.si2fi(si);
+      var si := e12.mp.fi2si(s.fi);
+      e12.mp.fi2si2fi(s.fi);
+      assert s.fi == e12.mp.si2fi(si);
       var si_1 := s.conn.si2sia(si);
-      assert SIValid(si_1, s.conn.mf_a.inputs, s.conn.mf_a.state);
-      reveal s.conn.mf_a.Valid();
-      var so_1 := s.conn.mf_a.sf(si_1);
-      var fo_1 := s.conn.mf_a.so2fo(so_1);
+      assert SIValid(si_1, e1.mp.inputs, e1.mp.state);
+      reveal UpdateFunction.Valid();
+      var so_1 := e1.uf.sf(si_1);
+      var fo_1 := e1.mp.so2fo(so_1);
       var si_2 := s.conn.si2sib(si);
-      assert s.conn.mf_b.si2fi(si_2) == s.fi_2;
-      reveal s.e1.mf.Valid();
+      assert e2.mp.si2fi(si_2) == s.fi_2;
+      //reveal e1.mp.Valid();
       reveal Seq.ToSet();
       reveal MapMatchesSeqs();
       var si_2_inputs := s.conn.abiao2bi.MapSeq(si.inputs, so_1.outputs);
-      assert np in s.conn.mf_b.inputs;
-      assert onp in s.conn.mf_a.outputs;
-      var index_src := Seq.IndexOf(s.conn.mf_b.inputs, np);
-      var index_snk := Seq.IndexOf(s.conn.mf_a.outputs, onp);
+      assert np in e2.mp.inputs;
+      assert onp in e1.mp.outputs;
+      var index_src := Seq.IndexOf(e2.mp.inputs, np);
+      var index_snk := Seq.IndexOf(e1.mp.outputs, onp);
       reveal s.conn.ConnectionCorrect();
       assert s.conn.abiao2bi.conn[index_src] == (true, index_snk);
       assert si_2.inputs[index_src] == so_1.outputs[index_snk];
       assert si_2.inputs[index_src] == s.fi_2.inputs[np];
       assert so_1.outputs[index_snk] == fo_1.outputs[onp];
       calc {
-        s.e1.mf.f(s.fi_1);
-        s.conn.mf_a.f(s.fi_1);
-        s.conn.mf_a.so2fo(s.conn.mf_a.sf(s.conn.mf_a.fi2si(s.fi_1)));
+        e1.f(s.fi_1);
+        e1.f(s.fi_1);
+        e1.mp.so2fo(e1.uf.sf(e1.mp.fi2si(s.fi_1)));
         {
-          assert s.fi_1 == s.conn.mf_a.si2fi(si_1);
-          assert si_1 == s.conn.mf_a.fi2si(s.fi_1);
+          assert s.fi_1 == e1.mp.si2fi(si_1);
+          assert si_1 == e1.mp.fi2si(s.fi_1);
         }
-        s.conn.mf_a.so2fo(s.conn.mf_a.sf(si_1));
-        s.conn.mf_a.so2fo(so_1);
+        e1.mp.so2fo(e1.uf.sf(si_1));
+        e1.mp.so2fo(so_1);
         fo_1;
       }
-      assert fo_1 == s.e1.mf.f(s.fi_1);
+      assert fo_1 == e1.f(s.fi_1);
     }
   }
 
@@ -231,15 +237,15 @@ module ConnectionEval {
 
   lemma EvaluateONPComposed1Helper(s: CESummary, prepath: seq<NP>, path: seq<NP>, inp: NP)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(prepath, s.e2.sc)
-    requires PathInSubcircuit(path, s.e1.sc)
+    requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_a.sc)
     requires inp !in path
-    requires inp.n in s.e1.sc
+    requires inp.n in s.conn.scuf_a.sc
     requires INPValid(s.new_c, inp)
     requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, s.fi)
     requires EvaluateONPUnaryBinaryRequirements(s.new_c, prepath + path, s.fi)
 
-    ensures forall np :: np in s.e1.mf.inputs ==> np in s.fi.inputs
+    ensures forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs
     ensures
       && var new_path := path + [inp];
       && Seq.HasNoDuplicates(new_path)
@@ -252,7 +258,7 @@ module ConnectionEval {
       |NodesNotInPath(s.new_c, prepath + path)|, 3
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
@@ -264,7 +270,7 @@ module ConnectionEval {
     StillHasNoDuplicates(prepath + path, inp);
     AppendPathValid(new_c, path, inp);
     AppendPathValid(new_c, prepath + path, inp);
-    assert forall np :: np in e1.mf.inputs ==> np in fi.inputs by {
+    assert forall np :: np in e1.mp.inputs ==> np in fi.inputs by {
       reveal Seq.ToSet();
     }
     var new_path := path + [inp];
@@ -279,21 +285,21 @@ module ConnectionEval {
 
   lemma EvaluateONPBinaryComposed1(s: CESummary, prepath: seq<NP>, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(prepath, s.e2.sc)
-    requires PathInSubcircuit(path, s.e1.sc)
+    requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_a.sc)
     requires EvaluateONPBinaryRequirements(s.new_c, path, s.fi)
     requires EvaluateONPBinaryRequirements(s.new_c, prepath + path, s.fi)
-    ensures forall np :: np in s.e1.mf.inputs ==> np in s.fi.inputs
+    ensures forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs
     ensures EvaluateONPBinary(s.new_c, path, s.fi) == EvaluateONPBinary(s.new_c, path, s.fi_1)
     ensures Simpl(EvaluateONPBinary(s.new_c, path, s.fi)) == Simpl(EvaluateONPBinary(s.new_c, prepath+path, s.fi))
     decreases |NodesNotInPath(s.new_c, prepath + path)|, 4
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
-    assert forall np :: np in e1.mf.inputs ==> np in fi.inputs by {
+    assert forall np :: np in e1.mp.inputs ==> np in fi.inputs by {
       reveal Seq.ToSet();
     }
     var head := Seq.Last(path);
@@ -324,11 +330,11 @@ module ConnectionEval {
 
   lemma EvaluateONPComposed2Helper(s: CESummary, path: seq<NP>, inp: NP)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(path, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_b.sc)
     requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, s.fi)
     requires INPValid(s.new_c, inp)
     requires inp !in path
-    requires inp.n in s.e2.sc
+    requires inp.n in s.conn.scuf_b.sc
     ensures
       var new_path := path + [inp];
       Seq.HasNoDuplicates(new_path) &&
@@ -347,7 +353,7 @@ module ConnectionEval {
 
   lemma EvaluateONPBinaryComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(path, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_b.sc)
     requires EvaluateONPBinaryRequirements(s.new_c, path, s.fi)
     ensures
       (Seq.Last(path).n !in s.fi_2.state) &&
@@ -355,7 +361,7 @@ module ConnectionEval {
     decreases |NodesNotInPath(s.new_c, path)|, 5
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
@@ -396,22 +402,22 @@ module ConnectionEval {
 
   lemma EvaluateONPUnaryComposed1(s: CESummary, prepath: seq<NP>, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(prepath, s.e2.sc)
-    requires PathInSubcircuit(path, s.e1.sc)
+    requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_a.sc)
     requires EvaluateONPUnaryRequirements(s.new_c, path, s.fi)
     requires EvaluateONPUnaryRequirements(s.new_c, prepath+path, s.fi)
     ensures
-      && (forall np :: np in s.e1.mf.inputs ==> np in s.fi.inputs)
+      && (forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs)
       && (EvaluateONPUnary(s.new_c, path, s.fi) == EvaluateONPUnary(s.new_c, path, s.fi_1))
       && (Simpl(EvaluateONPUnary(s.new_c, path, s.fi)) == Simpl(EvaluateONPUnary(s.new_c, prepath+path, s.fi)))
     decreases |NodesNotInPath(s.new_c, prepath + path)|, 5
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
-    assert forall np :: np in e1.mf.inputs ==> np in fi.inputs by {
+    assert forall np :: np in e1.mp.inputs ==> np in fi.inputs by {
       reveal Seq.ToSet();
     }
     var head := Seq.Last(path);
@@ -433,7 +439,7 @@ module ConnectionEval {
 
   lemma EvaluateONPUnaryComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(path, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_b.sc)
     requires EvaluateONPUnaryRequirements(s.new_c, path, s.fi)
     ensures
       && (Seq.Last(path) !in s.fi_2.inputs)
@@ -449,7 +455,7 @@ module ConnectionEval {
     } else {
       NodesNotInPathDecreases(s.new_c, path, inp_0);
       StillHasNoDuplicates(path, inp_0);
-      assert PathInSubcircuit(path + [inp_0], s.e2.sc) by {
+      assert PathInSubcircuit(path + [inp_0], s.conn.scuf_b.sc) by {
         reveal PathInSubcircuit();
       }
       EvaluateINPInnerComposed2(s, path + [inp_0]);
@@ -469,8 +475,8 @@ module ConnectionEval {
 
   lemma EvaluateINPInnerComposed1(s: CESummary, prepath: seq<NP>, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(path, s.e1.sc)
-    requires PathInSubcircuit(prepath, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_a.sc)
+    requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
     requires EvaluateINPInnerRequirements(s.new_c, path, s.fi)
     requires EvaluateINPInnerRequirements(s.new_c, prepath + path, s.fi)
     ensures EvaluateINPInner(s.new_c, path, s.fi) == EvaluateINPInner(s.new_c, path, s.fi_1)
@@ -478,7 +484,7 @@ module ConnectionEval {
     decreases |NodesNotInPath(s.new_c, prepath + path)|, 2
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b; var e12 := s.conn.scuf_ab;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
@@ -492,12 +498,12 @@ module ConnectionEval {
     assert np !in tail;
 
     assert (np in fi.inputs) == (np in fi_1.inputs) by {
-      assert fi.inputs.Keys == Seq.ToSet(s.e12.mf.inputs);
+      assert fi.inputs.Keys == Seq.ToSet(e12.mp.inputs);
       InThisNotInThat(np.n, e1.sc, e2.sc);
       FInputsInSc(new_c, e2);
       reveal NPsInSc();
       reveal Seq.ToSet();
-      assert np !in e2.mf.inputs;
+      assert np !in e2.mp.inputs;
     }
 
     if np in fi.inputs {
@@ -513,7 +519,7 @@ module ConnectionEval {
           reveal Circuit.Valid();
         }
         assert onp.n in e1.sc by {
-          reveal EntitySomewhatValid();
+          reveal Scuf.SomewhatValid();
           reveal ConnInputs();
         }
         if onp in path {
@@ -552,18 +558,18 @@ module ConnectionEval {
 
   lemma EvaluateINPInnerComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
-    requires PathInSubcircuit(path, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_b.sc)
     requires EvaluateINPInnerRequirements(s.new_c, path, s.fi)
     ensures
       && (EvaluateINPInner(s.new_c, path, s.fi) == EvaluateINPInner(s.new_c, path, s.fi_2))
     decreases |NodesNotInPath(s.new_c, path)|, 2
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
-    assert forall np :: np in e1.mf.inputs ==> np in fi.inputs by {
+    assert forall np :: np in e1.mp.inputs ==> np in fi.inputs by {
       reveal Seq.ToSet();
     }
     var np := Seq.Last(path);
@@ -574,14 +580,14 @@ module ConnectionEval {
     assert Seq.HasNoDuplicates(path);
     HasNoDuplicatesMeansHeadNotInTail(path);
     assert np !in tail;
-    assert fi.inputs.Keys == Seq.ToSet(e1.mf.inputs) + (Seq.ToSet(e2.mf.inputs) - connection.Keys);
-    assert np !in Seq.ToSet(e1.mf.inputs) by {
+    assert fi.inputs.Keys == Seq.ToSet(e1.mp.inputs) + (Seq.ToSet(e2.mp.inputs) - connection.Keys);
+    assert np !in Seq.ToSet(e1.mp.inputs) by {
       reveal Seq.ToSet();
       FInputsInSc(c, e1);
       reveal NPsInSc();
       InThisNotInThat(np.n, e2.sc, e1.sc);
     }
-    if np in Seq.ToSet(e2.mf.inputs) {
+    if np in Seq.ToSet(e2.mp.inputs) {
       assert np in fi_2.inputs;
       if np in fi.inputs {
         s.conn.fi2fibInfo(fi);
@@ -594,7 +600,7 @@ module ConnectionEval {
           reveal ConnectEntitiesImpl();
         }
         var onp := new_c.PortSource[np];
-        assert onp.n in e1.sc && onp in e1.mf.outputs by {
+        assert onp.n in e1.sc && onp in e1.mp.outputs by {
           reveal ConnectEntitiesImpl();
           reveal ConnectionValid();
           assert onp in connection.Values;
@@ -619,22 +625,21 @@ module ConnectionEval {
         assert (Simpl(EvaluateONPInner(new_c, path + [onp], fi)) ==
                 Simpl(EvaluateONPInner(new_c, [onp], fi)));
         assert EvaluateINPInner(new_c, path, fi) == EvaluateONPInner(new_c, path + [onp], fi);
-        assert (e1.mf.f.requires(fi_1)) && (e1.mf.f(fi_1).outputs.Keys == Seq.ToSet(e1.mf.outputs)) &&
-               (onp in e1.mf.f(fi_1).outputs) &&
-               (fi_2.inputs[np] == e1.mf.f(fi_1).outputs[onp]) by {
-          reveal MapFunction.Valid();
+        assert (e1.f.requires(fi_1)) && (e1.f(fi_1).outputs.Keys == Seq.ToSet(e1.mp.outputs)) &&
+               (onp in e1.f(fi_1).outputs) &&
+               (fi_2.inputs[np] == e1.f(fi_1).outputs[onp]) by {
+          //reveal MapFunction.Valid();
           reveal Seq.ToSet();
           reveal MapMatchesSeqs();
           Knowns2FromKnowns1(s, np);
           assert s.fi_2 == fi_2;
-          assert s.e1 == e1;
           assert s.fi_1 == fi_1;
-          assert fi_2.inputs[np] == e1.mf.f(fi_1).outputs[onp];
+          assert fi_2.inputs[np] == e1.f(fi_1).outputs[onp];
         }
-        assert EvaluateONPInner(new_c, [onp], fi_1) == EvalOk(MFLookupOutput(e1.mf, fi_1, onp)) by {
-          assert EntityValid(new_c, e1);
+        assert EvaluateONPInner(new_c, [onp], fi_1) == EvalOk(MFLookupOutput(e1, fi_1, onp)) by {
+          assert e1.Valid(new_c);
           reveal Seq.ToSet();
-          reveal EntityEvaluatesCorrectly();
+          reveal Scuf.EvaluatesCorrectly();
         }
         assert EvaluateINPInner(new_c, path, fi_2) == EvalOk(fi_2.inputs[np]);
         assert EvaluateINPInner(new_c, path, fi_2) == EvaluateONPInner(new_c, [onp], fi_1);
@@ -643,8 +648,8 @@ module ConnectionEval {
         assert EvaluateINPInner(new_c, path, fi_2) == EvaluateINPInner(new_c, path, fi);
       }
     } else {
-      assert np !in Seq.ToSet(e2.mf.inputs);
-      assert fi_2.inputs.Keys == Seq.ToSet(e2.mf.inputs);
+      assert np !in Seq.ToSet(e2.mp.inputs);
+      assert fi_2.inputs.Keys == Seq.ToSet(e2.mp.inputs);
       assert np !in fi_2.inputs;
       assert np !in fi.inputs by {
         assert np.n in e2.sc;
@@ -661,8 +666,8 @@ module ConnectionEval {
         }
         assert onp.n in e2.sc by {
           reveal Seq.ToSet();
-          assert np !in e2.mf.inputs;
-          reveal EntitySomewhatValid();
+          assert np !in e2.mp.inputs;
+          reveal Scuf.SomewhatValid();
           assert np !in AllInputs(new_c, e2.sc);
           assert np !in ConnInputs(new_c, e2.sc);
           reveal ConnInputs();
@@ -688,16 +693,16 @@ module ConnectionEval {
     requires CESummaryValid(s)
     requires EvaluateONPInnerRequirements(s.new_c, prepath + path, s.fi)
     requires EvaluateONPInnerRequirements(s.new_c, path, s.fi)
-    requires PathInSubcircuit(path, s.e1.sc)
-    requires PathInSubcircuit(prepath, s.e2.sc)
+    requires PathInSubcircuit(path, s.conn.scuf_a.sc)
+    requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
     ensures
-      && (forall np :: np in s.e1.mf.inputs ==> np in s.fi.inputs)
+      && (forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs)
       && (EvaluateONPInner(s.new_c, path, s.fi) == EvaluateONPInner(s.new_c, path, s.fi_1))
       && (Simpl(EvaluateONPInner(s.new_c, prepath + path, s.fi)) == Simpl(EvaluateONPInner(s.new_c, path, s.fi)))
     decreases |NodesNotInPath(s.new_c, prepath + path)|, 6
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
     var np := Seq.Last(path);
@@ -711,7 +716,7 @@ module ConnectionEval {
 
     assert (np.n in fi.state) == (np.n in fi_1.state) by {
       reveal Seq.ToSet();
-      assert np.n !in e2.mf.state by {
+      assert np.n !in e2.mp.state by {
         FInputsInSc(new_c, e2);
         reveal NPsInSc();
       }
@@ -753,7 +758,7 @@ module ConnectionEval {
     requires
       && CESummaryValid(s)
       && EvaluateONPInnerRequirements(s.new_c, path, s.fi)
-      && PathInSubcircuit(path, s.e2.sc)
+      && PathInSubcircuit(path, s.conn.scuf_b.sc)
     ensures
       && var np := Seq.Last(path);
       && (EvaluateONPInner(s.new_c, path, s.fi) == EvaluateONPInner(s.new_c, path, s.fi_2))
@@ -761,7 +766,7 @@ module ConnectionEval {
       |NodesNotInPath(s.new_c, path)|, 6
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
     var np := Seq.Last(path);
@@ -773,7 +778,7 @@ module ConnectionEval {
     }
     assert ONPValid(new_c, np);
     assert (np.n in fi.state) == (np.n in fi_2.state) by {
-      assert np.n !in e1.mf.state by {
+      assert np.n !in e1.mp.state by {
         FInputsInSc(new_c, e1);
         reveal NPsInSc();
       }
@@ -785,7 +790,7 @@ module ConnectionEval {
       assert fi.state[np.n] == fi_2.state[np.n];
       assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_2);
     } else {
-      assert np !in StateONPs(e1.mf.state + e2.mf.state) by {
+      assert np !in StateONPs(e1.mp.state + e2.mp.state) by {
         reveal Seq.ToSet();
       }
       var nk := new_c.NodeKind[np.n];
@@ -795,9 +800,9 @@ module ConnectionEval {
             reveal AllSeq();
           }
           assert np.n in AllSeq(new_c, e2.sc);
-          assert np in StateONPs(e2.mf.state) by {
+          assert np in StateONPs(e2.mp.state) by {
             reveal AllSeq();
-            reveal EntitySomewhatValid();
+            reveal Scuf.SomewhatValid();
           }
           assert false;
         }
@@ -830,13 +835,13 @@ module ConnectionEval {
     requires
       && CESummaryValid(s)
       && NPValid(s.new_c, np)
-      && (np in s.e1.mf.outputs || np in s.e2.mf.outputs || np in StateINPs(s.e1.mf.state + s.e2.mf.state))
+      && (np in s.conn.scuf_a.mp.outputs || np in s.conn.scuf_b.mp.outputs || np in StateINPs(s.conn.scuf_a.mp.state + s.conn.scuf_b.mp.state))
     ensures
-      && (np.n in s.e1.sc ==> Evaluate(s.new_c, np, s.fi_1) == Evaluate(s.new_c, np, s.fi))
-      && (np.n in s.e2.sc ==> Evaluate(s.new_c, np, s.fi_2) == Evaluate(s.new_c, np, s.fi))
+      && (np.n in s.conn.scuf_a.sc ==> Evaluate(s.new_c, np, s.fi_1) == Evaluate(s.new_c, np, s.fi))
+      && (np.n in s.conn.scuf_b.sc ==> Evaluate(s.new_c, np, s.fi_2) == Evaluate(s.new_c, np, s.fi))
   {
     var c := s.c; var new_c := s.new_c;
-    var e1 := s.e1; var e2 := s.e2;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
@@ -849,7 +854,7 @@ module ConnectionEval {
 
     LengthOneNoDuplicates(path);
     LengthOneNoDuplicates(prepath + path);
-    if np in e1.mf.outputs || np in StateINPs(e1.mf.state) {
+    if np in e1.mp.outputs || np in StateINPs(e1.mp.state) {
       assert np.n in e1.sc by {
         FOutputsInSc(s.c, e1);
         reveal Seq.ToSet();
@@ -859,7 +864,7 @@ module ConnectionEval {
       assert PathInSubcircuit(prepath, e2.sc) by { reveal PathInSubcircuit(); }
       assert PathInSubcircuit(path, e1.sc) by { reveal PathInSubcircuit(); }
     } else {
-      assert np in e2.mf.outputs || np in StateINPs(e2.mf.state);
+      assert np in e2.mp.outputs || np in StateINPs(e2.mp.state);
       assert np.n in e2.sc by {
         FOutputsInSc(s.c, e2);
         reveal Seq.ToSet();
@@ -871,7 +876,7 @@ module ConnectionEval {
     }
 
     if ONPValid(new_c, np) {
-      if np in e1.mf.outputs || np in StateINPs(e1.mf.state) {
+      if np in e1.mp.outputs || np in StateINPs(e1.mp.state) {
         EvaluateONPInnerComposed1(s, prepath, path);
         assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_1);
       } else {
@@ -879,7 +884,7 @@ module ConnectionEval {
         assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_2);
       }
     } else {
-      if np in e1.mf.outputs || np in StateINPs(e1.mf.state) {
+      if np in e1.mp.outputs || np in StateINPs(e1.mp.state) {
         EvaluateINPInnerComposed1(s, prepath, path);
         assert EvaluateINPInner(new_c, path, fi) == EvaluateINPInner(new_c, path, fi_1);
       } else {
@@ -887,7 +892,7 @@ module ConnectionEval {
         assert EvaluateINPInner(new_c, path, fi) == EvaluateINPInner(new_c, path, fi_2);
       }
     }
-    if np in e1.mf.outputs || np in StateINPs(e1.mf.state) {
+    if np in e1.mp.outputs || np in StateINPs(e1.mp.state) {
       assert Evaluate(new_c, np, fi) == Evaluate(new_c, np, fi_1);
     } else {
       assert Evaluate(new_c, np, fi) == Evaluate(new_c, np, fi_2);
@@ -898,66 +903,71 @@ module ConnectionEval {
     requires
       && CESummaryValid(s)
       && NPValid(s.new_c, np)
-      && (np in s.e12.mf.outputs || np in StateINPs(s.e12.mf.state))
+      && (np in s.conn.scuf_ab.mp.outputs || np in StateINPs(s.conn.scuf_ab.mp.state))
     ensures
-      (Evaluate(s.new_c, np, s.fi) == EvalOk(MFLookup(s.e12.mf, s.fi, np)))
+      (Evaluate(s.new_c, np, s.fi) == EvalOk(MFLookup(s.conn.scuf_ab, s.fi, np)))
   {
-    var e1 := s.e1; var e2 := s.e2;
-    var new_c := s.new_c; var e12 := s.e12;
+    var e1 := s.conn.scuf_a; var e2 := s.conn.scuf_b;
+    var new_c := s.new_c; var e12 := s.conn.scuf_ab;
     var fi := s.fi; var fi_1 := s.fi_1; var fi_2 := s.fi_2;
     var connection := s.conn.GetConnection();
 
-    assert np in s.e12.mf.outputs ==> (np in s.e1.mf.outputs || np in s.e2.mf.outputs) by {
-      assert Seq.ToSet(s.e12.mf.outputs) <= Seq.ToSet(s.e1.mf.outputs) + Seq.ToSet(s.e2.mf.outputs);
-      if np in s.e12.mf.outputs {
+    assert np in e12.mp.outputs ==> (np in s.conn.scuf_a.mp.outputs || np in e2.mp.outputs) by {
+      assert Seq.ToSet(e12.mp.outputs) <= Seq.ToSet(e1.mp.outputs) + Seq.ToSet(e2.mp.outputs);
+      if np in e12.mp.outputs {
         reveal Seq.ToSet();
-        assert np in Seq.ToSet(s.e12.mf.outputs);
-        assert np in Seq.ToSet(s.e1.mf.outputs) + Seq.ToSet(s.e2.mf.outputs);
-        assert np in s.e1.mf.outputs || np in s.e2.mf.outputs;
+        assert np in Seq.ToSet(e12.mp.outputs);
+        assert np in Seq.ToSet(e1.mp.outputs) + Seq.ToSet(e2.mp.outputs);
+        assert np in e1.mp.outputs || np in e2.mp.outputs;
       }
     }
 
-    s.e1.mf.NotInBothOutputsAndStateINPs(np);
-    s.e2.mf.NotInBothOutputsAndStateINPs(np);
-    s.e12.mf.NotInBothOutputsAndStateINPs(np);
+    //e1.mp.NotInBothOutputsAndStateINPs(np);
+    //e2.mp.NotInBothOutputsAndStateINPs(np);
+    //e12.mp.NotInBothOutputsAndStateINPs(np);
 
-    assert np in StateINPs(s.e12.mf.state) ==> np in StateINPs(s.e1.mf.state + s.e2.mf.state) by {
-      assert Seq.ToSet(s.e12.mf.state) == Seq.ToSet(s.e1.mf.state) + Seq.ToSet(s.e2.mf.state);
+    assert np in StateINPs(e12.mp.state) ==> np in StateINPs(e1.mp.state + e2.mp.state) by {
+      assert Seq.ToSet(e12.mp.state) == Seq.ToSet(e1.mp.state) + Seq.ToSet(e2.mp.state);
       reveal Seq.ToSet();
-      if np in StateINPs(s.e12.mf.state) {
-        assert np.n in s.e12.mf.state;
-        assert np.n in Seq.ToSet(s.e12.mf.state);
-        assert np.n in Seq.ToSet(s.e1.mf.state) || np.n in Seq.ToSet(s.e2.mf.state);
-        assert np.n in s.e1.mf.state || np.n in s.e2.mf.state;
-        assert np.n in s.e1.mf.state + s.e2.mf.state;
+      if np in StateINPs(e12.mp.state) {
+        assert np.n in e12.mp.state;
+        assert np.n in Seq.ToSet(e12.mp.state);
+        assert np.n in Seq.ToSet(e1.mp.state) || np.n in Seq.ToSet(e2.mp.state);
+        assert np.n in e1.mp.state || np.n in e2.mp.state;
+        assert np.n in e1.mp.state + e2.mp.state;
       }
     }
     EvaluateConnectEntitiesInner(s, np);
 
-    assert (Seq.ToSet(s.e1.mf.outputs) !! StateINPs(s.e2.mf.state)) && (Seq.ToSet(s.e2.mf.outputs) !! StateINPs(s.e1.mf.state)) by {
-      reveal MapFunction.Valid();
-      FOutputsInSc(s.c, s.e1);
-      FOutputsInSc(s.c, s.e2);
+    assert (Seq.ToSet(e1.mp.outputs) !! StateINPs(e2.mp.state)) && (Seq.ToSet(e2.mp.outputs) !! StateINPs(e1.mp.state)) by {
+      FOutputsInSc(s.c, e1);
+      FOutputsInSc(s.c, e2);
       assert e1.sc !! e2.sc;
       reveal NPsInSc();
     }
-    if np in s.e1.mf.outputs || np in s.e2.mf.outputs {
-      assert np in s.e12.mf.outputs by {
+    if np in e1.mp.outputs || np in e2.mp.outputs {
+      assert np in e12.mp.outputs by {
         reveal Seq.ToSet();
-        assert np !in StateINPs(s.e2.mf.state);
-        assert np !in StateINPs(s.e1.mf.state);
+        assert SeqsNoIntersection(e2.mp.outputs, StateINPsSeq(e2.mp.state));
+        assert SeqsNoIntersection(e1.mp.outputs, StateINPsSeq(e1.mp.state));
+        StateINPsSeqSame(e2.mp.state);
+        StateINPsSeqSame(e1.mp.state);
+        assert np !in StateINPs(e2.mp.state);
+        assert np !in StateINPs(e1.mp.state);
       }
     }
-    if np in StateINPs(s.e1.mf.state) || np in StateINPs(s.e2.mf.state) {
-      assert np in StateINPs(s.e12.mf.state) by {
+    if np in StateINPs(e1.mp.state) || np in StateINPs(e2.mp.state) {
+      assert np in StateINPs(e12.mp.state) by {
         reveal Seq.ToSet();
-        assert np !in s.e1.mf.outputs;
-        assert np !in s.e2.mf.outputs;
+        StateINPsSeqSame(e2.mp.state);
+        StateINPsSeqSame(e1.mp.state);
+        assert np !in e1.mp.outputs;
+        assert np !in e2.mp.outputs;
       }
     }
 
-    if np in e1.mf.outputs || np in StateINPs(e1.mf.state) {
-      assert np in Seq.ToSet(e1.mf.outputs) || np in StateINPs(e1.mf.state) by {
+    if np in e1.mp.outputs || np in StateINPs(e1.mp.state) {
+      assert np in Seq.ToSet(e1.mp.outputs) || np in StateINPs(e1.mp.state) by {
         reveal Seq.ToSet();
       }
       assert np.n in e1.sc by {
@@ -969,22 +979,22 @@ module ConnectionEval {
         Evaluate(new_c, np, fi);
         Evaluate(new_c, np, fi_1);
         {
-          assert EntityValid(new_c, e1);
-          reveal EntityEvaluatesCorrectly();
+          assert e1.Valid(new_c);
+          reveal Scuf.EvaluatesCorrectly();
         }
-        EvalOk(MFLookup(e1.mf, fi_1, np));
+        EvalOk(MFLookup(e1, fi_1, np));
         {
           reveal Seq.ToSet();
-          if np in e1.mf.outputs {
+          if np in e1.mp.outputs {
             s.conn.MFABMFAConsistentOutputs(fi, np);
           } else {
             s.conn.MFABMFAConsistentState(fi, np);
           }
         }
-        EvalOk(MFLookup(e12.mf, fi, np));
+        EvalOk(MFLookup(e12, fi, np));
       }
     } else {
-      assert np in e2.mf.outputs || np in StateINPs(e2.mf.state);
+      assert np in e2.mp.outputs || np in StateINPs(e2.mp.state);
       assert np.n in e2.sc by {
         FOutputsInSc(s.new_c, e2);
         reveal NPsInSc();
@@ -994,126 +1004,129 @@ module ConnectionEval {
         Evaluate(new_c, np, fi);
         Evaluate(new_c, np, fi_2);
         {
-          assert EntityValid(new_c, e2);
+          assert e2.Valid(new_c);
           reveal Seq.ToSet();
-          reveal EntityEvaluatesCorrectly();
+          reveal Scuf.EvaluatesCorrectly();
         }
-        EvalOk(MFLookup(e2.mf, fi_2, np));
+        EvalOk(MFLookup(e2, fi_2, np));
         {
           reveal Seq.ToSet();
-          if np in e2.mf.outputs {
+          if np in e2.mp.outputs {
             s.conn.MFABMFBConsistentOutputs(fi, np);
           } else {
             s.conn.MFABMFBConsistentState(fi, np);
           }
         }
-        EvalOk(MFLookup(e12.mf, fi, np));
+        EvalOk(MFLookup(e12, fi, np));
       }
     }
   }
 
-  lemma ConnectEntitiesValid(c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+  lemma ConnectEntitiesValid(c: Circuit, conn: ScufConnection)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures
-      var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-      && EntityValid(new_c, e12)
+      var new_c := ConnectEntitiesImpl(c, conn);
+      && conn.scuf_ab.Valid(new_c)
   {
-    var new_c := ConnectEntitiesImpl(c, e1, e2, e12, conn);
-    ConnectEntitiesSomewhatValid(c, e1, e2, e12, conn);
-    forall fi: FI | FIValid(fi, e12.mf.inputs, e12.mf.state)
-      ensures forall np :: np in Seq.ToSet(e12.mf.outputs) ==>
-          && np in e12.mf.f(fi).outputs
+    var new_c := ConnectEntitiesImpl(c, conn);
+    ConnectEntitiesSomewhatValid(c, conn);
+    var e1 := conn.scuf_a;
+    var e2 := conn.scuf_b;
+    var e12 := conn.scuf_ab;
+    forall fi: FI | FIValid(fi, e12.mp.inputs, e12.mp.state)
+      ensures forall np :: np in Seq.ToSet(e12.mp.outputs) ==>
+          && np in e12.f(fi).outputs
           && NPValid(new_c, np)
           && FICircuitValid(new_c, fi)
-          && (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).outputs[np]))
-      ensures forall np :: np in Seq.ToSet(e12.mf.outputs) ==>
-          && np in e12.mf.outputs
-          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)))
-      ensures forall np :: np in StateINPs(e12.mf.state) ==>
-          && np.n in e12.mf.f(fi).state
+          && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).outputs[np]))
+      ensures forall np :: np in Seq.ToSet(e12.mp.outputs) ==>
+          && np in e12.mp.outputs
+          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)))
+      ensures forall np :: np in StateINPs(e12.mp.state) ==>
+          && np.n in e12.f(fi).state
           && NPValid(new_c, np)
           && FICircuitValid(new_c, fi)
-          && (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).state[np.n]))
-      ensures forall np :: np in StateINPs(e12.mf.state) ==>
-          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)))
+          && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).state[np.n]))
+      ensures forall np :: np in StateINPs(e12.mp.state) ==>
+          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)))
     {
-      EntityFOutputsAreValid(c, e1);
-      EntityFOutputsAreValid(c, e2);
+      ScufFOutputsAreValid(c, e1);
+      ScufFOutputsAreValid(c, e2);
       FOutputsInSc(c, e1);
       FOutputsInSc(c, e2);
-      var s := MakeCESSummary(c, e1, e2, e12, conn, fi);
-      reveal MapFunction.Valid();
-      forall np | np in Seq.ToSet(e12.mf.outputs)
+      var s := MakeCESSummary(c, conn, fi);
+      //reveal MapFunction.Valid();
+      forall np | np in Seq.ToSet(e12.mp.outputs)
         ensures
-          && np in e12.mf.f(fi).outputs
+          && np in e12.f(fi).outputs
           && NPValid(new_c, np)
-          && (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).outputs[np]))
-          && np in e12.mf.outputs
-          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)))
+          && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).outputs[np]))
+          && np in e12.mp.outputs
+          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)))
       {
-        assert np in e12.mf.outputs by {
+        assert np in e12.mp.outputs by {
           reveal Seq.ToSet();
         }
-        EntityFOutputsAreValid(new_c, e12);
+        ScufFOutputsAreValid(new_c, e12);
         reveal NPsInSc();
         assert NPValid(new_c, np);
         EvaluateConnectEntities(s, np);
-        reveal e12.mf.Valid();
-        var fo := e12.mf.f(fi);
-        assert FOValid(fo, e12.mf.outputs, e12.mf.state);
+        //reveal e12.mp.Valid();
+        var fo := e12.f(fi);
+        assert FOValid(fo, e12.mp.outputs, e12.mp.state);
         assert np in fo.outputs by {
           reveal Seq.ToSet();
-          reveal e12.mf.Valid();
+          //reveal e12.mp.Valid();
         }
-        assert (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).outputs[np]));
-        assert (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)));
+        assert (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).outputs[np]));
+        assert (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)));
       }
-      forall np | np in StateINPs(e12.mf.state)
+      forall np | np in StateINPs(e12.mp.state)
         ensures
-          && np.n in e12.mf.f(fi).state
+          && np.n in e12.f(fi).state
           && NPValid(new_c, np)
-          && (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).state[np.n]))
-          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)))
+          && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).state[np.n]))
+          && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)))
       {
-        EntityFOutputsAreValid(new_c, e12);
+        ScufFOutputsAreValid(new_c, e12);
         reveal NPsInSc();
         assert NPValid(new_c, np);
         EvaluateConnectEntities(s, np);
-        assert np.n in e12.mf.f(fi).state by {
+        assert np.n in e12.f(fi).state by {
           reveal Seq.ToSet();
-          reveal e12.mf.Valid();
+          //reveal e12.mp.Valid();
         }
-        assert (Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).state[np.n]));
-        assert (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np)));
+        assert (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).state[np.n]));
+        assert (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)));
       }
     }
-    reveal EntityEvaluatesCorrectly();
+    reveal Scuf.EvaluatesCorrectly();
     assert ScValid(new_c, e12.sc) by {
       reveal ConnectEntitiesImpl();
       reveal ScValid();
     }
-    assert forall fi: FI :: FIValid(fi, e12.mf.inputs, e12.mf.state) ==>
-      forall np :: np in Seq.ToSet(e12.mf.outputs) ==>
-        && Evaluate(new_c, np, fi) == EvalOk(e12.mf.f(fi).outputs[np]);
-    assert forall fi: FI :: FIValid(fi, e12.mf.inputs, e12.mf.state) ==>
-      (forall np :: np in (Seq.ToSet(e12.mf.outputs) + StateINPs(e12.mf.state)) ==>
-      Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12.mf, fi, np))
+    assert forall fi: FI :: FIValid(fi, e12.mp.inputs, e12.mp.state) ==>
+      forall np :: np in Seq.ToSet(e12.mp.outputs) ==>
+        && Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).outputs[np]);
+    assert forall fi: FI :: FIValid(fi, e12.mp.inputs, e12.mp.state) ==>
+      (forall np :: np in (Seq.ToSet(e12.mp.outputs) + StateINPs(e12.mp.state)) ==>
+      Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np))
       );
-    assert EntityEvaluatesCorrectly(new_c, e12);
-    assert EntityValid(new_c, e12);
+    assert e12.EvaluatesCorrectly(new_c);
+    assert e12.Valid(new_c);
   }
 
   function ConnectEntities(
-      c: Circuit, e1: Entity, e2: Entity, e12: Entity, conn: MFConnection): (new_c: Circuit)
-    requires ConnectEntitiesRequirements(c, e1, e2, e12, conn)
+      c: Circuit, conn: ScufConnection): (new_c: Circuit)
+    requires ConnectEntitiesRequirements(c, conn)
     ensures new_c.Valid()
-    ensures EntityValid(new_c, e12)
-    ensures IsIsland(new_c, e12.sc)
+    ensures conn.scuf_ab.Valid(new_c)
+    ensures IsIsland(new_c, conn.scuf_ab.sc)
     ensures new_c.NodeKind == c.NodeKind
   {
-    ConnectEntitiesValid(c, e1, e2, e12, conn);
-    ConnectEntitiesIsIsland(c, e1, e2, e12, conn);
-    ConnectEntitiesImpl(c, e1, e2, e12, conn)
+    ConnectEntitiesValid(c, conn);
+    ConnectEntitiesIsIsland(c, conn);
+    ConnectEntitiesImpl(c, conn)
   }
 
 }
