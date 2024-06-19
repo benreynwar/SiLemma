@@ -13,6 +13,18 @@ module Utils {
     Seq.ToSet(a) !! Seq.ToSet(b)
   }
 
+  lemma ConcatSeqsNoIntersection<T(==)>(a1: seq<T>, a2: seq<T>, b1: seq<T>, b2: seq<T>)
+    requires SeqsNoIntersection(a1, b1)
+    requires SeqsNoIntersection(a1, b2)
+    requires SeqsNoIntersection(a2, b1)
+    requires SeqsNoIntersection(a2, b2)
+    ensures SeqsNoIntersection(a1 + a2, b1 + b2)
+  {
+    reveal Seq.ToSet();
+    assert Seq.ToSet(a1) !! Seq.ToSet(b1 + b2);
+    assert Seq.ToSet(a2) !! Seq.ToSet(b1 + b2);
+  }
+
   predicate SeqsNoIntersectionByIndex<T(==)>(a: seq<T>, b: seq<T>)
   {
     !exists index1: nat, index2: nat :: index1 < |a| && index2 < |b| && a[index1] == b[index2]
@@ -215,11 +227,11 @@ module Utils {
     forall index: nat :: index < |a| ==> a[index] in m && m[a[index]] == b[index]
   }
 
-  opaque function SeqsToMap<T(==), U(==)>(a: seq<T>, b: seq<U>): (r: map<T, U>)
+  opaque function SeqsToMap<T(==), U(==)>(a: seq<T>, b: seq<U>): (m: map<T, U>)
     requires Seq.HasNoDuplicates(a)
     requires |a| == |b|
-    ensures r.Keys == Seq.ToSet(a)
-    ensures MapMatchesSeqs(r, a, b)
+    ensures m.Keys == Seq.ToSet(a)
+    ensures MapMatchesSeqs(m, a, b)
   {
     reveal Seq.ToSet();
     reveal MapMatchesSeqs();
@@ -237,6 +249,46 @@ module Utils {
       var r := new_map[x := y];
       r
   }
+
+  opaque function MapToSeq<T(==), U(==)>(a: seq<T>, m: map<T, U>): (b: seq<U>)
+    requires Seq.HasNoDuplicates(a)
+    requires Seq.ToSet(a) == m.Keys
+    ensures
+      && |b| == |a|
+      && MapMatchesSeqs(m, a, b)
+  {
+    reveal MapMatchesSeqs();
+    reveal Seq.ToSet();
+    var b := seq(|a|, (index: nat) requires index < |a| => m[a[index]]);
+    b
+  }
+
+  lemma MapToSeqToMap<T, U>(a: seq<T>, m: map<T, U>)
+    requires Seq.HasNoDuplicates(a)
+    requires Seq.ToSet(a) == m.Keys
+    ensures
+      var b := MapToSeq(a, m);
+      m == SeqsToMap(a, b)
+  {
+    reveal MapToSeq();
+    reveal SeqsToMap();
+    reveal Seq.ToSet();
+    reveal MapMatchesSeqs();
+  }
+
+  lemma SeqToMapToSeq<T, U>(a: seq<T>, b: seq<U>)
+    requires Seq.HasNoDuplicates(a)
+    requires |a| == |b|
+    ensures
+      var m := SeqsToMap(a, b);
+      b == MapToSeq(a, m)
+  {
+    reveal MapToSeq();
+    reveal SeqsToMap();
+    reveal Seq.ToSet();
+    reveal MapMatchesSeqs();
+  }
+    
 
   lemma NoIntersectionEquiv<T>(a: set<T>, b: set<T>)
     ensures (a !! b) == (|a * b| == 0)
@@ -283,7 +335,7 @@ module Utils {
     // multiset.
     requires Seq.HasNoDuplicates(xs)
     requires Seq.HasNoDuplicates(ys)
-    requires Seq.ToSet(xs) !! Seq.ToSet(ys)
+    requires SeqsNoIntersection(xs, ys)
     ensures Seq.HasNoDuplicates(xs+ys)
   {
     reveal Seq.HasNoDuplicates();

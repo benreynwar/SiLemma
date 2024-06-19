@@ -160,6 +160,17 @@ module Subcircuit {
     reveal ONPsValid();
     (set np | np in AllNPFromNodes(c, sc) && ONPValid(c, np) :: np)
   }
+
+  lemma AllONPsAdd(c: Circuit, sc1: set<CNode>, sc2: set<CNode>)
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+    ensures
+      reveal ScValid();
+      AllONPs(c, sc1 + sc2) == AllONPs(c, sc1) + AllONPs(c, sc2)
+  {
+    reveal AllONPs();
+    reveal ScValid();
+  }
   
   function AllInputs(c: Circuit, sc: set<CNode>): (r: set<NP>)
     requires c.Valid()

@@ -88,6 +88,37 @@ module Circ {
       AllNPfromNode(c, node) + AllNPFromNodes(c, new_nodes)
   }
 
+  lemma AllNPFromNodesAdds(c: Circuit, sc1: set<CNode>, sc2: set<CNode>)
+    requires ScValid(c, sc1)
+    requires ScValid(c, sc2)
+    ensures
+      reveal ScValid();
+      AllNPFromNodes(c, sc1 + sc2) == AllNPFromNodes(c, sc1) + AllNPFromNodes(c, sc2)
+    decreases |sc2|
+  {
+    reveal ScValid();
+    if |sc2| == 0 {
+    } else {
+      var node :| node in sc2;
+      var new_sc2 := sc2 - {node};
+      var new_sc1 := sc1 + {node};
+      calc {
+        AllNPFromNodes(c, sc1 + sc2);
+        AllNPFromNodes(c, new_sc1 + new_sc2);
+        {AllNPFromNodesAdds(c, new_sc1, new_sc2);}
+        AllNPFromNodes(c, new_sc1) + AllNPFromNodes(c, new_sc2);
+        {
+          assert AllNPFromNodes(c, sc2) == AllNPFromNodes(c, new_sc2) + AllNPfromNode(c, node);
+          assert AllNPFromNodes(c, new_sc1) == AllNPFromNodes(c, sc1) + AllNPfromNode(c, node);
+        }
+        (AllNPFromNodes(c, sc1) - AllNPfromNode(c, node)) +
+        (AllNPFromNodes(c, sc2) + AllNPfromNode(c, node));
+        AllNPFromNodes(c, sc1) + AllNPFromNodes(c, sc2);
+      }
+    }
+  }
+
+
   lemma AllNPFromNodesDependsNodeKind(ca: Circuit, cb: Circuit, nodes: set<CNode>)
     requires ca.NodeKind == cb.NodeKind
     requires ScValid(ca, nodes)

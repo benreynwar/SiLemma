@@ -17,7 +17,20 @@ module ConservedSubcircuit {
 
   ghost opaque predicate CircuitUnconnected(ca: Circuit, cb: Circuit)
   {
-    && (forall np :: np in cb.PortSource && np !in ca.PortSource ==> np.n !in ca.NodeKind && cb.PortSource[np].n !in ca.NodeKind)
+    && (forall np :: np in cb.PortSource && np !in ca.PortSource ==>
+        np.n !in ca.NodeKind && cb.PortSource[np].n !in ca.NodeKind)
+  }
+
+  lemma CircuitConservedUnconnectedTransitive(ca: Circuit, cb: Circuit, cc: Circuit)
+    requires CircuitConserved(ca, cb)
+    requires CircuitConserved(cb, cc)
+    requires CircuitUnconnected(ca, cb)
+    requires CircuitUnconnected(cb, cc)
+    ensures CircuitConserved(ca, cc)
+    ensures CircuitUnconnected(ca, cc)
+  {
+    reveal CircuitConserved();
+    reveal CircuitUnconnected();
   }
 
   lemma CircuitConservedToSubcircuitConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
@@ -355,6 +368,23 @@ module ConservedSubcircuit {
     }
   }
 
+  lemma ScufConserved3(ca: Circuit, cb: Circuit, e: Scuf)
+    requires ca.Valid()
+    requires cb.Valid()
+    requires CircuitConserved(ca, cb)
+    requires CircuitUnconnected(ca, cb)
+    requires e.Valid(ca)
+    ensures e.Valid(cb)
+  {
+    CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
+    reveal CircuitConserved();
+    reveal CircuitUnconnected();
+    reveal ScValid();
+    reveal Scuf.SomewhatValid();
+    reveal ConnOutputs();
+    ScufConserved(ca, cb, e);
+  }
+
   lemma ScufConserved2(ca: Circuit, cb: Circuit, e: Scuf)
     requires ca.Valid()
     requires cb.Valid()
@@ -443,6 +473,41 @@ module ConservedSubcircuit {
     && (c.NodeKind.Keys !! e.sc)
   }
 
+  opaque ghost predicate DualInsertion(c: Circuit, new_c: Circuit, s1: Scuf, s2: Scuf)
+  {
+    && new_c.Valid()
+    && s1.Valid(new_c)
+    && s2.Valid(new_c)
+    && IsIsland(new_c, s1.sc)
+    && IsIsland(new_c, s2.sc)
+    && (s1.sc !! s2.sc)
+    && CircuitUnconnected(c, new_c)
+    && CircuitConserved(c, new_c)
+    && (new_c.NodeKind.Keys == c.NodeKind.Keys + s1.sc + s2.sc)
+    && (c.NodeKind.Keys !! s1.sc)
+  }
+
+  lemma TwoSimpleInsertionIsDualInsertion(c: Circuit, c1: Circuit, c2: Circuit, s1: Scuf, s2: Scuf)
+    requires SimpleInsertion(c, c1, s1)
+    requires SimpleInsertion(c1, c2, s2)
+    ensures DualInsertion(c, c2, s1, s2)
+  {
+    reveal SimpleInsertion();
+    reveal DualInsertion();
+    ScufConserved3(c1, c2, s1);
+    IsIslandConserved(c1, c2, s1.sc);
+    assert c2.Valid();
+    assert s1.Valid(c2);
+    assert s2.Valid(c2);
+    assert IsIsland(c2, s1.sc);
+    assert IsIsland(c2, s2.sc);
+    assert (s1.sc !! s2.sc);
+    CircuitConservedUnconnectedTransitive(c, c1, c2);
+    assert CircuitConserved(c, c2);
+    assert (c2.NodeKind.Keys == c.NodeKind.Keys + s1.sc + s2.sc);
+    assert (c.NodeKind.Keys !! s1.sc);
+  }
+
   datatype ScufInserter = ScufInserter(
     uf: UpdateFunction,
     fn: Circuit --> (Circuit, Scuf)
@@ -471,6 +536,19 @@ module ConservedSubcircuit {
     {
       reveal Valid();
     }
+
+    lemma FnOutputsValid(c: Circuit)
+      requires Valid()
+      requires c.Valid()
+      ensures
+        reveal Valid();
+        var (new_c, s) := fn(c);
+        && new_c.Valid()
+        && s.Valid(new_c)
+    {
+      reveal Valid();
+      reveal SimpleInsertion();
+    }
   }
 
   lemma StillSimpleInsertionAfterScufSwapMF(old_c: Circuit, new_c: Circuit, e: Scuf, uf: UpdateFunction)
@@ -485,6 +563,21 @@ module ConservedSubcircuit {
       SimpleInsertion(old_c, new_c, new_e)
   {
     reveal SimpleInsertion();
+  }
+
+  function InsertTwo(c: Circuit, z1: ScufInserter, z2: ScufInserter): (r: (Circuit, Scuf, Scuf))
+    requires c.Valid()
+    requires z1.Valid()
+    requires z2.Valid()
+    ensures DualInsertion(c, r.0, r.1, r.2)
+  {
+    reveal SimpleInsertion();
+    z1.ValidForCircuit(c);
+    var (c1, s1) := z1.fn(c);
+    z2.ValidForCircuit(c1);
+    var (c2, s2) := z2.fn(c1);
+    TwoSimpleInsertionIsDualInsertion(c, c1, c2, s1, s2);
+    (c2, s1, s2)
   }
   
 

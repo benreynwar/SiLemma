@@ -4,7 +4,7 @@ module MapFunction {
 
   import opened Circ
   import opened Utils
-  //import opened MapConnection
+  import opened Subcircuit
 
   datatype FI = FI(
     inputs: map<NP, bool>,
@@ -408,6 +408,13 @@ module MapFunction {
       && SeqsNoIntersection(outputs, StateINPsSeq(state))
     }
 
+    predicate InSc(sc: set<CNode>)
+    {
+      && NPsInSc(sc, Seq.ToSet(inputs))
+      && NPsInSc(sc, Seq.ToSet(outputs))
+      && Seq.ToSet(state) <= sc
+    }
+
     function NPs(): set<NP>
     {
       Seq.ToSet(inputs) + Seq.ToSet(outputs) + StateONPs(state) + StateINPs(state)
@@ -453,15 +460,9 @@ module MapFunction {
       requires FIValid(fi, inputs, state)
       ensures SIValid(si, inputs, state)
     {
-      var i := seq(|inputs|, (index: nat) requires index < |inputs| =>
-        reveal Seq.ToSet();
-        fi.inputs[inputs[index]]);
-      var s := seq(|state|, (index: nat) requires index < |state| =>
-        reveal Seq.ToSet();
-        fi.state[state[index]]);
-      //reveal Valid();
+      var i := MapToSeq(inputs, fi.inputs);
+      var s := MapToSeq(state, fi.state);
       reveal Seq.HasNoDuplicates();
-      //InputsHasNoDuplicates();
       SI(i, s)
     }
 
