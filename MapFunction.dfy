@@ -466,6 +466,20 @@ module MapFunction {
       SI(i, s)
     }
 
+    lemma fi2siInputs(fi: FI, np: NP)
+      requires Valid()
+      requires FIValid(fi, inputs, state)
+      requires np in fi.inputs
+      ensures
+        var si := fi2si(fi);
+        reveal Seq.ToSet();
+        var index := Seq.IndexOf(inputs, np);
+        si.inputs[index] == fi.inputs[np]
+    {
+      reveal Seq.ToSet();
+      reveal MapMatchesSeqs();
+    }
+
     lemma fi2si2fi(fi: FI)
       requires Valid()
       requires FIValid(fi, inputs, state)

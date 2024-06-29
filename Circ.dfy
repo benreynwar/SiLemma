@@ -158,17 +158,41 @@ module Circ {
     c.NodeKind.Keys
   }
 
+  predicate NPsConnected(c: Circuit, np0: NP, np1: NP)
+    requires c.Valid()
+    requires NPValid(c, np0)
+    requires NPValid(c, np1)
+  {
+    if INPValid(c, np0) then
+      np0 in c.PortSource && c.PortSource[np0] == np1
+    else
+      ONPValid(c, np0) && INPValid(c, np1) && (np0.n == np1.n)
+  }
+
   opaque predicate PathValid(c: Circuit, p: seq<NP>)
+    requires c.Valid()
     // Whether a path is valid.
     // Here this is purely determined by whether the `NP` are valid.
     // It doesn't consider connectivity at all.
   {
-    forall np :: np in p ==> NPValid(c, np)
+    && (forall index: nat :: index < |p| ==> NPValid(c, p[index]))
+    && (forall index: nat :: index < |p|-1 ==> NPsConnected(c, p[index], p[index+1]))
+  }
+
+  predicate PathNonZeroValid(c: Circuit, p: seq<NP>)
+    requires c.Valid()
+  {
+    && |p| > 0
+    && PathValid(c, p)
   }
 
   lemma AppendPathValid(c: Circuit, p: seq<NP>, np: NP)
+    requires c.Valid()
     requires PathValid(c, p)
     requires NPValid(c, np)
+    requires
+      reveal PathValid();
+      |p| > 0 ==> NPsConnected(c, Seq.Last(p), np)
     ensures PathValid(c, p + [np])
   {
     reveal PathValid();
@@ -178,6 +202,7 @@ module Circ {
     // All the nodes in a circuit that are not in the path.
     // When we're tracing paths in the circuit, this can help us prove termination
     // since the size of this will decrease as the path gets longer.
+    requires c.Valid()
     requires PathValid(c, p)
   {
     var all_np := AllNP(c);

@@ -11,8 +11,10 @@ module ConservedSubcircuit {
   {
     && (forall n :: n in ca.NodeKind ==> n in cb.NodeKind)
     && (forall n :: n in ca.NodeKind ==> ca.NodeKind[n] == cb.NodeKind[n])
-    && (forall np: NP :: np in ca.PortSource ==> np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np])
-    && (forall np: NP :: np.n in ca.NodeKind && np !in ca.PortSource && np in cb.PortSource ==> cb.PortSource[np].n !in ca.NodeKind)
+    && (forall np: NP :: np in ca.PortSource ==>
+      np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np])
+    && (forall np: NP :: np.n in ca.NodeKind && np !in ca.PortSource && np in cb.PortSource ==>
+      cb.PortSource[np].n !in ca.NodeKind)
   }
 
   ghost opaque predicate CircuitUnconnected(ca: Circuit, cb: Circuit)
@@ -54,6 +56,28 @@ module ConservedSubcircuit {
     reveal CircuitConserved();
   }
 
+  ghost opaque predicate NoNewExternalConnections(ca: Circuit, cb: Circuit, sc: set<CNode>)
+  {
+    && (forall np: NP :: np.n in sc && np !in ca.PortSource && np in cb.PortSource ==> cb.PortSource[np].n in sc)
+    && (forall np: NP :: np.n !in sc && np !in ca.PortSource && np in cb.PortSource ==> cb.PortSource[np].n !in sc)
+  }
+
+  ghost opaque predicate NoNewInternalConnections(ca: Circuit, cb: Circuit, sc: set<CNode>)
+  {
+    && (forall np: NP :: np.n in sc && np !in ca.PortSource && np in cb.PortSource ==> cb.PortSource[np].n !in sc)
+  }
+
+  ghost opaque predicate SubcircuitWeaklyConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
+    // New internal connections can be made in the subcircuit.
+    requires ScValid(ca, sc)
+  {
+    reveal ScValid();
+    && (forall n :: n in sc ==> n in cb.NodeKind)
+    && (forall n :: n in sc ==> ca.NodeKind[n] == cb.NodeKind[n])
+    && (forall np: NP :: np.n in sc && np in ca.PortSource ==>
+        np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np])
+  }
+
   ghost opaque predicate SubcircuitConserved(ca: Circuit, cb: Circuit, sc: set<CNode>)
     // The internal connections of the subcircuit remain unchanged.
     requires ScValid(ca, sc)
@@ -93,6 +117,29 @@ module ConservedSubcircuit {
   {
     reveal SubcircuitConserved();
     reveal e.SomewhatValid();
+    reveal ScValid();
+    reveal ConnOutputs();
+    reveal SeqOutputs();
+    reveal AllONPs();
+    reveal AllINPs();
+    reveal SeqInputs();
+    reveal UnconnInputs();
+    reveal ConnInputs();
+    reveal Circuit.Valid();
+    reveal AllSeq();
+  }
+
+  lemma ScufSomewhatValidRelaxInputsConserved(ca: Circuit, cb: Circuit, e: Scuf)
+    requires ca.Valid()
+    requires cb.Valid()
+    requires e.SomewhatValidRelaxInputs(ca)
+    requires ScValid(ca, e.sc)
+    requires SubcircuitWeaklyConserved(ca, cb, e.sc)
+    requires OutputsInFOutputs(cb, e)
+    ensures e.SomewhatValidRelaxInputs(cb)
+  {
+    reveal SubcircuitWeaklyConserved();
+    reveal e.SomewhatValidRelaxInputs();
     reveal ScValid();
     reveal ConnOutputs();
     reveal SeqOutputs();
@@ -166,7 +213,7 @@ module ConservedSubcircuit {
     && ca.Valid()
     && cb.Valid()
     && e.Valid(ca)
-    && SubcircuitConserved(ca, cb, e.sc)
+    && SubcircuitWeaklyConserved(ca, cb, e.sc)
     && (Seq.ToSet(e.mp.inputs) == fi.inputs.Keys)
     && (Seq.ToSet(e.mp.state) == fi.state.Keys)
     && OutputsInFOutputs(cb, e)
@@ -194,7 +241,7 @@ module ConservedSubcircuit {
   {
     reveal PathValid();
     reveal Circuit.Valid();
-    reveal SubcircuitConserved();
+    reveal SubcircuitWeaklyConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := Seq.Last(path);
     var tail := Seq.DropLast(path);
@@ -246,7 +293,7 @@ module ConservedSubcircuit {
   {
     reveal PathValid();
     reveal Circuit.Valid();
-    reveal SubcircuitConserved();
+    reveal SubcircuitWeaklyConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var nk := ca.NodeKind[path[|path|-1].n];
     var head := path[|path|-1];
@@ -290,7 +337,7 @@ module ConservedSubcircuit {
   {
     reveal PathValid();
     reveal Circuit.Valid();
-    reveal SubcircuitConserved();
+    reveal SubcircuitWeaklyConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := path[|path|-1];
     var inp_0 := NP(head.n, INPUT_0);
@@ -306,8 +353,9 @@ module ConservedSubcircuit {
     requires ConservedValid(ca, cb, e, fi)
     ensures FICircuitValid(ca, fi) && FICircuitValid(cb, fi)
   {
+    e.SomewhatValidToRelaxInputs(ca);
     ScufValidFiValidToFICircuitValid(ca, e, fi);
-    ScufSomewhatValidConserved(ca, cb, e);
+    ScufSomewhatValidRelaxInputsConserved(ca, cb, e);
     ScufValidFiValidToFICircuitValid(cb, e, fi);
   }
 
@@ -327,7 +375,7 @@ module ConservedSubcircuit {
   {
     reveal PathValid();
     reveal Circuit.Valid();
-    reveal SubcircuitConserved();
+    reveal SubcircuitWeaklyConserved();
     FICircuitValidFromConservedValid(ca, cb, e, fi);
     var head := path[|path|-1];
     if head.n in fi.state {
@@ -377,29 +425,39 @@ module ConservedSubcircuit {
     ensures e.Valid(cb)
   {
     CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
+    assert SubcircuitWeaklyConserved(ca, cb, e.sc) by {
+      reveal SubcircuitConserved();
+      reveal SubcircuitWeaklyConserved();
+    }
     reveal CircuitConserved();
     reveal CircuitUnconnected();
     reveal ScValid();
     reveal Scuf.SomewhatValid();
     reveal ConnOutputs();
+    assert Seq.ToSet(e.mp.outputs) >= ConnOutputs(ca, e.sc);
+    assert Seq.ToSet(e.mp.outputs) >= ConnOutputs(cb, e.sc);
     ScufConserved(ca, cb, e);
   }
 
-  lemma ScufConserved2(ca: Circuit, cb: Circuit, e: Scuf)
-    requires ca.Valid()
-    requires cb.Valid()
-    requires CircuitConserved(ca, cb)
-    requires e.Valid(ca)
-    requires ScValid(cb, e.sc)
-    requires OutputsInFOutputs(cb, e)
-    ensures e.Valid(cb)
-  {
-    CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
-    reveal CircuitConserved();
-    reveal CircuitUnconnected();
-    reveal ScValid();
-    ScufConserved(ca, cb, e);
-  }
+  //lemma ScufConserved2(ca: Circuit, cb: Circuit, e: Scuf)
+  //  requires ca.Valid()
+  //  requires cb.Valid()
+  //  requires CircuitConserved(ca, cb)
+  //  requires e.Valid(ca)
+  //  requires ScValid(cb, e.sc)
+  //  requires OutputsInFOutputs(cb, e)
+  //  ensures e.Valid(cb)
+  //{
+  //  CircuitConservedToSubcircuitConserved(ca, cb, e.sc);
+  //  assert SubcircuitWeaklyConserved(ca, cb, e.sc) by {
+  //    reveal SubcircuitConserved();
+  //    reveal SubcircuitWeaklyConserved();
+  //  }
+  //  reveal CircuitConserved();
+  //  reveal CircuitUnconnected();
+  //  reveal ScValid();
+  //  ScufConserved(ca, cb, e);
+  //}
 
   lemma ScufConserved(ca: Circuit, cb: Circuit, e: Scuf)
     requires ca.Valid()
@@ -413,6 +471,7 @@ module ConservedSubcircuit {
     reveal Circuit.Valid();
     reveal ScValid();
     reveal SubcircuitConserved();
+    reveal SubcircuitWeaklyConserved();
 
     assert ScValid(ca, e.sc);
     assert ScValid(cb, e.sc) by {
@@ -420,6 +479,8 @@ module ConservedSubcircuit {
     }
 
     ScufSomewhatValidConserved(ca, cb, e);
+    e.SomewhatValidToRelaxInputs(ca);
+    e.SomewhatValidToRelaxInputs(cb);
 
     if e.Valid(ca) {
       forall fi: FI | FIValid(fi, e.mp.inputs, e.mp.state)

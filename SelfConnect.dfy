@@ -9,6 +9,7 @@ module SelfConnect {
   import opened Connection
   import opened Utils
   import opened Subcircuit
+  import opened Path
 
   // A scuf is modified such that some of its outputs are connected to the inputs.
   // The outputs remain unchanged, but the new input width is reduced.
@@ -59,17 +60,46 @@ module SelfConnect {
       )
     }
 
+    opaque function I2NIInternal<T>(bi: seq<T>, ni_index: nat): (bni: seq<T>)
+      requires Valid()
+      requires |bi| == i_width
+      requires ni_index <= ni_width
+      ensures |bni| == ni_index
+      ensures forall index: nat :: index < ni_index ==>
+        reveal Valid();
+        bni[index] == bi[i2ni[index]]
+      decreases ni_index
+    {
+      if ni_index == 0 then
+        []
+      else
+        reveal Valid();
+        var i_index := i2ni[ni_index-1];
+        I2NIInternal(bi, ni_index-1) + [bi[i_index]]
+    }
+
     function I2NI<T>(bi: seq<T>): (bni: seq<T>)
       requires Valid()
       requires |bi| == i_width
       ensures |bni| == ni_width
     {
-      reveal Valid();
-      seq(ni_width, (ni_index: int) requires 0 <= ni_index < ni_width =>
-        var i_index := i2ni[ni_index];
-        assert i_index < i_width;
-        bi[i_index])
+      reveal I2NIInternal();
+      I2NIInternal(bi, ni_width)
     }
+
+    lemma I2NICorrect<T>(bi: seq<T>)
+      requires Valid()
+      requires |bi| == i_width
+      ensures 
+        reveal Valid();
+        var bni := I2NI(bi);
+        forall ni_index: nat :: ni_index < ni_width ==>
+          bni[ni_index] == bi[i2ni[ni_index]]
+    {
+      reveal Valid();
+      reveal I2NIInternal();
+    }
+
 
     function MapConnectedInputs<T(==)>(bi: seq<T>): (r: set<T>)
       requires Valid()
@@ -116,6 +146,37 @@ module SelfConnect {
       reveal Valid();
     }
 
+    lemma NI2NIO2I<T>(bi: seq<T>, bo: seq<T>)
+      requires Valid()
+      requires |bi| == i_width
+      requires |bo| == o_width
+      requires forall i_index: nat :: i_index < i_width ==> (
+        reveal Valid();
+        var (from_output, index) := nio2i[i_index];
+        from_output ==> bi[i_index] == bo[index]
+      )
+      ensures NIO2I(I2NI(bi), bo) == bi
+    {
+      reveal Valid();
+      I2NICorrect(bi);
+      var bni := I2NI(bi);
+      assert forall ni_index: nat :: ni_index < ni_width ==>
+        bni[ni_index] == bi[i2ni[ni_index]];
+      var bi_new := NIO2I(bni, bo);
+      forall i_index: nat | i_index < i_width
+        ensures bi_new[i_index] == bi[i_index]
+      {
+        var (from_output, index) := nio2i[i_index];
+        if !from_output {
+          assert bi_new[i_index] == bni[index];
+          assert bi_new[i_index] == bi[i_index];
+        } else {
+          assert bi_new[i_index] == bo[index];
+          assert bi_new[i_index] == bi[i_index];
+        }
+      }
+    }
+
     function GetConnectedInputs(mp: ScufMap): (r: set<NP>)
       requires Valid()
       requires MPConnectionConsistent(mp, this)
@@ -146,10 +207,11 @@ module SelfConnect {
         var r := GetConnection(s.mp);
         && (forall onp :: onp in r.Values ==> ONPValid(c, onp))
         && (forall inp :: inp in r ==> INPValid(c, inp))
-        && (forall inp :: inp in r ==> NoPathInScuf(c, s, r[inp], inp))
         && MPConnectionConsistent(s.mp, this)
         && (r.Keys == GetConnectedInputs(s.mp))
         && (r.Values == GetConnectedOutputs(s.mp))
+        && reveal ONPsValid();
+        && !PathExistsBetweenNPSets(c, r.Values, r.Keys)
         && ConnectCircuitRequirements(c, r)
     {
       reveal ScufConnectionConsistent();
@@ -160,6 +222,12 @@ module SelfConnect {
       ScufFOutputsAreValid(c, s);
       assert ConnectCircuitRequirements(c, np_connections) by {
         reveal ConnectCircuitRequirements();
+      }
+      reveal ONPsValid();
+      assert !PathExistsBetweenNPSets(c, np_connections.Values, np_connections.Keys) by {
+        assert (np_connections.Keys == GetConnectedInputs(s.mp));
+        assert (np_connections.Values == GetConnectedOutputs(s.mp));
+        assert !PathExistsBetweenNPSets(c, GetConnectedOutputs(s.mp), GetConnectedInputs(s.mp));
       }
     }
 
@@ -197,6 +265,61 @@ module SelfConnect {
       np_connections
     }
 
+    function SIFromOutputs(mp: ScufMap, fi: FI, outputs: seq<bool>): (si_from_outputs: SI)
+      requires Valid()
+      requires mp.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      requires |outputs| == |mp.outputs|
+      ensures |si_from_outputs.state| == |mp.state|
+      ensures |si_from_outputs.inputs| == |mp.inputs|
+    {
+      var output_width := |mp.outputs|;
+      var new_mp := ConnectScufMap(mp, this);
+      var sni_pass := new_mp.fi2si(fi);
+      SI(NIO2I(sni_pass.inputs, outputs), sni_pass.state)
+    }
+
+    function SOFromOutputs(mp: ScufMap, uf: UpdateFunction, fi: FI, outputs: seq<bool>): (so_from_outputs: SO)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      requires |outputs| == |mp.outputs|
+      ensures |so_from_outputs.state| == |mp.state|
+      ensures |so_from_outputs.outputs| == |mp.outputs|
+    {
+      var si := SIFromOutputs(mp, fi, outputs);
+      reveal UpdateFunction.Valid();
+      var so := uf.sf(si);
+      so
+    }
+
+    function FIFromOutputs(mp: ScufMap, fi: FI, outputs: seq<bool>): (fi_from_outputs: FI)
+      requires Valid()
+      requires mp.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      requires |outputs| == |mp.outputs|
+      ensures fi_from_outputs.state == fi.state
+      ensures FIValid(fi_from_outputs, mp.inputs, mp.state)
+    {
+      var si_pass := SIFromOutputs(mp, fi, outputs);
+      var fi_pass := mp.si2fi(si_pass);
+      assert fi_pass.state == fi.state by {
+        MapToSeqToMap(mp.state, fi.state);
+      }
+      fi_pass
+    }
+
     function FIFirstPass(mp: ScufMap, fi: FI): (fi_first_pass: FI)
       requires Valid()
       requires mp.Valid()
@@ -209,14 +332,111 @@ module SelfConnect {
     {
       var output_width := |mp.outputs|;
       var fake_output := seq(output_width, (index: nat) requires index < output_width => false);
-      var new_mp := ConnectScufMap(mp, this);
-      var sni_first_pass := new_mp.fi2si(fi);
-      var si_first_pass := SI(NIO2I(sni_first_pass.inputs, fake_output), sni_first_pass.state);
-      var fi_first_pass := mp.si2fi(si_first_pass);
-      assert fi_first_pass.state == fi.state by {
-        MapToSeqToMap(mp.state, fi.state);
+      FIFromOutputs(mp, fi, fake_output)
+    }
+
+    function FOFirstPass(mp: ScufMap, uf: UpdateFunction, fi: FI): (fo_first_pass: FO)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures fo_first_pass.outputs.Keys == Seq.ToSet(mp.outputs)
+      ensures fo_first_pass.state.Keys == Seq.ToSet(mp.state)
+    {
+      var so_first_pass := SOFirstPass(mp, uf, fi);
+      mp.so2fo(so_first_pass)
+    }
+
+    lemma FOFirstPassTOFISecondPass(mp: ScufMap, uf: UpdateFunction, fi: FI, inp: NP)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var conn_inputs := GetConnectedInputs(mp);
+        inp in conn_inputs
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures
+        var fo_first_pass := FOFirstPass(mp, uf, fi);
+        var fi_second_pass := FISecondPass(mp, uf, fi);
+        var npconnections := GetConnection(mp);
+        var onp := npconnections[inp];
+        fi_second_pass.inputs[inp] == fo_first_pass.outputs[onp]
+    {
+      assert inp in mp.inputs by {
+        reveal Seq.ToSet();
       }
-      fi_first_pass
+      var new_mp := ConnectScufMap(mp, this);
+      var inp_index := Seq.IndexOf(mp.inputs, inp);
+      var si := new_mp.fi2si(fi);
+      var so_first_pass := SOFirstPass(mp, uf, fi);
+      var fi_second_pass := FISecondPass(mp, uf, fi);
+      var si_second_pass := SI(NIO2I(si.inputs, so_first_pass.outputs), si.state);
+      assert mp.inputs[inp_index] == inp;
+      assert fi_second_pass == mp.si2fi(si_second_pass);
+      assert fi_second_pass.inputs == SeqsToMap(mp.inputs, si_second_pass.inputs);
+      assert si_second_pass.inputs[inp_index] == fi_second_pass.inputs[inp] by {
+        reveal MapMatchesSeqs();
+      }
+
+      assert inp_index < |nio2i| by {
+        reveal Valid();
+      }
+
+      var conn_inputs := GetConnectedInputs(mp);
+      assert inp_index in connections by {
+        assert inp in conn_inputs;
+        reveal Valid();
+        reveal Seq.ToSet();
+        reveal Seq.HasNoDuplicates();
+        assert conn_inputs == (set i | i in connections :: mp.inputs[i]);
+      }
+      var (from_output, onp_index) := nio2i[inp_index];
+      assert from_output by {
+        reveal Valid();
+        assert ((!from_output) ==> onp_index < ni_width && i2ni[onp_index] == inp_index && (inp_index !in connections));
+        assert ((from_output) ==> onp_index < o_width && (inp_index in connections) && (onp_index == connections[inp_index]));
+      }
+      var npconnections := GetConnection(mp);
+      var onp := npconnections[inp];
+      assert onp_index < |mp.outputs| by {
+        reveal Valid();
+      }
+      assert mp.outputs[onp_index] == onp by {
+        reveal Valid();
+        reveal Seq.HasNoDuplicates();
+      }
+      var fo_first_pass := FOFirstPass(mp, uf, fi);
+      assert so_first_pass.outputs[onp_index] == fo_first_pass.outputs[onp] by {
+        reveal MapMatchesSeqs();
+      }
+    }
+
+    function SOFirstPass(mp: ScufMap, uf: UpdateFunction, fi: FI): (so_first_pass: SO)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures |so_first_pass.outputs| == |mp.outputs|
+      ensures |so_first_pass.outputs| == uf.output_width
+    {
+      var output_width := |mp.outputs|;
+      var fake_output := seq(output_width, (index: nat) requires index < output_width => false);
+      SOFromOutputs(mp, uf, fi, fake_output)
     }
 
     function FISecondPass(mp: ScufMap, uf: UpdateFunction, fi: FI): (fi_second_pass: FI)
@@ -230,37 +450,229 @@ module SelfConnect {
         var new_mp := ConnectScufMap(mp, this);
         FIValid(fi, new_mp.inputs, new_mp.state)
       ensures FIValid(fi_second_pass, mp.inputs, mp.state)
+      ensures fi.state == fi_second_pass.state
     {
-      var new_mp := ConnectScufMap(mp, this);
-      var sni_first_pass := new_mp.fi2si(fi);
-      var fake_outputs := seq(uf.output_width, (index: nat) requires index < uf.output_width => false);
-      var si_first_pass := SI(NIO2I(sni_first_pass.inputs, fake_outputs), sni_first_pass.state);
-      reveal UpdateFunction.Valid();
-      var so_first_pass := uf.sf(si_first_pass);
-      var si_second_pass := SI(NIO2I(sni_first_pass.inputs, so_first_pass.outputs), sni_first_pass.state);
-      var fi_second_pass := mp.si2fi(si_second_pass);
-      fi_second_pass
+      var so := SOFirstPass(mp, uf, fi);
+      FIFromOutputs(mp, fi, so.outputs)
     }
 
+    lemma FIFromOutputsMatchingKeyMatchingValue(mp: ScufMap, uf: UpdateFunction, fi: FI, outputs: seq<bool>)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures
+        var fi_pass := FIFromOutputs(mp, fi, outputs);
+        forall x :: (x in fi.inputs && x in fi_pass.inputs) ==>
+          (fi.inputs[x] == fi_pass.inputs[x])
+    {
+      reveal Seq.ToSet();
+      var new_mp := ConnectScufMap(mp, this);
+      var fi_pass := FIFromOutputs(mp, fi, outputs);
+      forall x: NP | (x in fi.inputs && x in fi_pass.inputs)
+        ensures fi.inputs[x] == fi_pass.inputs[x]
+      {
+        assert FIValid(fi, new_mp.inputs, new_mp.state);
+        assert FIValid(fi_pass, mp.inputs, mp.state);
+        assert x in mp.inputs;
+        assert x in new_mp.inputs;
+
+        var output_width := |mp.outputs|;
+        var sni_pass := new_mp.fi2si(fi);
+        var si_pass := SI(NIO2I(sni_pass.inputs, outputs), sni_pass.state);
+        var fi_pass := mp.si2fi(si_pass);
+
+        var ni_index := Seq.IndexOf(new_mp.inputs, x);
+        assert new_mp.inputs[ni_index] == x;
+        var i_index := Seq.IndexOf(mp.inputs, x);
+        assert mp.inputs[i_index] == x;
+        assert new_mp.inputs == I2NI(mp.inputs);
+        assert |i2ni| == ni_width && i2ni[ni_index] < i_width by {
+          reveal Valid();
+        }
+        assert new_mp.inputs[ni_index] == mp.inputs[i2ni[ni_index]] by {
+          I2NICorrect(mp.inputs);
+        }
+        assert i2ni[ni_index] == i_index by {
+          assert mp.inputs[i2ni[ni_index]] == x;
+          assert mp.inputs[i_index] == x;
+          assert Seq.HasNoDuplicates(mp.inputs);
+          reveal Seq.HasNoDuplicates();
+        }
+
+        var value := fi.inputs[x];
+        new_mp.fi2siInputs(fi, x);
+        assert sni_pass.inputs[ni_index] == value;
+        NIO2I2NI(sni_pass.inputs, outputs);
+        assert si_pass.inputs[i2ni[ni_index]] == value;
+        assert si_pass.inputs[i_index] == value;
+        assert mp.inputs[i_index] == x;
+        mp.si2fi2si(si_pass);
+        mp.fi2siInputs(fi_pass, x);
+        assert fi_pass.inputs[x] == value;
+      }
+    }
+    lemma FIFirstPassMatchingKeyMatchingValue(mp: ScufMap, uf: UpdateFunction, fi: FI)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures
+        var fi_pass := FIFirstPass(mp, fi);
+        forall x :: (x in fi.inputs && x in fi_pass.inputs) ==>
+          (fi.inputs[x] == fi_pass.inputs[x])
+    {
+      var output_width := |mp.outputs|;
+      var fake_output := seq(output_width, (index: nat) requires index < output_width => false);
+      FIFromOutputsMatchingKeyMatchingValue(mp, uf, fi, fake_output);
+    }
+
+    lemma FISecondPassMatchingKeyMatchingValue(mp: ScufMap, uf: UpdateFunction, fi: FI)
+      requires Valid()
+      requires mp.Valid()
+      requires uf.Valid()
+      requires MPConnectionConsistent(mp, this)
+      requires UFConnectionConsistent(uf, this)
+      requires ScufMapUpdateFunctionConsistent(mp, uf)
+      requires
+        var new_mp := ConnectScufMap(mp, this);
+        FIValid(fi, new_mp.inputs, new_mp.state)
+      ensures
+        var fi_second_pass := FISecondPass(mp, uf, fi);
+        forall x :: (x in fi.inputs && x in fi_second_pass.inputs) ==>
+          (fi.inputs[x] == fi_second_pass.inputs[x])
+    {
+      var so := SOFirstPass(mp, uf, fi);
+      FIFromOutputsMatchingKeyMatchingValue(mp, uf, fi, so.outputs);
+    }
   }
 
-  ghost predicate NoPathInScuf(c: Circuit, s: Scuf, onp: NP, inp: NP)
+  //opaque ghost predicate NoPathsInScuf(c: Circuit, s: Scuf, onps: set<NP>, inps: set<NP>)
+  //  requires c.Valid()
+  //  requires s.SomewhatValidRelaxInputs(c)
+  //  requires ONPsValid(c, onps)
+  //{
+  //  forall fi: FI :: FIValid(fi, s.mp.inputs, s.mp.state) ==> (
+  //    assert FICircuitValid(c, fi) by {
+  //      ScufValidFiValidToFICircuitValid(c, s, fi);
+  //    }
+  //    var new_fi := FI(fi.inputs - inps, fi.state);
+  //    assert FICircuitValid(c, new_fi) by {
+  //      reveal FICircuitValid();
+  //    }
+  //    reveal ONPsValid();
+  //    forall path: seq<NP> :: EvaluatePathRequirements(c, path) &&  Seq.Last(path) in onps ==>
+  //      EvaluateONPInner(c, path, fi) == EvaluateONPInner(c, path, new_fi)
+  //  )
+  //}
+
+  function GetSubPathInOldInternal(c: Circuit, new_c: Circuit, inps: set<NP>, p: seq<NP>, index: nat): (subp: seq<NP>)
     requires c.Valid()
-    requires s.Valid(c)
-    requires NPValid(c, onp)
+    requires new_c.Valid()
+    requires new_c.NodeKind == c.NodeKind
+    requires forall np :: np in c.PortSource ==> np in new_c.PortSource && c.PortSource[np] == new_c.PortSource[np]
+    requires forall np :: np in new_c.PortSource && np !in c.PortSource ==> np in inps
+    requires index < |p|
+    requires Seq.Last(p) in inps
+    requires index > 0 ==> p[index-1] !in inps
+    requires PathValid(new_c, p)
+    requires PathValid(c, p[..index])
+    ensures PathValid(c, subp)
+    ensures |subp| > 0
+    ensures Seq.Last(subp) in inps
+    ensures Seq.First(subp) == Seq.First(p)
+    decreases |p| - index
   {
-    forall fi: FI :: FIValid(fi, s.mp.inputs, s.mp.state) ==> (
-      assert FICircuitValid(c, fi) by {
-        s.SomewhatValidToRelaxInputs(c);
-        ScufValidFiValidToFICircuitValid(c, s, fi);
+    reveal PathValid();
+    if p[index] in inps then
+      p[..index+1]
+    else
+      assert PathValid(c, p[..(index+1)]) by {
+        assert PathValid(c, p[..index]);
+        assert NPValid(c, p[index]);
+        assert PathValid(new_c, p);
+        assert NPValid(new_c, p[index]);
+        if index > 0 {
+          assert NPValid(new_c, p[index-1]);
+          assert NPsConnected(new_c, p[index-1], p[index]);
+          assert p[index-1] !in inps;
+          assert NPsConnected(c, p[index-1], p[index]);
+        }
       }
-      var new_fi := FI(fi.inputs - {inp}, fi.state);
-      assert FICircuitValid(c, new_fi) by {
-        reveal FICircuitValid();
-      }
-      Evaluate(c, onp, fi) == Evaluate(c, onp, new_fi)
-    )
+      GetSubPathInOldInternal(c, new_c, inps, p, index+1)
   }
+
+  function GetSubPathInOld(c: Circuit, new_c: Circuit, inps: set<NP>, p: seq<NP>): (subp: seq<NP>)
+    requires c.Valid()
+    requires new_c.Valid()
+    requires new_c.NodeKind == c.NodeKind
+    requires forall np :: np in c.PortSource ==> np in new_c.PortSource && c.PortSource[np] == new_c.PortSource[np]
+    requires forall np :: np in new_c.PortSource && np !in c.PortSource ==> np in inps
+    requires |p| > 0
+    requires Seq.Last(p) in inps
+    requires PathValid(new_c, p)
+    ensures PathValid(c, subp)
+    ensures |subp| > 0
+    ensures Seq.Last(subp) in inps
+    ensures Seq.First(subp) == Seq.First(p)
+  {
+    reveal PathValid();
+    GetSubPathInOldInternal(c, new_c, inps, p, 0)
+  }
+
+  lemma StillNoPathExistsBetweenNPSets(c: Circuit, new_c: Circuit, onps: set<NP>, inps: set<NP>)
+    requires c.Valid()
+    requires new_c.Valid()
+    requires ONPsValid(c, onps)
+    requires ONPsValid(new_c, onps)
+    requires new_c.NodeKind == c.NodeKind
+    requires forall np :: np in c.PortSource ==> np in new_c.PortSource && c.PortSource[np] == new_c.PortSource[np]
+    requires forall np :: np in new_c.PortSource && np !in c.PortSource ==> np in inps
+    requires !PathExistsBetweenNPSets(c, onps, inps)
+    ensures !PathExistsBetweenNPSets(new_c, onps, inps)
+  {
+    //exists p: seq<NP> :: (|p| > 0) && PathValid(c, p) && (Seq.First(p) in nps_a) && (Seq.Last(p) in nps_b)
+    reveal PathExistsBetweenNPSets();
+    if PathExistsBetweenNPSets(new_c, onps, inps) {
+      var p :| (|p| > 0) && PathValid(new_c, p) && (Seq.First(p) in onps) && (Seq.Last(p) in inps);
+      var psub := GetSubPathInOld(c, new_c, inps, p);
+      assert PathBetweenNPSets(c, psub, onps, inps);
+    }
+  }
+
+  //lemma ApplyNoPathsInScuf(c: Circuit, s: Scuf, onps: set<NP>, inps: set<NP>, path: seq<NP>,
+  //                         subinps: set<NP>, fi: FI)
+  //  requires c.Valid()
+  //  requires s.SomewhatValidRelaxInputs(c)
+  //  requires ONPsValid(c, onps)
+  //  //requires INPsValid(c, inps)
+  //  //requires subinps <= inps
+  //  requires subinps == inps
+  //  requires FIValid(fi, s.mp.inputs, s.mp.state)
+  //  requires EvaluateONPInnerRequirements(c, path, fi)
+  //  requires
+  //    var new_fi := FI(fi.inputs - subinps, fi.state);
+  //    EvaluateONPInnerRequirements(c, path, new_fi)
+  //  requires Seq.Last(path) in onps
+  //  requires NoPathsInScuf(c, s, onps, inps)
+  //  ensures
+  //    var new_fi := FI(fi.inputs - subinps, fi.state);
+  //    && reveal ONPsValid();
+  //    && (EvaluateONPInner(c, path, fi) == EvaluateONPInner(c, path, new_fi))
+  //{
+  //  reveal NoPathsInScuf();
+  //}
+
 
   opaque ghost predicate ScufConnectionConsistent(c: Circuit, s: Scuf, conn: InternalConnection)
     requires c.Valid()
@@ -268,15 +680,12 @@ module SelfConnect {
     requires conn.Valid()
   {
     reveal InternalConnection.Valid();
+    reveal ONPsValid();
+    s.SomewhatValidToRelaxInputs(c);
+    ScufFOutputsAreValid(c, s);
     && (conn.i_width == s.uf.input_width)
     && (conn.o_width == s.uf.output_width)
-    && (forall i_index, o_index :: i_index in conn.connections && o_index in conn.connections.Values ==>
-        var inp := s.mp.inputs[i_index];
-        var onp := s.mp.outputs[o_index];
-        s.SomewhatValidToRelaxInputs(c);
-        ScufFOutputsAreValid(c, s);
-        ScufFInputsAreValid(c, s);
-        NoPathInScuf(c, s, onp, inp))
+    && !PathExistsBetweenNPSets(c, conn.GetConnectedOutputs(s.mp), conn.GetConnectedInputs(s.mp))
     && (forall i_index :: i_index in conn.connections ==> s.mp.inputs[i_index] !in c.PortSource)
   }
 
@@ -452,7 +861,10 @@ module SelfConnect {
       && ScValid(c, s.sc)
       && s.SomewhatValidRelaxInputs(c)
       && new_s.MapValid()
+      && s.SomewhatValidRelaxInputs(new_c)
       && new_s.SomewhatValid(new_c)
+      && SubcircuitWeaklyConserved(c, new_c, s.sc)
+      && NoNewExternalConnections(c, new_c, s.sc)
   {
     reveal ScufConnectionConsistent();
     var connection := conn.GetConnection(s.mp);
@@ -493,7 +905,46 @@ module SelfConnect {
       assert s.EvaluatesCorrectly(new_c) by {
       }
     }
+    assert SubcircuitWeaklyConserved(c, new_c, s.sc) by {
+      reveal SubcircuitWeaklyConserved();
+    }
+    assert NoNewExternalConnections(c, new_c, s.sc) by {
+      reveal NoNewExternalConnections();
+    }
     (new_c, new_s)
+  }
+
+  lemma ConnectCircuitScufConserved(c: Circuit, s: Scuf, conn: InternalConnection, fi: FI)
+    requires c.Valid()
+    requires s.Valid(c)
+    requires conn.Valid()
+    requires ScufConnectionConsistent(c, s, conn)
+    requires FIValid(fi, s.mp.inputs, s.mp.state)
+    ensures
+      var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
+      ConservedValid(c, new_c, s, fi)
+  {
+    var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
+    assert c.Valid();
+    assert new_c.Valid();
+    assert s.Valid(c);
+    assert c.NodeKind == new_c.NodeKind;
+    assert SubcircuitConserved(c, new_c, s.sc) by {
+      reveal SubcircuitConserved();
+      reveal ScValid();
+      var sc := s.sc;
+      var ca := c;
+      var cb := new_c;
+      assert (forall n :: n in sc ==> n in cb.NodeKind);
+      assert (forall n :: n in sc ==> ca.NodeKind[n] == cb.NodeKind[n]);
+      assert (forall np: NP :: np.n in sc && np in ca.PortSource ==>
+          np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np]);
+      assert (forall np: NP :: np.n in sc && np !in ca.PortSource && np in cb.PortSource ==>
+          cb.PortSource[np].n !in sc);
+    }
+    assert (Seq.ToSet(s.mp.inputs) == fi.inputs.Keys);
+    assert (Seq.ToSet(s.mp.state) == fi.state.Keys);
+    assert OutputsInFOutputs(new_c, s);
   }
 
   function ConnectCircuitScuf(c: Circuit, s: Scuf, conn: InternalConnection): (r: (Circuit, Scuf))

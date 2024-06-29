@@ -12,6 +12,7 @@ module Eval {
 
   ghost predicate EvaluatePathRequirements(c: Circuit, path: seq<NP>)
   {
+    && c.Valid()
     && (|path| > 0)
     && PathValid(c, path)
     && Seq.HasNoDuplicates(path)
@@ -73,7 +74,7 @@ module Eval {
       if head in c.PortSource then
         var onp := c.PortSource[head];
         if onp in path then
-          EvalError({}, {path + [onp]})
+          EvalError({}, {GetLoop(path, onp)})
         else
           reveal Circuit.Valid();
           NodesNotInPathDecreases(c, path, onp);
@@ -85,10 +86,14 @@ module Eval {
   }
 
   lemma NodesNotInPathDecreases(c: Circuit, p: seq<NP>, np: NP)
+    requires c.Valid()
     requires PathValid(c, p)
+    requires NPValid(c, np)
+    requires
+      reveal PathValid();
+      |p| > 0 ==> NPsConnected(c, Seq.Last(p), np)
     requires Seq.HasNoDuplicates(p)
     requires np !in p
-    requires NPValid(c, np)
     ensures
       var new_p := p + [np];
       PathValid(c, new_p) &&
@@ -103,6 +108,15 @@ module Eval {
     assert new_nodes_in_path == nodes_in_path + {np};
   }
 
+  function GetLoop(path: seq<NP>, np: NP): (loop: seq<NP>)
+    requires Seq.HasNoDuplicates(path)
+    requires np in path
+  {
+    var index := Seq.IndexOf(path, np);
+    path[index..] + [np]
+  }
+
+
   function EvaluateONPBinary(c: Circuit, path: seq<NP>, fi: FI): EvalResult
     requires EvaluateONPBinaryRequirements(c, path, fi)
     decreases |NodesNotInPath(c, path)|, 3
@@ -113,9 +127,11 @@ module Eval {
     var inp_0 := NP(head.n, INPUT_0);
     var inp_1 := NP(head.n, INPUT_1);
     if inp_0 in path then
-      EvalError({}, {path + [inp_0]})
+      var loop := GetLoop(path, inp_0);
+      EvalError({}, {loop})
     else if inp_1 in path then
-      EvalError({}, {path + [inp_1]})
+      var loop := GetLoop(path, inp_1);
+      EvalError({}, {loop})
     else
       NodesNotInPathDecreases(c, path, inp_0);
       NodesNotInPathDecreases(c, path, inp_1);
@@ -158,7 +174,7 @@ module Eval {
     var head := Seq.Last(path);
     var inp_0 := NP(head.n, INPUT_0);
     if inp_0 in path then
-      EvalError({}, {path + [inp_0]})
+      EvalError({}, {GetLoop(path, inp_0)})
     else
       var new_path := path + [inp_0];
       AppendPathValid(c, path, inp_0);
