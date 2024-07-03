@@ -486,9 +486,7 @@ module MapFunction {
       ensures si2fi(fi2si(fi)) == fi
     {
       var si := fi2si(fi);
-      assert si.inputs == seq(|inputs|, (index: nat) requires index < |inputs| =>
-        reveal Seq.ToSet();
-        fi.inputs[inputs[index]]);
+      assert si.inputs == MapToSeq(inputs, fi.inputs);
       var fi_next := si2fi(si);
       assert fi_next.inputs == SeqsToMap(inputs, si.inputs);
       forall np | np in fi.inputs
@@ -497,7 +495,6 @@ module MapFunction {
         reveal Seq.ToSet();
         assert np in inputs;
         var index := Seq.IndexOf(inputs, np);
-        assert si.inputs[index] == fi.inputs[np];
         reveal MapMatchesSeqs();
         reveal SeqsToMap();
         assert fi_next.inputs[np] == si.inputs[index];
@@ -511,7 +508,6 @@ module MapFunction {
         reveal Seq.ToSet();
         assert n in state;
         var index := Seq.IndexOf(state, n);
-        assert si.state[index] == fi.state[n];
         reveal MapMatchesSeqs();
         reveal SeqsToMap();
         assert fi_next.state[n] == si.state[index];

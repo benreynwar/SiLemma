@@ -212,7 +212,7 @@ module ConservedSubcircuit {
   {
     && ca.Valid()
     && cb.Valid()
-    && e.Valid(ca)
+    && e.ValidRelaxInputs(ca)
     && SubcircuitWeaklyConserved(ca, cb, e.sc)
     && (Seq.ToSet(e.mp.inputs) == fi.inputs.Keys)
     && (Seq.ToSet(e.mp.state) == fi.state.Keys)
@@ -353,7 +353,6 @@ module ConservedSubcircuit {
     requires ConservedValid(ca, cb, e, fi)
     ensures FICircuitValid(ca, fi) && FICircuitValid(cb, fi)
   {
-    e.SomewhatValidToRelaxInputs(ca);
     ScufValidFiValidToFICircuitValid(ca, e, fi);
     ScufSomewhatValidRelaxInputsConserved(ca, cb, e);
     ScufValidFiValidToFICircuitValid(cb, e, fi);
@@ -520,6 +519,51 @@ module ConservedSubcircuit {
     assert ScValid(cb, e.sc);
     assert e.EvaluatesCorrectly(cb) by {
       reveal Scuf.EvaluatesCorrectly();
+    }
+  }
+
+  lemma ScufWeaklyConserved(ca: Circuit, cb: Circuit, s: Scuf)
+    requires ca.Valid()
+    requires cb.Valid()
+    requires s.ValidRelaxInputs(ca)
+    requires SubcircuitWeaklyConserved(ca, cb, s.sc)
+    requires OutputsInFOutputs(cb, s)
+    ensures s.ValidRelaxInputs(cb)
+  {
+    assert s.MapValid();
+    assert ScValid(cb, s.sc) by {
+      reveal SubcircuitWeaklyConserved();
+      reveal ScValid();
+    }
+    assert s.SomewhatValidRelaxInputs(cb) by {
+      ScufSomewhatValidRelaxInputsConserved(ca, cb, s);
+    }
+    assert s.EvaluatesCorrectly(cb) by {
+      reveal Scuf.EvaluatesCorrectly();
+      reveal Seq.ToSet();
+      forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
+        ensures
+        forall np :: np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state) ==>
+          && FICircuitValid(cb, fi)
+          && np.n in s.sc && NPValid(ca, np) && NPValid(cb, np)
+          && (Evaluate(cb, np, fi) == EvalOk(MFLookup(s, fi, np)))
+      {
+        assert ConservedValid(ca, cb, s, fi);
+        assert FICircuitValid(cb, fi) by {ScufValidFiValidToFICircuitValid(cb, s, fi);}
+        forall np | np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state)
+          ensures np.n in s.sc && NPValid(ca, np) && NPValid(cb, np)
+          ensures Evaluate(cb, np, fi) == EvalOk(MFLookup(s, fi, np))
+        {
+          assert np.n in s.sc && NPValid(ca, np) by {
+            FOutputsInSc(ca, s);
+            ScufFOutputsAreValid(ca, s);
+            reveal NPsInSc();
+          }
+          EvaluateConserved(ca, cb, s, np, fi);
+          assert Evaluate(ca, np, fi) == Evaluate(cb, np, fi);
+          assert Evaluate(cb, np, fi) == EvalOk(MFLookup(s, fi, np));
+        }
+      }
     }
   }
 

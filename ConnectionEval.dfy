@@ -244,6 +244,7 @@ module ConnectionEval {
     requires INPValid(s.new_c, inp)
     requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, s.fi)
     requires EvaluateONPUnaryBinaryRequirements(s.new_c, prepath + path, s.fi)
+    requires NPsConnected(s.new_c, Seq.Last(path), inp)
 
     ensures forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs
     ensures
@@ -335,6 +336,7 @@ module ConnectionEval {
     requires INPValid(s.new_c, inp)
     requires inp !in path
     requires inp.n in s.conn.scuf_b.sc
+    requires NPsConnected(s.new_c, Seq.Last(path), inp)
     ensures
       var new_path := path + [inp];
       Seq.HasNoDuplicates(new_path) &&
@@ -523,7 +525,7 @@ module ConnectionEval {
           reveal ConnInputs();
         }
         if onp in path {
-          assert EvaluateINPInner(new_c, path, fi) == EvalError({}, {path + [onp]});
+          assert EvaluateINPInner(new_c, path, fi) == EvalError({}, {GetLoop(path, onp)});
           assert EvaluateINPInner(new_c, path, fi) == EvaluateINPInner(new_c, path, fi_1);
           assert Simpl(EvaluateINPInner(new_c, path, fi)) == Simpl(EvaluateINPInner(new_c, prepath+path, fi));
         } else {

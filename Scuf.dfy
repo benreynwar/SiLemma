@@ -43,7 +43,7 @@ module Scuf {
 
     lemma SomewhatValidToRelaxInputs(c: Circuit)
       requires c.Valid()
-      requires SomewhatValid(c)
+      requires SomewhatValid(c) || SomewhatValidRelaxInputs(c)
       ensures SomewhatValidRelaxInputs(c)
     {
       reveal SomewhatValid();
@@ -62,7 +62,7 @@ module Scuf {
       requires c.Valid()
       requires ScValid(c, sc)
       requires MapValid()
-      requires SomewhatValidRelaxInputs(c)
+      requires SomewhatValidRelaxInputs(c) || SomewhatValid(c)
     {
       reveal ScValid();
       ScufFOutputsAreValid(c, this);
@@ -117,11 +117,12 @@ module Scuf {
 
   lemma ScufFInputsAreValid(c: Circuit, e: Scuf)
     requires c.Valid()
-    requires e.SomewhatValidRelaxInputs(c)
+    requires e.SomewhatValidRelaxInputs(c) || e.SomewhatValid(c)
     ensures forall np :: np in e.mp.inputs ==> INPValid(c, np)
     ensures forall np :: np in StateONPs(e.mp.state) ==> ONPValid(c, np)
   {
     reveal Scuf.SomewhatValidRelaxInputs();
+    reveal Scuf.SomewhatValid();
     reveal AllSeq();
     reveal INPsValid();
     assert INPsValid(c, AllInputs(c, e.sc));
@@ -140,11 +141,12 @@ module Scuf {
 
   lemma ScufFOutputsAreValid(c: Circuit, e: Scuf)
     requires c.Valid()
-    requires e.SomewhatValidRelaxInputs(c)
+    requires e.SomewhatValidRelaxInputs(c) || e.SomewhatValid(c)
     ensures forall np :: np in e.mp.outputs ==> ONPValid(c, np)
     ensures forall np :: np in StateINPs(e.mp.state) ==> INPValid(c, np)
   {
     reveal ScValid();
+    reveal Scuf.SomewhatValid();
     reveal Scuf.SomewhatValidRelaxInputs();
     reveal ONPsValid();
     assert Seq.ToSet(e.mp.outputs) <= AllONPs(c, e.sc);
@@ -176,11 +178,12 @@ module Scuf {
 
   lemma FInputsInSc(c: Circuit, e: Scuf)
     requires c.Valid()
-    requires e.SomewhatValid(c)
+    requires e.SomewhatValidRelaxInputs(c) || e.SomewhatValid(c)
     ensures NPsInSc(e.sc, Seq.ToSet(e.mp.inputs))
     ensures NPsInSc(e.sc, StateONPs(e.mp.state))
   {
     reveal Scuf.SomewhatValid();
+    reveal Scuf.SomewhatValidRelaxInputs();
     reveal AllINPs();
     reveal NPsInSc();
     reveal Seq.ToSet();
@@ -189,12 +192,13 @@ module Scuf {
 
   lemma FOutputsInSc(c: Circuit, e: Scuf)
     requires c.Valid()
-    requires e.SomewhatValid(c)
+    requires e.SomewhatValid(c) || e.SomewhatValidRelaxInputs(c)
     ensures NPsInSc(e.sc, Seq.ToSet(e.mp.outputs))
     ensures NPsInSc(e.sc, StateINPs(e.mp.state))
   {
     reveal NPsInSc();
     reveal Scuf.SomewhatValid();
+    reveal Scuf.SomewhatValidRelaxInputs();
     reveal AllSeq();
     reveal Seq.ToSet();
     assert AllONPs(c, e.sc) >= Seq.ToSet(e.mp.outputs);
@@ -218,9 +222,23 @@ module Scuf {
     reveal Scuf.SomewhatValid();
   }
 
+  lemma StateIsSeq(c: Circuit, s: Scuf)
+    requires c.Valid()
+    requires s.SomewhatValidRelaxInputs(c)
+    ensures forall n :: n in s.mp.state ==> n in c.NodeKind && c.NodeKind[n].CSeq?
+  {
+    reveal Scuf.SomewhatValidRelaxInputs();
+    assert Seq.ToSet(s.mp.state) == AllSeq(c, s.sc);
+    reveal Seq.ToSet();
+    reveal ScValid();
+    reveal Circuit.Valid();
+    reveal AllSeq();
+    assert forall n :: n in s.mp.state ==> (n in s.sc) && c.NodeKind[n].CSeq?;
+  }
+
   lemma StaysInSc(c: Circuit, e: Scuf, np: NP)
     requires c.Valid()
-    requires e.SomewhatValid(c)
+    requires e.SomewhatValidRelaxInputs(c)
     requires INPValid(c, np)
     requires np.n in e.sc
     requires np !in e.mp.inputs
@@ -228,7 +246,7 @@ module Scuf {
     ensures c.PortSource[np].n in e.sc
   {
     reveal Circuit.Valid();
-    reveal Scuf.SomewhatValid();
+    reveal Scuf.SomewhatValidRelaxInputs();
     reveal UnconnInputs();
     reveal ConnInputs();
     reveal Seq.ToSet();
@@ -286,10 +304,11 @@ module Scuf {
 
   lemma ScufValidFiValidToFICircuitValid(c: Circuit, e: Scuf, fi: FI)
     requires c.Valid()
-    requires e.SomewhatValidRelaxInputs(c)
+    requires e.SomewhatValidRelaxInputs(c) || e.SomewhatValid(c)
     requires FIValid(fi, e.mp.inputs, e.mp.state)
     ensures FICircuitValid(c, fi)
   {
+    reveal Scuf.SomewhatValid();
     reveal Scuf.SomewhatValidRelaxInputs();
     assert Seq.ToSet(e.mp.inputs) >= AllInputs(c, e.sc);
     assert Seq.ToSet(e.mp.inputs) == fi.inputs.Keys;

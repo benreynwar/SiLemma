@@ -122,6 +122,10 @@ module Path {
   {
     reveal PathExistsBetweenNPSets();
     reveal PathExistsToNPSet();
+    if PathExistsToNPSet(c, np, nps_b) {
+      var p :| PathToNPSet(c, p, np, nps_b);
+      assert PathBetweenNPSets(c, p, nps_a, nps_b);
+    }
   }
 
   predicate PathFromTo(c: Circuit, p: seq<NP>, a: NP, b: NP)
@@ -158,6 +162,7 @@ module Path {
       var p_d := ValidPathSegment(c, p_b, 0, index_b+1);
       var p_joined := JoinPaths(c, p_d, p_c);
       assert PathFromTo(c, p_joined, Seq.First(p_b), Seq.Last(p_a));
+      assert PathBetweenNPSets(c, p_joined, nps_a, nps_b);
       reveal PathExistsBetweenNPSets();
       assert PathExistsBetweenNPSets(c, nps_a, nps_b);
       assert false;

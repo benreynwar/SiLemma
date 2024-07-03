@@ -107,11 +107,32 @@ module SelfConnectEval2 {
       && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
       && (np in s.mp.outputs || np in StateINPs(s.mp.state))
+      && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+      && var conn_inputs := conn.GetConnectedInputs(s.mp);
+      && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
+      && NPValid(new_c, np)
+      && FICircuitValid(new_c, fi_second_pass) && FICircuitValid(new_c, fi)
       && (Evaluate(new_c, np, fi_second_pass) == Evaluate(new_c, np, fi))
   {
+    var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
+    assert NPValid(new_c, np) by {
+      ScufFOutputsAreValid(c, s);
+    }
+    var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
+    assert FICircuitValid(c, fi) && FICircuitValid(new_c, fi_second_pass) && FICircuitValid(new_c, fi) by {
+      reveal FICircuitValid();
+      ScufFInputsAreValid(c, s);
+      reveal Seq.ToSet();
+      reveal Circuit.Valid();
+      reveal AllSeq();
+      StateIsSeq(c, s);
+    }
+    assert FICircuitValid(new_c, fi);
+    reveal Seq.HasNoDuplicates();
+    reveal PathValid();
     if ONPValid(c, np) {
       EvaluateONPInnerSelfConnect(c, s, conn, [np], fi);
     } else {
@@ -160,7 +181,6 @@ module SelfConnectEval2 {
     assert fi == FI(fi_pass.inputs - inps, fi_pass.state) by {
       assert fi.state == fi_pass.state;
       var output_width := |s.mp.outputs|;
-      //var fake_output := seq(output_width, (index: nat) requires index < output_width => false);
       var sni := new_s.mp.fi2si(fi);
       conn.NIO2I2NI(sni.inputs, outputs);
       assert fi.inputs.Keys == fi_pass.inputs.Keys - inps;
@@ -218,7 +238,8 @@ module SelfConnectEval2 {
     }
   }
 
-  ghost predicate EvaluateINPInnerSelfConnectRequirements(c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, fi: FI)
+  ghost predicate EvaluateINPInnerSelfConnectRequirements(
+    c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, fi: FI)
   {
     && c.Valid()
     && s.Valid(c)
@@ -229,6 +250,45 @@ module SelfConnectEval2 {
     && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
     && EvaluateINPInnerRequirements(new_c, path, fi_second_pass)
     && EvaluateINPInnerRequirements(new_c, path, fi)
+    && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+    && var conn_inputs := conn.GetConnectedInputs(s.mp);
+    && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
+  }
+
+  lemma ONPNotInPath(c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, onp: NP)
+    requires 
+      && c.Valid()
+      && s.Valid(c)
+      && conn.Valid()
+      && ScufConnectionConsistent(c, s, conn)
+      && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
+      && PathValid(new_c, path)
+      && (|path| > 0)
+      && onp in conn.GetConnectedOutputs(s.mp)
+      && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+      && var conn_inputs := conn.GetConnectedInputs(s.mp);
+      && Seq.Last(path) in conn.GetConnectedInputs(s.mp)
+      && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
+    ensures onp !in path
+  {
+    var conn_outputs := conn.GetConnectedOutputs(s.mp);
+    var conn_inputs := conn.GetConnectedInputs(s.mp);
+    var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
+    assert onp !in path by {
+      // We know there are no paths from onp to Seq.Last(path) because onp is one of the connected outputs,
+      // and Seq.Last(path) is one of the connected inputs, and we know there are no pathes between.
+      if onp in path {
+        var index := Seq.IndexOf(path, onp);
+        var path_contradict := ValidPathSegment(new_c, path, index, |path|);
+        assert PathFromTo(new_c, path_contradict, onp, Seq.Last(path));
+        assert onp in conn.GetConnectedOutputs(s.mp);
+        assert Seq.Last(path) in conn.GetConnectedInputs(s.mp);
+        assert PathBetweenNPSets(new_c, path_contradict, conn_outputs, conn_inputs);
+        reveal PathExistsBetweenNPSets();
+        assert PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs);
+        assert false;
+      }
+    }
   }
 
   lemma EvaluateINPInnerSelfConnectHelperA(c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, fi: FI)
@@ -252,27 +312,10 @@ module SelfConnectEval2 {
     conn.GetConnectionProperties(c, s);
     var conn_outputs := conn.GetConnectedOutputs(s.mp);
     var conn_inputs := conn.GetConnectedInputs(s.mp);
-    //assert PathValid(c, path) by {
-    //  assert PathValid(new_c, path);
-    //  reveal PathValid();
-    //}
     assert ONPValid(new_c, onp) by {
       reveal Circuit.Valid();
     }
-    assert onp !in path by {
-      // We know there are no paths from onp to Seq.Last(path) because onp is one of the connected outputs,
-      // and Seq.Last(path) is one of the connected inputs, and we know there are no pathes between.
-      if onp in path {
-        var index := Seq.IndexOf(path, onp);
-        var path_contradict := ValidPathSegment(c, path, index, |path|);
-        assert PathFromTo(c, path_contradict, onp, Seq.Last(path));
-        assert onp in conn.GetConnectedOutputs(s.mp);
-        assert Seq.Last(path) in conn.GetConnectedInputs(s.mp);
-        assert PathBetweenNPSets(c, path_contradict, conn_outputs, conn_inputs);
-        reveal PathExistsBetweenNPSets();
-        assert PathExistsBetweenNPSets(c, conn_outputs, conn_inputs);
-      }
-    }
+    ONPNotInPath(c, s, conn, path, onp);
     assert !PathExists(new_c, onp, Seq.Last(path)) by {
       reveal PathExists();
       reveal PathExistsBetweenNPSets();
@@ -395,20 +438,10 @@ module SelfConnectEval2 {
     assert (EvaluateINPInner(new_c, path, fi_second_pass) == EvaluateINPInner(new_c, path, fi));
   }
 
-  lemma {:vcs_split_on_every_assert} EvaluateINPInnerSelfConnect(c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, fi: FI)
-    requires c.Valid()
-    requires s.Valid(c)
-    requires conn.Valid()
-    requires ScufConnectionConsistent(c, s, conn)
-    //requires
-    //  reveal ScufConnectionConsistent();
-    //  forall np :: np in path ==> np !in conn.GetConnectedOutputs(s.mp)
-    requires
-      && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-      && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
-      && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-      && EvaluateINPInnerRequirements(new_c, path, fi_second_pass)
-      && EvaluateINPInnerRequirements(new_c, path, fi)
+  lemma EvaluateINPInnerSelfConnect(
+      c: Circuit, s: Scuf, conn: InternalConnection, path: seq<NP>, fi: FI)
+    requires EvaluateINPInnerSelfConnectRequirements(c, s, conn, path, fi)
+    requires PathValid(c, path)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
@@ -419,131 +452,39 @@ module SelfConnectEval2 {
   {
     var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
     var fi_first_pass := conn.FIFirstPass(s.mp, fi);
+    var fo_first_pass := conn.FOFirstPass(s.mp, s.uf, fi);
     var so_first_pass := conn.SOFirstPass(s.mp, s.uf, fi);
     var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
     var head := path[|path|-1];
     var tail := path[..|path|-1];
     var connections := conn.GetConnection(s.mp);
+    var conn_outputs := conn.GetConnectedOutputs(s.mp);
+    var conn_inputs := conn.GetConnectedInputs(s.mp);
+    assert PathValid(new_c, path);
     if head in fi.inputs {
       assert head in fi.inputs;
       assert head in fi_second_pass.inputs;
       conn.FISecondPassMatchingKeyMatchingValue(s.mp, s.uf, fi);
       assert fi.inputs[head] == fi_second_pass.inputs[head];
     } else if head in fi_second_pass.inputs {
-      assert head !in fi.inputs;
-      // We've gone from an onp to one of the connected inps;
-      // We need to prove that these two things are equal.
-      // EvaluateINPInner(new_c, path, fi_second_pass)
-      // EvaluateINPInner(new_c, path, fi))
-
-      // If fi_second_pass is used, then the value is just the value in fi_second_pass.
-      assert EvaluateINPInner(new_c, path, fi_second_pass) == EvalOk(fi_second_pass.inputs[head]);
-      // But if we're using 'fi' then  we propagate back to the connected onp.
-
-
-
-      assert head in s.mp.inputs &&  head !in new_s.mp.inputs by {
-        reveal Seq.ToSet();
-        assert head !in fi.inputs;
-        assert fi.inputs.Keys == Seq.ToSet(new_s.mp.inputs);
-      }
-      assert head in connections.Keys by {
-        reveal Seq.ToSet();
-        assert new_s.mp == ConnectScufMap(s.mp, conn);
-      }
-      var onp: NP := new_c.PortSource[head];
-      //assert head !in c.PortSource;
-      assert onp !in path by {
-        // We know there are no paths from onp to Seq.Last(path) because onp is one of the connected outputs,
-        // and Seq.Last(path) is one of the connected inputs, and we know there are no pathes between.
-        if onp in path {
-          var index := Seq.IndexOf(path, onp);
-          var path_contradict := ValidPathSegment(c, path, index, |path|);
-          assert PathFromTo(c, path_contradict, onp, Seq.Last(path));
-        }
-      }
-      // Prove has no duplicates
-      StillHasNoDuplicates(path, onp);
-      assert EvaluateINPInner(new_c, path, fi) == EvaluateONPInner(new_c, path + [onp], fi);
-       
-      //assert head in Seq.ToSet(s.mp.inputs);
-      //assert head in connections.Keys;
-      assert head !in c.PortSource by {
-        reveal ScufConnectionConsistent();
-      }
-      assert onp !in path;
-      reveal Circuit.Valid();
-      NodesNotInPathDecreases(new_c, path, onp);
-      StillHasNoDuplicates(path, onp);
-      AppendPathValid(new_c, path, onp);
-      // Look back around to ONP.
-      var connection := conn.GetConnection(s.mp); 
-      assert onp == connection[head];
-      assert ONPValid(new_c, onp);
-      assert EvaluateONPInnerRequirements(new_c, path + [onp], fi) by {
-          assert EvaluateConstRequirements(new_c, fi);
-          assert EvaluatePathRequirements(new_c, path + [onp]);
-          assert ONPValid(new_c, Seq.Last(path + [onp]));
-      }
-      assert EvaluateONPInnerRequirements(new_c, path + [onp], fi_second_pass);
-      assert FICircuitValid(new_c, fi);
-      assert FICircuitValid(new_c, fi_second_pass) && FICircuitValid(new_c, fi_first_pass) by {
-        reveal FICircuitValid();
-      }
-      var output_width := |s.mp.outputs|;
-      var fake_output := seq(output_width, (index: nat) requires index < output_width => false);
-      var sni := new_s.mp.fi2si(fi);
-      var si_second_pass_inputs := conn.NIO2I(sni.inputs, so_first_pass.outputs);
-      var si_second_pass := SI(si_second_pass_inputs, sni.state);
-      assert fi_second_pass == s.mp.si2fi(si_second_pass);
-
-      var actual_output := so_first_pass.outputs;
-      assert |actual_output| == |s.mp.outputs| by {
-        assert ScufMapUpdateFunctionConsistent(s.mp, s.uf);
-        assert s.uf.output_width == |s.mp.outputs|;
-        reveal UpdateFunction.Valid();
-        assert|so_first_pass.outputs| == s.uf.output_width;
-      }
-      EvaluateONPInnerConnectedOutputs(c, s, conn, path + [onp], fi, fake_output);
-      EvaluateONPInnerConnectedOutputs(c, s, conn, path + [onp], fi, actual_output);
-      assert EvaluateONPInner(new_c, path + [onp], fi_first_pass) == EvaluateONPInner(new_c, path + [onp], fi);
-      assert EvaluateONPInner(new_c, path + [onp], fi_second_pass) == EvaluateONPInner(new_c, path + [onp], fi);
-  //if head in fi.inputs then
-  //  EvalOk(fi.inputs[head])
-  //else
-  //  if head in c.PortSource then
-  //    var onp := c.PortSource[head];
-  //    if onp in path then
-  //      EvalError({}, {path + [onp]})
-  //    else
-      calc {
-        EvaluateINPInner(new_c, path, fi);
-        EvaluateONPInner(new_c, path + [onp], fi);
-        EvaluateONPInner(new_c, path + [onp], fi_first_pass);
-        Evaluate(new_c, onp, fi_first_pass);
-        EvalOk(MFLookup(s, fi_first_pass, onp));
-        //EvalOk(fo_first_pass.outputs[onp]);
-        EvalOk(fi_second_pass.inputs[head]);
-        EvaluateINPInner(new_c, path, fi_second_pass);
-      }
-      assert EvaluateINPInner(new_c, path, fi_second_pass) == EvaluateINPInner(new_c, path, fi);
-
+      EvaluateINPInnerSelfConnectHelper(c, s, conn, path, fi);
     } else if head in new_c.PortSource {
       assert head !in Seq.ToSet(new_s.mp.inputs);
       assert fi.inputs.Keys == Seq.ToSet(new_s.mp.inputs);
       assert Seq.ToSet(new_s.mp.inputs) == Seq.ToSet(s.mp.inputs) - connections.Keys;
       var onp: NP := new_c.PortSource[head];
-      if head in fi_second_pass.inputs {
+      if onp in path {
       } else {
         reveal Circuit.Valid();
         NodesNotInPathDecreases(new_c, path, onp);
         StillHasNoDuplicates(path, onp);
         AppendPathValid(new_c, path, onp);
+        AppendPathValid(c, path, onp);
         EvaluateONPInnerSelfConnect(c, s, conn, path + [onp], fi);
-      }
-      assert SubcircuitWeaklyConserved(c, new_c, s.sc);
-      assert new_c.PortSource[head] == c.PortSource[head] by {
-        reveal SubcircuitWeaklyConserved();
+        assert SubcircuitWeaklyConserved(c, new_c, s.sc);
+        assert new_c.PortSource[head] == c.PortSource[head] by {
+          reveal SubcircuitWeaklyConserved();
+        }
       }
     } else {
       //EvalError({head}, {})
@@ -561,6 +502,10 @@ module SelfConnectEval2 {
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
       && EvaluateONPUnaryRequirements(new_c, path, fi_second_pass)
       && EvaluateONPUnaryRequirements(new_c, path, fi)
+      && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+      && var conn_inputs := conn.GetConnectedInputs(s.mp);
+      && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
+    requires PathValid(c, path)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
@@ -582,6 +527,7 @@ module SelfConnectEval2 {
       assert PathValid(new_c, new_path_0);
       assert |NodesNotInPath(new_c, path + [inp_0])| < |NodesNotInPath(new_c, path)|;
       StillHasNoDuplicates(path, inp_0);
+      AppendPathValid(c, path, inp_0);
       EvaluateINPInnerSelfConnect(c, s, conn, path + [inp_0], fi);
     }
   }
@@ -597,6 +543,10 @@ module SelfConnectEval2 {
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
       && EvaluateONPBinaryRequirements(new_c, path, fi_second_pass)
       && EvaluateONPBinaryRequirements(new_c, path, fi)
+      && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+      && var conn_inputs := conn.GetConnectedInputs(s.mp);
+      && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
+      && PathValid(c, path)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
@@ -624,6 +574,8 @@ module SelfConnectEval2 {
       assert |NodesNotInPath(new_c, path + [inp_0])| < |NodesNotInPath(new_c, path)|;
       StillHasNoDuplicates(path, inp_0);
       StillHasNoDuplicates(path, inp_1);
+      AppendPathValid(c, path, inp_0);
+      AppendPathValid(c, path, inp_1);
       EvaluateINPInnerSelfConnect(c, s, conn, path + [inp_0], fi);
       EvaluateINPInnerSelfConnect(c, s, conn, path + [inp_1], fi);
     }
@@ -640,6 +592,10 @@ module SelfConnectEval2 {
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
       && EvaluateONPInnerRequirements(new_c, path, fi_second_pass)
       && EvaluateONPInnerRequirements(new_c, path, fi)
+      && var conn_outputs := conn.GetConnectedOutputs(s.mp);
+      && var conn_inputs := conn.GetConnectedInputs(s.mp);
+      && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
+      && PathValid(c, path)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
@@ -681,26 +637,4 @@ module SelfConnectEval2 {
         }
     }
   }
-
-  //lemma EvaluateONP(c: Circuit, s: Scuf, conn: InternalConnection, np: NP, fi: FI)
-  //  //
-  //  // Here we need to prove that when we take a circuit and connect some of the input points to
-  //  // other nodes it doesn't effect the evaluation.
-  //  // This is because at the input points the evaluation is terminated.
-  //  //
-  //  //
-  //  requires c.Valid()
-  //  requires s.Valid(c)
-  //  requires conn.Valid()
-  //  requires ScufConnectionConsistent(c, s, conn)
-  //  requires FIValid(fi, s.mp.inputs, s.mp.state)
-  //  requires NPValid(c, np)
-  //  requires np in s.mp.outputs || np in StateINPs(s.mp.state)
-  //  ensures
-  //    var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-  //    && FICircuitValid(new_c, fi)
-  //    && FICircuitValid(c, fi)
-  //    && (Evaluate(new_c, np, fi) == Evaluate(c, np, fi))
-  //{
-  //}
 }

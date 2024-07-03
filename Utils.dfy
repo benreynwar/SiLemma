@@ -13,7 +13,7 @@ module Utils {
     Seq.ToSet(a) !! Seq.ToSet(b)
   }
 
-  lemma ConcatSeqsNoIntersection<T(==)>(a1: seq<T>, a2: seq<T>, b1: seq<T>, b2: seq<T>)
+  lemma ConcatSeqsNoIntersection<T>(a1: seq<T>, a2: seq<T>, b1: seq<T>, b2: seq<T>)
     requires SeqsNoIntersection(a1, b1)
     requires SeqsNoIntersection(a1, b2)
     requires SeqsNoIntersection(a2, b1)
