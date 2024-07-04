@@ -206,8 +206,11 @@ module SelfConnectEval2 {
       reveal FICircuitValid();
     }
     NoPathExistsBetweenNPSetsToToNPSet(new_c, onps, inps, Seq.Last(path));
-    EvaluateONPInnerReduceFI(new_c, path, fi_pass, inps);
-    assert fi == FI(fi_pass.inputs - inps, fi_pass.state);
+    assert !PathExistsToNPSet(new_c, Seq.Last(path), StateONPsFromSet({})) by {
+      reveal PathExistsToNPSet();
+    }
+    EvaluateONPInnerReduceFI(new_c, path, fi_pass, inps, {});
+    assert fi == FI(fi_pass.inputs - inps, fi_pass.state - {});
     assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_pass);
     assert Seq.HasNoDuplicates([Seq.Last(path)]) && PathValid(new_c, [Seq.Last(path)]) by {
       reveal Seq.HasNoDuplicates();

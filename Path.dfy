@@ -4,6 +4,7 @@ module Path {
   import opened Eval
   import opened MapFunction
   import opened Utils
+  import opened Subcircuit
 
   function PathSegment(p: seq<NP>, start: nat, stop: nat): (seg: seq<NP>)
     requires start < |p|
@@ -65,6 +66,20 @@ module Path {
     requires c.Valid()
   {
     exists p: seq<NP> :: PathToNPSet(c, p, np, nps_b)
+  }
+
+  lemma NoPathExistsToNPSubSet(c: Circuit, np: NP, nps: set<NP>, nps_subset: set<NP>)
+    requires c.Valid()
+    requires !PathExistsToNPSet(c, np, nps)
+    requires nps_subset <= nps
+    ensures !PathExistsToNPSet(c, np, nps_subset)
+  {
+    reveal PathExistsToNPSet();
+    if PathExistsToNPSet(c, np, nps_subset) {
+      var p :| PathToNPSet(c, p, np, nps_subset);
+      assert PathToNPSet(c, p, np, nps);
+      assert false;
+    }
   }
 
   lemma StillNoPathExistsToNPSet(c: Circuit, np: NP, next_np: NP, nps_b: set<NP>)
@@ -168,6 +183,51 @@ module Path {
       assert false;
     }
     reveal Seq.ToSet();
+  }
+
+  function PathFindTransition(c: Circuit, sc: set<CNode>, p: seq<NP>): (index: nat)
+    // A path is entire in two subcircuits.
+    // It starts in one and ends in another.
+    // Find a transition from the sc_a set to not sc_a set.
+    requires c.Valid()
+    requires ScValid(c, sc)
+    requires |p| > 0
+    requires Seq.First(p).n in sc
+    requires Seq.Last(p).n !in sc
+    ensures index < |p|-1
+    ensures p[index].n in sc
+    ensures p[index+1].n !in sc
+  {
+    assert |p| > 1;
+    if p[1].n !in sc then
+      0
+    else
+      assert p[1].n in sc;
+      1 + PathFindTransition(c, sc, p[1..])
+  }
+
+  lemma NoPathOutOfIsland(c: Circuit, sc: set<CNode>, np_a: NP, np_b: NP)
+    requires c.Valid()
+    requires ScValid(c, sc)
+    requires IsIsland(c, sc)
+    requires np_a.n in sc
+    requires np_b.n !in sc
+    ensures !PathExists(c, np_a, np_b)
+  {
+    if PathExists(c, np_a, np_b) {
+      // A path shoudn't be able to exist because sc_a is an island so there is no connection out.
+      var p := PathExistsToPath(c, np_a, np_b);
+      assert Seq.First(p).n in sc;
+      assert Seq.Last(p).n !in sc;
+      var transition_index := PathFindTransition(c, sc, p);
+      var np_in_a := p[transition_index];
+      var np_not_in_a := p[transition_index+1];
+      assert NPValid(c, np_in_a) && NPValid(c, np_not_in_a) && NPsConnected(c, np_in_a, np_not_in_a) by {
+        reveal PathValid();
+      }
+      reveal IsIsland();
+      assert false;
+    }
   }
 
   ghost opaque predicate PathCaught(c: Circuit, p: seq<NP>, catcher: set<NP>)

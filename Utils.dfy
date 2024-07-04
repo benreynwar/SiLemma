@@ -250,6 +250,49 @@ module Utils {
       r
   }
 
+  lemma SeqsToMapAdd<T(==), U(==)>(a1: seq<T>, b1: seq<U>, a2: seq<T>, b2: seq<U>)
+    requires Seq.HasNoDuplicates(a1)
+    requires |a1| == |b1|
+    requires Seq.HasNoDuplicates(a2)
+    requires |a2| == |b2|
+    requires Seq.ToSet(a1) !! Seq.ToSet(a2)
+    ensures
+      && Seq.HasNoDuplicates(a1 + a2)
+      && (SeqsToMap(a1 + a2, b1 + b2) == SeqsToMap(a1, b1) + SeqsToMap(a2, b2))
+  {
+    assert Seq.HasNoDuplicates(a1 + a2) by {
+      NoDuplicatesInConcat(a1, a2);
+    }
+    reveal SeqsToMap();
+    var m1 := SeqsToMap(a1, b1);
+    var m2 := SeqsToMap(a2, b2);
+    var m12 := SeqsToMap(a1 + a2, b1 + b2);
+    reveal Seq.ToSet();
+    reveal MapMatchesSeqs();
+    assert m1.Keys == Seq.ToSet(a1);
+    assert m2.Keys == Seq.ToSet(a2);
+    assert m12.Keys == m1.Keys + m2.Keys;
+    forall k | k in m12.Keys
+      ensures m12[k] == (m1 + m2)[k]
+    {
+      if k in m1.Keys {
+        assert k in a1;
+        var index1 := Seq.IndexOf(a1, k);
+        assert m1[k] == b1[index1];
+        assert m12[k] == (b1 + b2)[index1];
+        assert m12[k] == m1[k];
+      } else {
+        assert k in a2;
+        var index2 := Seq.IndexOf(a2, k);
+        assert m2[k] == b2[index2];
+        assert m12[k] == (b1 + b2)[|b1| + index2];
+        assert m12[k] == m2[k];
+      }
+    }
+    assert forall k :: k in m12.Keys ==> m12[k] == (m1 + m2)[k];
+  }
+
+
   opaque function MapToSeq<T(==), U(==)>(a: seq<T>, m: map<T, U>): (b: seq<U>)
     requires Seq.HasNoDuplicates(a)
     requires Seq.ToSet(a) == m.Keys

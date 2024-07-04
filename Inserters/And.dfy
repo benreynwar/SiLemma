@@ -3,36 +3,29 @@ module Inserters.And{
   import opened Circ
   import opened Eval
   import opened Utils
-  import opened Entity
+  import opened Scuf
   import opened Subcircuit
   import opened ConservedSubcircuit
   import opened MapFunction
 
-  function AndSF(si: SI): (so: SO)
-    requires |si.inputs| == 2
-    requires |si.state| == 0
+  const AndUFConst := UpdateFunction(
+    2, 1, 0,
+    (si: SI) requires |si.inputs| == 2 && |si.state| == 0 =>
+      SO([si.inputs[0] && si.inputs[1]], []));
+
+  function AndUF(): (r: UpdateFunction)
+    ensures r.Valid()
   {
-    SO([si.inputs[0] && si.inputs[1]], [])
+    reveal UpdateFunction.Valid();
+    AndUFConst
   }
 
-  ghost predicate AndMFValid(mf: MapFunction)
-  {
-    && mf.Valid()
-    && |mf.inputs| == 2
-    && |mf.state| == 0
-    && |mf.outputs| == 1
-    && (forall si :: SIValid(si, mf.inputs, mf.state) ==> (
-      && mf.sf.requires(si)
-      && mf.sf(si) == AndSF(si)
-      )
-    )
-  }
-
-  function InsertAndImpl(c: Circuit): (r: (Circuit, Entity))
+  function InsertAndImpl(c: Circuit): (r: (Circuit, Scuf))
     requires c.Valid()
     ensures r.0.Valid()
-    ensures EntitySomewhatValid(r.0, r.1)
-    ensures r.1.mf.Valid()
+    ensures r.1.SomewhatValid(r.0)
+    ensures r.1.MapValid()
+    ensures r.1.uf.Valid()
   {
     reveal Circuit.Valid();
     var new_node := GetNewNode(c);
@@ -47,12 +40,15 @@ module Inserters.And{
     var inputs := [i_0, i_1];
     var outputs := [o_0];
     var state := [];
-    var mf := MapFunction(inputs, outputs, state, (si: SI) requires SIValid(si, inputs, state) =>
+    var mp := ScufMap(inputs, outputs, state);
+    assert mp.Valid() by {
+      reveal Seq.HasNoDuplicates();
       reveal Seq.ToSet();
-      SO([si.inputs[0] && si.inputs[1]], []));
-    var e := Entity({new_node}, mf);
-    assert EntitySomewhatValid(new_c, e) by {
-      reveal EntitySomewhatValid();
+    }
+    var uf := AndUF();
+    var s := Scuf({new_node}, mp, uf);
+    assert s.SomewhatValid(new_c) by {
+      reveal Scuf.SomewhatValid();
       reveal Seq.ToSet();
       reveal ScValid();
       reveal ConnOutputs();
@@ -60,35 +56,53 @@ module Inserters.And{
       reveal UnconnInputs();
       reveal AllONPs();
       reveal AllSeq();
-      assert ScValid(new_c, e.sc);
-      assert forall np: NP :: np.n in e.sc ==> np !in c.PortSource.Values;
+      assert ScValid(new_c, s.sc);
+      assert forall np: NP :: np.n in s.sc ==> np !in c.PortSource.Values;
     }
-    assert mf.Valid() by {
-      reveal MapFunction.Valid();
+    assert s.MapValid() by {
       reveal Seq.ToSet();
-      reveal Seq.HasNoDuplicates();
+      reveal NPsInSc();
     }
-    (new_c, e)
+    (new_c, s)
   }
+
+  lemma InsertAndF(c: Circuit, fi: FI)
+    requires c.Valid()
+    requires
+      var (new_c, s) := InsertAndImpl(c);
+      FIValid(fi, s.mp.inputs, s.mp.state)
+    ensures
+      var (new_c, s) := InsertAndImpl(c);
+      reveal Scuf.SomewhatValid();
+      reveal Seq.ToSet();
+      && s.f(fi) == FO(map[s.mp.outputs[0]:=fi.inputs[s.mp.inputs[0]] && fi.inputs[s.mp.inputs[1]]], map[])
+    {
+      reveal Scuf.SomewhatValid();
+      reveal Seq.ToSet();
+      reveal MapToSeq();
+      reveal SeqsToMap();
+    }
+      
+
 
   lemma InsertAndCorrect(c: Circuit)
     requires c.Valid()
     ensures
       var (new_c, e) := InsertAndImpl(c);
-      && EntityValid(new_c, e)
+      && e.Valid(new_c)
   {
     var (new_c, e) := InsertAndImpl(c);
-    var o := e.mf.outputs[0];
-    var i_0 := e.mf.inputs[0];
-    var i_1 := e.mf.inputs[1];
-    var path := [e.mf.outputs[0]];
+    var o := e.mp.outputs[0];
+    var i_0 := e.mp.inputs[0];
+    var i_1 := e.mp.inputs[1];
+    var path := [e.mp.outputs[0]];
     assert PathValid(new_c, path) && PathValid(new_c, [o, i_0]) && PathValid(new_c, [o, i_1]) by {
       reveal PathValid();
     }
     LengthOneNoDuplicates(path);
     assert new_c.Valid();
     reveal Seq.ToSet();
-    forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
+    forall fi: FI | FIValid(fi, e.mp.inputs, e.mp.state)
       ensures
         var iv_0 := fi.inputs[i_0];
         var iv_1 := fi.inputs[i_1];
@@ -99,7 +113,7 @@ module Inserters.And{
       var iv_1 := fi.inputs[i_1];
       assert Seq.HasNoDuplicates(path);
       assert FICircuitValid(new_c, fi) by {
-        reveal MapFunction.Valid();
+        reveal UpdateFunction.Valid();
         reveal FICircuitValid();
       }
       assert EvaluateONP(new_c, o, fi) == EvaluateONPBinary(new_c, [o], fi);
@@ -110,18 +124,18 @@ module Inserters.And{
       assert EvaluateONPInner(new_c, [o], fi) == EvalOk(iv_0 && iv_1);
       assert EvaluateONP(new_c, o, fi) == EvalOk(iv_0 && iv_1);
       assert Evaluate(new_c, o, fi) == EvalOk(iv_0 && iv_1);
-      assert Evaluate(new_c, o, fi) == EvalOk(e.mf.f(fi).outputs[o]) by {
-        reveal MapMatchesSeqs();
+      assert Evaluate(new_c, o, fi) == EvalOk(e.f(fi).outputs[o]) by {
+        InsertAndF(c, fi);
       }
     }
     assert ScValid(new_c, e.sc) by {
-      reveal EntitySomewhatValid();
+      reveal Scuf.SomewhatValid();
     }
-    assert EntityEvaluatesCorrectly(new_c, e) by {
-      reveal EntityEvaluatesCorrectly();
+    assert e.EvaluatesCorrectly(new_c) by {
+      reveal Scuf.EvaluatesCorrectly();
       reveal MapMatchesSeqs();
     }
-    assert EntityValid(new_c, e);
+    assert e.Valid(new_c);
   }
 
   lemma InsertAndConserves(c: Circuit)
@@ -143,13 +157,13 @@ module Inserters.And{
     reveal IsIsland();
   }
 
-  function InsertAnd(c: Circuit): (r: (Circuit, Entity))
+  function InsertAnd(c: Circuit): (r: (Circuit, Scuf))
     requires c.Valid()
     ensures
       var (new_c, e) := r;
       && r == InsertAndImpl(c)
       && r.0.Valid()
-      && EntityValid(new_c, e)
+      && e.Valid(new_c)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)
       && IsIsland(new_c, e.sc)
@@ -159,31 +173,18 @@ module Inserters.And{
     InsertAndImpl(c)
   }
 
-  const AndRFConst := RFunction(2, 1, 0, AndSF)
+  const AndInserterConst := ScufInserter(AndUF(), InsertAnd)
 
-  function AndRF(): (r: RFunction)
+  function AndInserter(): (r: ScufInserter)
     ensures r.Valid()
   {
-    reveal RFunction.Valid();
-    AndRFConst
-  }
-
-  const AndInserterConst := EntityInserter(AndRF(), InsertAnd)
-
-  function AndInserter(): (r: EntityInserter)
-    ensures r.Valid()
-  {
-    reveal RFunction.Valid();
-    reveal EntityInserter.Valid();
-    reveal RFunction.MFConsistent();
-    var rf := AndRF();
-    var ei := AndInserterConst;
-    assert ei.Valid() by {
-      forall c: Circuit | c.Valid() {
-        assert ei.SpecificValid(c);
-      }
+    reveal UpdateFunction.Valid();
+    reveal ScufInserter.Valid();
+    var z := AndInserterConst;
+    assert z.Valid() by {
+      reveal SimpleInsertion();
     }
-    ei
+    z 
   }
 
 }
