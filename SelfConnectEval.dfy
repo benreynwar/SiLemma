@@ -103,6 +103,7 @@ module SelfConnectEval {
       && new_c.Valid()
       && new_s.Valid(new_c)
       && s.ValidRelaxInputs(new_c)
+      && (IsIsland(c, s.sc) ==> IsIsland(new_c, new_s.sc))
   {
     reveal ScufConnectionConsistent();
     var (new_c, new_s) := ConnectCircuitScufImpl(c, s,conn);
@@ -168,8 +169,59 @@ module SelfConnectEval {
         }
       }
     }
+    ConnectCircuitScufConservesIsIsland(c, s, conn);
     (new_c, new_s)
   }
 
+  lemma ConnectCircuitScufConservesIsIsland(c: Circuit, s: Scuf, conn: InternalConnection)
+    requires c.Valid()
+    requires s.Valid(c)
+    requires conn.Valid()
+    requires ScufConnectionConsistent(c, s, conn)
+    ensures
+      var (new_c, new_s) := ConnectCircuitScufImpl(c, s,conn);
+      IsIsland(c, s.sc) ==> IsIsland(new_c, new_s.sc)
+  {
+    reveal IsIsland();
+    FOutputsInSc(c, s);
+    FInputsInSc(c, s);
+    reveal NPsInSc();
+  }
+
+  lemma ConnectCircuitScufCircuitUnconnected(ca: Circuit, cb: Circuit, s: Scuf, conn: InternalConnection)
+    requires ca.Valid()
+    requires cb.Valid()
+    requires s.Valid(cb)
+    requires conn.Valid()
+    requires ScufConnectionConsistent(cb, s, conn)
+    requires s.sc !! ca.NodeKind.Keys
+    requires CircuitUnconnected(ca, cb)
+    ensures
+      var (new_c, new_s) := ConnectCircuitScufImpl(cb, s,conn);
+      CircuitUnconnected(ca, new_c)
+  {
+    reveal CircuitUnconnected();
+    FOutputsInSc(cb, s);
+    FInputsInSc(cb, s);
+    reveal NPsInSc();
+  }
+
+  lemma ConnectCircuitScufCircuitConserved(ca: Circuit, cb: Circuit, s: Scuf, conn: InternalConnection)
+    requires ca.Valid()
+    requires cb.Valid()
+    requires s.Valid(cb)
+    requires conn.Valid()
+    requires ScufConnectionConsistent(cb, s, conn)
+    requires s.sc !! ca.NodeKind.Keys
+    requires CircuitConserved(ca, cb)
+    ensures
+      var (new_c, new_s) := ConnectCircuitScufImpl(cb, s,conn);
+      CircuitConserved(ca, new_c)
+  {
+    reveal CircuitConserved();
+    FOutputsInSc(cb, s);
+    FInputsInSc(cb, s);
+    reveal NPsInSc();
+  }
 
 }

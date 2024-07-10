@@ -11,7 +11,7 @@ module Inserters.And{
   const AndUFConst := UpdateFunction(
     2, 1, 0,
     (si: SI) requires |si.inputs| == 2 && |si.state| == 0 =>
-      SO([si.inputs[0] && si.inputs[1]], []));
+      SO([si.inputs[0] && si.inputs[1]], []))
 
   function AndUF(): (r: UpdateFunction)
     ensures r.Valid()

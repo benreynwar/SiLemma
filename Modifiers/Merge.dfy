@@ -72,7 +72,7 @@ module Modifiers.Merge {
     so
   }
 
-  function MergeUpdateFunctions(uf1: UpdateFunction, uf2: UpdateFunction): (uf: UpdateFunction)
+  opaque function MergeUpdateFunctions(uf1: UpdateFunction, uf2: UpdateFunction): (uf: UpdateFunction)
     requires uf1.Valid()
     requires uf2.Valid()
     ensures uf.Valid()
@@ -101,7 +101,8 @@ module Modifiers.Merge {
       var s := MergeScufsImpl(c, s1, s2);
       var fi1 := MergeFI1(c, s1, s2, fi);
       && (MFLookup(s, fi, np) == MFLookup(s1, fi1, np))
-  {
+  { 
+    reveal MergeUpdateFunctions();
     reveal Seq.ToSet();
     var s := MergeScufsImpl(c, s1, s2);
     var si := s.mp.fi2si(fi);
@@ -301,6 +302,7 @@ module Modifiers.Merge {
       var s := MergeScufsImpl(c, s1, s2);
       FIValid(fi, s.mp.inputs, s.mp.state)
   {
+    reveal MergeUpdateFunctions();
     var s := MergeScufsImpl(c, s1, s2);
     var si := s.mp.fi2si(fi);
     var so := s.uf.sf(si);
@@ -350,6 +352,7 @@ module Modifiers.Merge {
       && fo.outputs == fo1.outputs + fo2.outputs
       && fo.state == fo1.state + fo2.state
   {
+    reveal MergeUpdateFunctions();
     var s := MergeScufsImpl(c, s1, s2);
     var si := s.mp.fi2si(fi);
     var so := s.uf.sf(si);
@@ -501,6 +504,7 @@ module Modifiers.Merge {
     requires MergeRequirements(c, s1, s2)
     ensures s.MapValid()
   {
+    reveal MergeUpdateFunctions();
     var sc := s1.sc + s2.sc;
     assert ScufMapsCanMerge(s1.mp, s2.mp) by {
       ScufsNoIntersectionMapsCanMerge(c, s1, s2);
@@ -580,27 +584,103 @@ module Modifiers.Merge {
     s
   }
 
-  function MergeInserter(c: Circuit, z1: ScufInserter, z2: ScufInserter): (r: (Circuit, Scuf))
+  opaque function MergeInserter(c: Circuit, z1: ScufInserter, z2: ScufInserter): (r: (Circuit, Scuf))
     requires c.Valid()
     requires z1.Valid()
     requires z2.Valid()
+    ensures
+      var (new_c, s1, s2) := InsertTwo(c, z1, z2);
+      SimpleInsertion(c, new_c, r.1)
   {
     var (new_c, s1, s2) := InsertTwo(c, z1, z2);
     reveal DualInsertion();
     var s := MergeScufs(new_c, s1, s2);
+    assert SimpleInsertion(c, new_c, s) by {
+      reveal SimpleInsertion();
+      reveal IsIsland();
+    }
     (new_c, s)
   }
 
-  function MergeModifier(z1: ScufInserter, z2: ScufInserter): (r: ScufInserter)
+  lemma MergeModifierPathConstraints(z1: ScufInserter, z2: ScufInserter, c: Circuit)
+    requires c.Valid()
     requires z1.Valid()
     requires z2.Valid()
+    ensures
+      reveal MergeInserter();
+      reveal MergeUpdateFunctions();
+      var z := MergeModifier(z1, z2);
+      var (new_c, s) := z.fn(c);
+      && new_c.Valid()
+      && !PathExistsBetweenNPSets(new_c, Seq.ToSet(s.mp.outputs[..z1.uf.output_width]),
+            Seq.ToSet(s.mp.inputs[z1.uf.input_width..]))
+      && !PathExistsBetweenNPSets(new_c, Seq.ToSet(s.mp.outputs[z1.uf.output_width..]),
+            Seq.ToSet(s.mp.inputs[..z1.uf.input_width]))
+  {
+    reveal MergeUpdateFunctions();
+    reveal ScufInserter.Valid();
+    reveal DualInsertion();
+    reveal Seq.ToSet();
+    reveal MergeInserter();
+    var (new_c, s1, s2) := InsertTwo(c, z1, z2);
+    assert s1.uf == z1.uf;
+    assert s2.uf == z2.uf;
+    var s := MergeScufs(new_c, s1, s2);
+    var z := MergeModifier(z1, z2);
+    assert (new_c, s) == z.fn(c);
+    FOutputsInSc(new_c, s1);
+    FOutputsInSc(new_c, s2);
+    FInputsInSc(new_c, s1);
+    FInputsInSc(new_c, s2);
+    reveal NPsInSc();
+    reveal PathExists();
+    reveal PathExistsBetweenNPSets();
+    assert !PathExistsBetweenNPSets(new_c, Seq.ToSet(s1.mp.outputs), Seq.ToSet(s2.mp.inputs)) by {
+      forall np1: NP, np2: NP | np1 in s1.mp.outputs && np2 in s2.mp.inputs
+        ensures !PathExists(new_c, np1, np2)
+      {
+        NoPathOutOfIsland(new_c, s1.sc, np1, np2);
+      }
+    }
+    assert !PathExistsBetweenNPSets(new_c, Seq.ToSet(s2.mp.outputs), Seq.ToSet(s1.mp.inputs)) by {
+      forall np1: NP, np2: NP | np1 in s2.mp.outputs && np2 in s1.mp.inputs
+        ensures !PathExists(new_c, np1, np2)
+      {
+        NoPathOutOfIsland(new_c, s2.sc, np1, np2);
+      }
+    }
+  }
+
+  function MergeModifier(z1: ScufInserter, z2: ScufInserter): (z: ScufInserter)
+    requires z1.Valid()
+    requires z2.Valid()
+    ensures z.Valid()
   {
     reveal ScufInserter.Valid();
+    reveal MergeInserter();
     var uf := MergeUpdateFunctions(z1.uf, z2.uf);
-    ScufInserter(
+    var z := ScufInserter(
       uf,
       (c: Circuit) requires c.Valid() => MergeInserter(c, z1, z2)
-    )
+    );
+    assert z.Valid() by {
+      assert uf.Valid();
+      forall c: Circuit | c.Valid()
+        ensures z.SpecificValid(c)
+      {
+        var (intermed_c, s1, s2) := InsertTwo(c, z1, z2);
+        assert s1.uf == z1.uf;
+        assert s2.uf == z2.uf;
+        assert z.fn.requires(c);
+        var (new_c, s) := z.fn(c);
+        assert s.uf == uf;
+        assert z.uf == uf;
+        assert (s.uf == z.uf);
+        assert SimpleInsertion(c, new_c, s);
+        assert z.SpecificValid(c);
+      }
+    }
+    z
   }
 
 }

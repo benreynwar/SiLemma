@@ -10,8 +10,9 @@ module Modifiers.Connect {
   import opened Utils
   import opened Subcircuit
   import opened SelfConnect
+  import opened SelfConnectEval
 
-  function {:vcs_split_on_every_assert} ConnectInserter(c: Circuit, z: ScufInserter, conn: InternalConnection): (r: (Circuit, Scuf))
+  function ConnectInserter(c: Circuit, z: ScufInserter, conn: InternalConnection): (r: (Circuit, Scuf))
     requires c.Valid()
     requires z.Valid()
     requires conn.Valid()
@@ -31,25 +32,17 @@ module Modifiers.Connect {
     assert MPConnectionConsistent(s.mp, conn) by {
       reveal ScufConnectionConsistent();
     }
-    //var connection := conn.GetConnection(s.mp);
-    //conn.GetConnectionProperties(c1, s);
-    //assert ConnectCircuitRequirements(c1, connection);
     var (new_c, new_s) := ConnectCircuitScuf(c1, s, conn);
-    assert new_s.Valid(new_c) by {
-      assert new_s.MapValid();
-      assert new_s.SomewhatValid(new_c);
-      assert new_s.EvaluatesCorrectly(new_c) by {
-        //reveal ScValid();
-        //ScufFOutputsAreValid(c, this);
-        //reveal Seq.ToSet();
-        forall fi: FI | FIValid(fi, new_s.mp.inputs, new_s.mp.state) {
-          assert FICircuitValid(new_c, fi) by {ScufValidFiValidToFICircuitValid(new_c, new_s, fi);}
-          forall np | np in Seq.ToSet(new_s.mp.outputs) || np in StateINPs(new_s.mp.state) {
-            assert Evaluate(new_c, np, fi) == EvalOk(MFLookup(new_s, fi, np));
-          }
-        }
-      }
-    }
+    reveal SimpleInsertion();
+    assert new_c.Valid();
+    assert new_s.Valid(new_c);
+    assert IsIsland(new_c, new_s.sc);
+    ConnectCircuitScufCircuitUnconnected(c, c1, s, conn);
+    assert CircuitUnconnected(c, new_c);
+    ConnectCircuitScufCircuitConserved(c, c1, s, conn);
+    assert CircuitConserved(c, new_c);
+    assert (new_c.NodeKind.Keys == c.NodeKind.Keys + new_s.sc);
+    assert (c.NodeKind.Keys !! new_s.sc);
     (new_c, new_s)
   }
 

@@ -590,6 +590,7 @@ module ConservedSubcircuit {
     && CircuitConserved(c, new_c)
     && (new_c.NodeKind.Keys == c.NodeKind.Keys + s1.sc + s2.sc)
     && (c.NodeKind.Keys !! s1.sc)
+    && (c.NodeKind.Keys !! s2.sc)
   }
 
   lemma TwoSimpleInsertionIsDualInsertion(c: Circuit, c1: Circuit, c2: Circuit, s1: Scuf, s2: Scuf)
@@ -675,6 +676,8 @@ module ConservedSubcircuit {
     requires z1.Valid()
     requires z2.Valid()
     ensures DualInsertion(c, r.0, r.1, r.2)
+    ensures r.1.uf == z1.uf
+    ensures r.2.uf == z2.uf
   {
     reveal SimpleInsertion();
     z1.ValidForCircuit(c);

@@ -3,34 +3,47 @@ module Inserters.Const{
   import opened Circ
   import opened Eval
   import opened Utils
-  import opened Entity
+  import opened Scuf
   import opened Subcircuit
   import opened ConservedSubcircuit
   import opened MapFunction
 
-  function InsertConstImpl(c: Circuit, v: bool): (r: (Circuit, Entity))
+  function ConstUF(value: bool): (r: UpdateFunction)
+    ensures r.Valid()
+  {
+    reveal UpdateFunction.Valid();
+    UpdateFunction(
+      0, 1, 0,
+      (si: SI) requires |si.inputs| == 0 && |si.state| == 0 => SO([value], []))
+  }
+
+  function InsertConstImpl(c: Circuit, value: bool): (r: (Circuit, Scuf))
     requires c.Valid()
     ensures r.0.Valid()
-    ensures EntitySomewhatValid(r.0, r.1)
-    ensures r.1.mf.Valid()
+    ensures r.1.SomewhatValid(r.0)
+    ensures r.1.MapValid()
+    ensures r.1.uf.Valid()
   {
     reveal Circuit.Valid();
     var new_node := GetNewNode(c);
     assert new_node !in c.NodeKind;
     var new_c := Circuit(
-      NodeKind := c.NodeKind[new_node := CConst(v)],
+      NodeKind := c.NodeKind[new_node := CConst(value)],
       PortSource := c.PortSource
     );
     var o_0 := NP(new_node, OUTPUT_0);
     var inputs := [];
     var outputs := [o_0];
     var state := [];
-    var mf := MapFunction(inputs, outputs, state, (si: SI) requires SIValid(si, inputs, state) =>
+    var mp := ScufMap(inputs, outputs, state);
+    assert mp.Valid() by {
+      reveal Seq.HasNoDuplicates();
       reveal Seq.ToSet();
-      SO([v], []));
-    var e := Entity({new_node}, mf);
-    assert EntitySomewhatValid(new_c, e) by {
-      reveal EntitySomewhatValid();
+    }
+    var uf := ConstUF(value);
+    var s := Scuf({new_node}, mp, uf);
+    assert s.SomewhatValid(new_c) by {
+      reveal Scuf.SomewhatValid();
       reveal Seq.ToSet();
       reveal ScValid();
       reveal ConnOutputs();
@@ -38,74 +51,72 @@ module Inserters.Const{
       reveal UnconnInputs();
       reveal AllONPs();
       reveal AllSeq();
-      assert ScValid(new_c, e.sc);
-      assert forall np: NP :: np.n in e.sc ==> np !in c.PortSource.Values;
+      assert ScValid(new_c, s.sc);
+      assert forall np: NP :: np.n in s.sc ==> np !in c.PortSource.Values;
     }
-    assert mf.Valid() by {
-      reveal MapFunction.Valid();
+    assert s.MapValid() by {
       reveal Seq.ToSet();
-      reveal Seq.HasNoDuplicates();
+      reveal NPsInSc();
     }
-    (new_c, e)
+    (new_c, s)
   }
 
-  lemma InsertConstCorrect(c: Circuit, v: bool)
+  lemma InsertConstF(c: Circuit, value: bool, fi: FI)
+    requires c.Valid()
+    requires
+      var (new_c, s) := InsertConstImpl(c, value);
+      FIValid(fi, s.mp.inputs, s.mp.state)
+    ensures
+      var (new_c, s) := InsertConstImpl(c, value);
+      reveal Scuf.SomewhatValid();
+      reveal Seq.ToSet();
+      && s.f(fi) == FO(map[s.mp.outputs[0]:=value], map[])
+    {
+      reveal Scuf.SomewhatValid();
+      reveal Seq.ToSet();
+      reveal MapToSeq();
+      reveal SeqsToMap();
+    }
+      
+
+
+  lemma InsertConstCorrect(c: Circuit, value: bool)
     requires c.Valid()
     ensures
-      var (new_c, e) := InsertConstImpl(c, v);
-      && EntityValid(new_c, e)
+      var (new_c, e) := InsertConstImpl(c, value);
+      && e.Valid(new_c)
   {
-    var (new_c, e) := InsertConstImpl(c, v);
-    assert |e.mf.inputs| == 0;
-    var o := e.mf.outputs[0];
-    var path := [e.mf.outputs[0]];
-    LengthOneNoDuplicates(path);
-    forall fi: FI | FIValid(fi, e.mf.inputs, e.mf.state)
+    reveal Seq.ToSet();
+    var (new_c, s) := InsertConstImpl(c, value);
+    var o := s.mp.outputs[0];
+    forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
       ensures
         && FICircuitValid(new_c, fi)
-        && (EvaluateONP(new_c, o, fi) == EvalOk(v))
+        && (EvaluateONP(new_c, o, fi) == EvalOk(value))
     {
-      reveal e.mf.Valid();
-      reveal Seq.ToSet();
-      assert Seq.HasNoDuplicates(path);
-      assert FICircuitValid(new_c, fi) by {
-        reveal MapFunction.Valid();
-        reveal FICircuitValid();
-      }
-      reveal Seq.HasNoDuplicates();
-      assert PathValid(new_c, path) by {
-        reveal PathValid();
-      }
-      assert EvaluateONPInner(new_c, [o], fi) == EvalOk(v);
-      assert EvaluateONP(new_c, o, fi) == EvalOk(v);
-      assert Evaluate(new_c, o, fi) == EvalOk(v);
-      assert Evaluate(new_c, o, fi) == EvalOk(e.mf.f(fi).outputs[o]) by {
-        reveal MapMatchesSeqs();
-      }
+      reveal FICircuitValid();
     }
-    assert ScValid(new_c, e.sc) by {
-      reveal EntitySomewhatValid();
+    assert ScValid(new_c, s.sc) by {
+      reveal Scuf.SomewhatValid();
     }
-    assert EntityEvaluatesCorrectly(new_c, e) by {
-      EntityFOutputsAreValid(new_c, e);
-      reveal Seq.ToSet();
-      reveal EntityEvaluatesCorrectly();
+    assert s.EvaluatesCorrectly(new_c) by {
+      reveal Scuf.EvaluatesCorrectly();
       reveal MapMatchesSeqs();
     }
-    assert EntityValid(new_c, e);
+    assert s.Valid(new_c);
   }
 
-  lemma InsertConstConserves(c: Circuit, v: bool)
+  lemma InsertConstConserves(c: Circuit, value: bool)
     requires c.Valid()
-    ensures CircuitConserved(c, InsertConstImpl(c, v).0)
-    ensures CircuitUnconnected(c, InsertConstImpl(c, v).0)
+    ensures CircuitConserved(c, InsertConstImpl(c, value).0)
+    ensures CircuitUnconnected(c, InsertConstImpl(c, value).0)
     ensures
-      var (new_c, e) := InsertConstImpl(c, v);
+      var (new_c, e) := InsertConstImpl(c, value);
       IsIsland(new_c, e.sc)
   {
     reveal CircuitConserved();
     reveal CircuitUnconnected();
-    var (new_c, e) := InsertConstImpl(c, v);
+    var (new_c, e) := InsertConstImpl(c, value);
     reveal Circuit.Valid();
     assert (forall np :: np in c.PortSource.Keys ==> np.n !in e.sc);
     assert (forall np :: np in c.PortSource.Values ==> np.n !in e.sc);
@@ -114,20 +125,41 @@ module Inserters.Const{
     reveal IsIsland();
   }
 
-  function InsertConst(c: Circuit, v: bool): (r: (Circuit, Entity))
+  function InsertConst(c: Circuit, value: bool): (r: (Circuit, Scuf))
     requires c.Valid()
     ensures
       var (new_c, e) := r;
-      && r == InsertConstImpl(c, v)
+      && r == InsertConstImpl(c, value)
       && r.0.Valid()
-      && EntityValid(new_c, e)
+      && e.Valid(new_c)
       && CircuitConserved(c, r.0)
       && CircuitUnconnected(c, r.0)
       && IsIsland(new_c, e.sc)
   {
-    InsertConstCorrect(c, v);
-    InsertConstConserves(c, v);
-    InsertConstImpl(c, v)
+    InsertConstCorrect(c, value);
+    InsertConstConserves(c, value);
+    InsertConstImpl(c, value)
+  }
+
+  function InsertConstWrapper(value: bool): (fn: Circuit-->(Circuit, Scuf))
+    ensures forall c: Circuit :: c.Valid() ==> fn.requires(c)
+  {
+    var fn: Circuit --> (Circuit, Scuf) :=
+      (c: Circuit) requires c.Valid() => InsertConst(c, value);
+    fn
+  }
+
+  function ConstInserter(value: bool): (r: ScufInserter)
+    ensures r.Valid()
+  {
+    reveal UpdateFunction.Valid();
+    reveal ScufInserter.Valid();
+    var fn := InsertConstWrapper(value);
+    var z := ScufInserter(ConstUF(value), fn);
+    assert z.Valid() by {
+      reveal SimpleInsertion();
+    }
+    z 
   }
 
 }

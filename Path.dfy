@@ -114,6 +114,34 @@ module Path {
     exists p: seq<NP> :: PathBetweenNPSets(c, p, nps_a, nps_b)
   }
 
+  lemma NoPathExistsToNoPathExistsBetweenNPSets(c: Circuit, nps_a: set<NP>, nps_b: set<NP>)
+    requires c.Valid()
+    requires forall npa: NP, npb: NP :: npa in nps_a && npb in nps_b ==> !PathExists(c, npa, npb)
+    ensures !PathExistsBetweenNPSets(c, nps_a, nps_b)
+  {
+    reveal PathExistsBetweenNPSets();
+    reveal PathExists();
+    if PathExistsBetweenNPSets(c, nps_a, nps_b) {
+      var p :| PathBetweenNPSets(c, p, nps_a, nps_b);
+      assert PathExists(c, Seq.First(p), Seq.Last(p));
+    }
+  }
+
+  lemma NoPathExistsBetweenNPSubSets(c: Circuit, nps_a: set<NP>, nps_b: set<NP>, subset_a: set<NP>, subset_b: set<NP>)
+    requires c.Valid()
+    requires !PathExistsBetweenNPSets(c, nps_a, nps_b)
+    requires subset_a <= nps_a
+    requires subset_b <= nps_b
+    ensures !PathExistsBetweenNPSets(c, subset_a, subset_b)
+  {
+    reveal PathExistsBetweenNPSets();
+    if PathExistsBetweenNPSets(c, subset_a, subset_b) {
+      var p :| PathBetweenNPSets(c, p, subset_a, subset_b);
+      assert PathBetweenNPSets(c, p, nps_a, nps_b);
+      assert false;
+    }
+  }
+
   lemma NoPathExistsBetweenNPSetsToNoPathExists(c: Circuit, nps_a: set<NP>, nps_b: set<NP>, np_a: NP, np_b: NP)
     requires c.Valid()
     requires np_a in nps_a
