@@ -20,10 +20,7 @@ module SelfConnectEval {
       reveal ScufConnectionConsistent();
     }
     && FIValid(fi, conn.I2NI(s.mp.inputs), s.mp.state)
-    //&& var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-    //&& FICircuitValid(new_c, fi)
   }
-
 
   lemma EvaluateSelfConnect(c: Circuit, s: Scuf, conn: InternalConnection, np: NP, fi: FI)
     requires ConnectRequirements(c, s, conn, fi)

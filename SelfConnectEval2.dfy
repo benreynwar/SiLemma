@@ -628,6 +628,9 @@ module SelfConnectEval2 {
         case CAnd() => {
             EvaluateONPBinarySelfConnect(c, s, conn, path, fi);
         }
+        case COr() => {
+            EvaluateONPBinarySelfConnect(c, s, conn, path, fi);
+        }
         case CInv() => {
             EvaluateONPUnarySelfConnect(c, s, conn, path, fi);
         }

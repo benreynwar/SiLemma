@@ -106,6 +106,7 @@ module Path2 {
       match nk
         case CXor() => EvaluateONPBinaryReduceFI(c, p, fi, removed_inputs, removed_state);
         case CAnd() => EvaluateONPBinaryReduceFI(c, p, fi, removed_inputs, removed_state);
+        case COr() => EvaluateONPBinaryReduceFI(c, p, fi, removed_inputs, removed_state);
         case CInv() => EvaluateONPUnaryReduceFI(c, p, fi, removed_inputs, removed_state);
         case CIden() => EvaluateONPUnaryReduceFI(c, p, fi, removed_inputs, removed_state);
         case CConst(b) => {

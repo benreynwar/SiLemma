@@ -32,7 +32,7 @@ module Eval {
     && ONPValid(c, path[|path|-1])
     && (Seq.Last(path).n !in fi.state)
     && var nk := c.NodeKind[Seq.Last(path).n];
-    && (nk.CXor? || nk.CAnd? || nk.CInv? || nk.CIden?)
+    && (nk.CXor? || nk.CAnd? || nk.COr? || nk.CInv? || nk.CIden?)
   }
 
   ghost predicate EvaluateONPBinaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
@@ -42,7 +42,7 @@ module Eval {
     && ONPValid(c, Seq.Last(path))
     && (Seq.Last(path).n !in fi.state)
     && var nk := c.NodeKind[Seq.Last(path).n];
-    && (nk.CXor? || nk.CAnd?)
+    && (nk.CXor? || nk.CAnd? || nk.COr?)
   }
 
   ghost predicate EvaluateONPUnaryRequirements(c: Circuit, path: seq<NP>, fi: FI)
@@ -159,8 +159,11 @@ module Eval {
             case EvalOk(b1) =>
               if nk.CXor? then
                 EvalOk(Xor(b0, b1))
-              else
+              else if nk.CAnd? then
                 EvalOk(b0 && b1)
+              else
+                assert nk.COr?;
+                EvalOk(b0 || b1)
         )
   }
 
@@ -215,6 +218,7 @@ module Eval {
       match nk
         case CXor() => EvaluateONPBinary(c, path, fi)
         case CAnd() => EvaluateONPBinary(c, path, fi)
+        case COr() => EvaluateONPBinary(c, path, fi)
         case CInv() => EvaluateONPUnary(c, path, fi)
         case CIden() => EvaluateONPUnary(c, path, fi)
         case CConst(b) => EvalOk(b)

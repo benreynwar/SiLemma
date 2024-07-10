@@ -5,12 +5,23 @@ module Circ {
   datatype CNodeKind = 
     | CXor()
     | CAnd()
+    | COr()
     | CInv()
     | CIden()
       // A contant 0 or 1
     | CConst(value: bool)
       // A register.
     | CSeq()
+
+  predicate CNodeKindIsBinary(nk: CNodeKind)
+  {
+    nk.CXor? || nk.CAnd? || nk.COr?
+  }
+
+  predicate CNodeKindIsUnary(nk: CNodeKind)
+  {
+    nk.CInv? || nk.CIden?
+  }
 
   newtype CNode = nat
   newtype CPort = nat
@@ -67,6 +78,7 @@ module Circ {
     match nk
       case CXor() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
       case CAnd() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
+      case COr() => {NP(node, INPUT_0), NP(node, INPUT_1), NP(node, OUTPUT_0)}
       case CInv() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
       case CIden() => {NP(node, INPUT_0), NP(node, OUTPUT_0)}
       case CConst(b) => {NP(node, OUTPUT_0)}
@@ -236,6 +248,7 @@ module Circ {
     match nk
       case CXor() => p == OUTPUT_0
       case CAnd() => p == OUTPUT_0
+      case COr() => p == OUTPUT_0
       case CInv() => p == OUTPUT_0
       case CIden() => p == OUTPUT_0
       case CConst(b) => p == OUTPUT_0
@@ -247,6 +260,7 @@ module Circ {
     match nk
       case CXor() => p == INPUT_0 || p == INPUT_1
       case CAnd() => p == INPUT_0 || p == INPUT_1
+      case COr() => p == INPUT_0 || p == INPUT_1
       case CInv() => p == INPUT_0
       case CIden() => p == INPUT_0
       case CConst(b) => false

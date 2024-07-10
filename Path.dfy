@@ -375,6 +375,7 @@ module Path {
       match nk
         case CXor() => EvaluateONPBinaryOkToPathCaught(c, p, fi);
         case CAnd() => EvaluateONPBinaryOkToPathCaught(c, p, fi);
+        case COr() => EvaluateONPBinaryOkToPathCaught(c, p, fi);
         case CInv() => EvaluateONPUnaryOkToPathCaught(c, p, fi);
         case CIden() => EvaluateONPUnaryOkToPathCaught(c, p, fi);
         case CConst(b) => {
@@ -503,6 +504,7 @@ module Path {
       match nk
         case CXor() => EvaluateONPBinaryPrepend(c, prefix, p, fi);
         case CAnd() => EvaluateONPBinaryPrepend(c, prefix, p, fi);
+        case COr() => EvaluateONPBinaryPrepend(c, prefix, p, fi);
         case CInv() => EvaluateONPUnaryPrepend(c, prefix, p, fi);
         case CIden() => EvaluateONPUnaryPrepend(c, prefix, p, fi);
         case CConst(b) => {

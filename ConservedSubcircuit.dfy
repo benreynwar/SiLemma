@@ -276,7 +276,7 @@ module ConservedSubcircuit {
     requires forall np :: np in path ==> np.n in e.sc
     requires
       var nk := ca.NodeKind[Seq.Last(path).n];
-      nk.CXor? || nk.CAnd?
+      CNodeKindIsBinary(nk)
     requires PathValid(ca, path)
     requires Seq.HasNoDuplicates(path)
     ensures PathValid(cb, path)
@@ -285,7 +285,7 @@ module ConservedSubcircuit {
       && cb.Valid()
       && ONPValid(cb, Seq.Last(path))
       && var nk := cb.NodeKind[Seq.Last(path).n];
-      && (nk.CXor? || nk.CAnd?)
+      && CNodeKindIsBinary(nk)
       && FICircuitValid(ca, fi)
       && FICircuitValid(cb, fi)
       && (EvaluateONPBinary(ca, path, fi) == EvaluateONPBinary(cb, path, fi))
@@ -383,6 +383,7 @@ module ConservedSubcircuit {
       match nk
         case CXor() => EvaluateONPBinaryConserved(ca, cb, e, path, fi);
         case CAnd() => EvaluateONPBinaryConserved(ca, cb, e, path, fi);
+        case COr() => EvaluateONPBinaryConserved(ca, cb, e, path, fi);
         case CInv() => EvaluateONPUnaryConserved(ca, cb, e, path, fi);
         case CIden() => EvaluateONPUnaryConserved(ca, cb, e, path, fi);
         case CConst(b) => {}

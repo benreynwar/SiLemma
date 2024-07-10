@@ -740,6 +740,9 @@ module ConnectionEval {
         case CAnd() => {
           EvaluateONPBinaryComposed1(s, prepath, path);
         }
+        case COr() => {
+          EvaluateONPBinaryComposed1(s, prepath, path);
+        }
         case CInv() => {
           EvaluateONPUnaryComposed1(s, prepath, path);
         }
@@ -815,6 +818,10 @@ module ConnectionEval {
           assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_2);
         }
         case CAnd() => {
+          EvaluateONPBinaryComposed2(s, path);
+          assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_2);
+        }
+        case COr() => {
           EvaluateONPBinaryComposed2(s, path);
           assert EvaluateONPInner(new_c, path, fi) == EvaluateONPInner(new_c, path, fi_2);
         }
