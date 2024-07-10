@@ -370,7 +370,7 @@ module Scuf {
     r
   }
 
-  const NullScuf := Scuf({}, NullScufMap, NullUpdateFunction)
+  const NullScuf := Scuf({}, NullScufMap, NullUpdateFunction())
 
   lemma NullScufValid(c: Circuit)
     requires c.Valid()

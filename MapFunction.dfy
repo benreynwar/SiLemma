@@ -746,16 +746,23 @@ module MapFunction {
     reveal Seq.HasNoDuplicates();
     reveal Seq.ToSet();
   }
-
-  const NullUpdateFunction := UpdateFunction(0, 0, 0,
+ 
+  const NullUpdateFunctionConst := UpdateFunction(0, 0, 0,
     (si: SI) requires |si.inputs| == 0 && |si.state| == 0 => SO([], []))
 
   lemma NullUpdateFunctionValid()
-    ensures NullUpdateFunction.Valid()
+    ensures NullUpdateFunctionConst.Valid()
   {
     reveal UpdateFunction.Valid();
     reveal Seq.ToSet();
     reveal Seq.HasNoDuplicates();
+  }
+
+  function NullUpdateFunction(): (uf: UpdateFunction)
+    ensures uf.Valid()
+  {
+    NullUpdateFunctionValid();
+    NullUpdateFunctionConst
   }
 
   datatype DelayFunction = DelayFunction(
