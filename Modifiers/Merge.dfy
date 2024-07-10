@@ -76,6 +76,9 @@ module Modifiers.Merge {
     requires uf1.Valid()
     requires uf2.Valid()
     ensures uf.Valid()
+    ensures uf.input_width == uf1.input_width + uf2.input_width
+    ensures uf.output_width == uf1.output_width + uf2.output_width
+    ensures uf.state_width == uf1.state_width + uf2.state_width
   {
     var input_width := uf1.input_width + uf2.input_width;
     var output_width := uf1.output_width + uf2.output_width;

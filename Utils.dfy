@@ -250,7 +250,7 @@ module Utils {
       r
   }
 
-  lemma SeqsToMapAdd<T(==), U(==)>(a1: seq<T>, b1: seq<U>, a2: seq<T>, b2: seq<U>)
+  lemma SeqsToMapAdd<T, U>(a1: seq<T>, b1: seq<U>, a2: seq<T>, b2: seq<U>)
     requires Seq.HasNoDuplicates(a1)
     requires |a1| == |b1|
     requires Seq.HasNoDuplicates(a2)
@@ -524,6 +524,22 @@ module Utils {
       assert a[p1][q1] != b[p2][q2];
     }
     SeqsNoIntersectionEquiv(uca, ucb);
+  }
+
+  function Range(start: nat, stop: nat): seq<nat>
+    requires stop >= start
+  {
+    seq(stop - start, (i: nat) requires i < (stop - start) => start + i)
+  }
+
+  lemma InRange(start: nat, stop: nat, value: nat)
+    requires value >= start
+    requires value < stop
+    ensures value in Range(start, stop)
+  {
+    var index := value - start;
+    var s := Range(start, stop);
+    assert s[index] == value;
   }
 
 }
