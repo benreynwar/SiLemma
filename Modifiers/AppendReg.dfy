@@ -21,7 +21,7 @@ module ModifiersAppendReg {
     so
   }
 
-  function AppendRegUpdateFunction(uf: UpdateFunction): (new_uf: UpdateFunction)
+  opaque function AppendRegUpdateFunction(uf: UpdateFunction): (new_uf: UpdateFunction)
     requires uf.Valid()
     ensures new_uf.Valid()
   {
@@ -46,9 +46,11 @@ module ModifiersAppendReg {
   {
     reveal UpdateFunction.Valid();
     reveal UpdateFunctionsEquiv();
+    reveal SeriesUpdateFunction();
+    reveal AppendRegUpdateFunction();
   }
 
-  function AppendRegModifier(z: ScufInserter): (new_z: ScufInserter)
+  opaque function AppendRegModifier(z: ScufInserter): (new_z: ScufInserter)
     requires z.Valid()
     ensures new_z.Valid()
   {

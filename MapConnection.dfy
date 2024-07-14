@@ -547,6 +547,7 @@ module MapConnection {
     }
 
     lemma foafob2foInfo(fi: FI)
+      // FIXME: Very slow (49M).  Needs some help.
       requires SomewhatValid()
       requires FIValid(fi, scuf_ab.mp.inputs, scuf_ab.mp.state)
       ensures
@@ -555,6 +556,7 @@ module MapConnection {
         var fo_a := scuf_a.f(fi_a);
         var fo_b := scuf_b.f(fi_b);
         var fo := foafob2fo(fo_a, fo_b);
+
         && (forall np :: np in fo_a.outputs && np in fo.outputs ==> fo.outputs[np] == fo_a.outputs[np])
         && (forall n :: n in fo_a.state && n in fo.state ==> fo.state[n] == fo_a.state[n])
         && (forall np :: np in fo_b.outputs && np in fo.outputs ==> fo.outputs[np] == fo_b.outputs[np])
@@ -565,6 +567,7 @@ module MapConnection {
       var fo_a := scuf_a.f(fi_a);
       var fo_b := scuf_b.f(fi_b);
       var fo := foafob2fo(fo_a, fo_b);
+
       reveal aobo2abo.Valid();
       reveal Seq.ToSet();
       reveal MapMatchesSeqs();

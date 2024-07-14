@@ -60,6 +60,8 @@ module Inserters.And3{
   }
 
   lemma {:vcs_split_on_every_assert} LemmaAnd3Step1UF()
+    // Seems to need 'vcs_split_on_every_assert'.
+    // I suspect this is due to whatever curse MergeUpdateFunctions has.
     ensures UpdateFunctionsEquiv(And3Step1UF(), And3Step1UFx())
   {
     var uf1 := And3Step1UF();
@@ -95,6 +97,7 @@ module Inserters.And3{
   function And3Step2UFx(): (r: UpdateFunction)
   {
     var conn := And3InternalConnection();
+    reveal And3InternalConnection();
     ConnectUpdateFunction(And3Step1UFx(), conn)
   }
 
@@ -104,6 +107,8 @@ module Inserters.And3{
       UpdateFunctionsEquiv(And3Step2UF(), And3Step2UFx())
   {
     LemmaAnd3Step1UF();
+    reveal And3InternalConnection();
+    reveal ConnectUpdateFunction();
     reveal UpdateFunctionsEquiv();
   }
 
@@ -128,6 +133,7 @@ module Inserters.And3{
       UpdateFunctionsEquiv(And3Step3UF(), And3Step3UFx())
   {
     LemmaAnd3Step2UF();
+    reveal NewOutputsUpdateFunction();
     reveal UpdateFunctionsEquiv();
   }
 
@@ -136,6 +142,7 @@ module Inserters.And3{
       reveal MergeUpdateFunctions();
       var merged_uf := MergeUpdateFunctions(AndUF(), AndUF());
       var conn := And3InternalConnection();
+      reveal And3InternalConnection();
       var connected_uf := ConnectUpdateFunction(merged_uf, conn);
       var new_outputs := And3NewOutputs();
       var new_outputs_uf := NewOutputsUpdateFunction(connected_uf, new_outputs);
@@ -145,7 +152,7 @@ module Inserters.And3{
       reveal UpdateFunctionsEquiv();
   }
 
-  function And3InternalConnection(): (r: InternalConnection)
+  opaque function And3InternalConnection(): (r: InternalConnection)
     ensures r.Valid()
     ensures r.connections.Keys == {3}
     ensures r.connections.Values == {0}
@@ -158,7 +165,9 @@ module Inserters.And3{
     var nio2i := [(false, 0), (false, 1), (false, 2), (true, 0)];
     var conn := InternalConnection(ni_width, i_width, o_width, connections, i2ni, nio2i);
     assert conn.Valid() by {
-      reveal InternalConnection.Valid();
+      reveal InternalConnection.ConnectionsValid();
+      reveal InternalConnection.ToNIMapValid();
+      reveal InternalConnection.ToIMapValid();
       reveal Seq.HasNoDuplicates();
     }
     conn
@@ -177,8 +186,9 @@ module Inserters.And3{
       var z_and1 := AndInserter();
       var z_and2 := AndInserter();
       var z := MergeModifier(z_and1, z_and2);
-      var (new_c, s) := z.fn(c);
-      var conn := And3InternalConnection();
+      && z.fn.requires(c)
+      && var (new_c, s) := z.fn(c);
+      && var conn := And3InternalConnection();
       && new_c.Valid()
       && s.Valid(new_c)
       && ScufConnectionConsistent(new_c, s, conn)
@@ -190,9 +200,11 @@ module Inserters.And3{
     assert z_and1.uf.input_width == 2;
     var z := MergeModifier(z_and1, z_and2);
     MergeModifierPathConstraints(z_and1, z_and2, c);
+    z.ValidForCircuit(c);
     var (new_c, s) := z.fn(c);
 
     var conn := And3InternalConnection();
+    reveal And3InternalConnection();
     assert conn.connections == map[3 := 0];
     assert conn.connections.Keys == {3};
     assert conn.connections.Values == {0};
@@ -206,7 +218,7 @@ module Inserters.And3{
       assert SimpleInsertion(c, new_c, s);
     }
   
-    reveal InternalConnection.Valid();
+    reveal InternalConnection.ConnectionsValid();
     reveal ONPsValid();
     s.SomewhatValidToRelaxInputs(new_c);
     ScufFOutputsAreValid(new_c, s);
@@ -219,7 +231,7 @@ module Inserters.And3{
     assert conn_inputs == {s.mp.inputs[3]};
 
     assert ScufConnectionConsistent(new_c, s, conn) by {
-      reveal InternalConnection.Valid();
+      reveal InternalConnection.ConnectionsValid();
       reveal ONPsValid();
       s.SomewhatValidToRelaxInputs(new_c);
       ScufFOutputsAreValid(new_c, s);
@@ -253,20 +265,23 @@ module Inserters.And3{
     }
   }
 
-  opaque function And3Inserter(): (z: ScufInserter)
-    ensures z.Valid()
+  lemma And3InserterHelper()
+    ensures
+      var z_and1 := AndInserter();
+      var z_and2 := AndInserter();
+      var z_par_ands := MergeModifier(z_and1, z_and2);
+      var conn := And3InternalConnection();
+      InserterConnectionConsistent(z_par_ands, conn)
   {
-    reveal Seq.ToSet();
-
     var z_and1 := AndInserter();
     var z_and2 := AndInserter();
     assert z_and1.uf.input_width == 2;
 
-    reveal MergeUpdateFunctions();
     var z_par_ands := MergeModifier(z_and1, z_and2);
     assert z_par_ands.uf.input_width == 4;
 
     var conn := And3InternalConnection();
+    reveal And3InternalConnection();
 
     assert InserterConnectionConsistent(z_par_ands, conn) by {
       assert UFConnectionConsistent(z_par_ands.uf, conn) by {
@@ -275,28 +290,52 @@ module Inserters.And3{
       }
       forall c: Circuit | c.Valid()
         ensures
+          reveal ScufInserter.Valid();
           var (new_c, s) := z_par_ands.fn(c);
           && new_c.Valid() && s.Valid(new_c)
           && ScufConnectionConsistent(new_c, s, conn)
       {
+        reveal ScufInserter.Valid();
         var (new_c, s) := z_par_ands.fn(c);
         And3ScufConnectionConsistent(c);
         assert ScufConnectionConsistent(new_c, s, conn);
       }
       reveal InserterConnectionConsistent();
     }
+  }
+
+  opaque function And3Inserter(): (z: ScufInserter)
+    ensures z.Valid()
+  {
+
+    var z_and1 := AndInserter();
+    var z_and2 := AndInserter();
+    assert z_and1.uf.input_width == 2;
+
+    var z_par_ands := MergeModifier(z_and1, z_and2);
+    assert z_par_ands.uf.input_width == 4;
+    assert z_par_ands.uf.output_width == 2;
+
+    var conn := And3InternalConnection();
+
+    assert InserterConnectionConsistent(z_par_ands, conn) by {
+      And3InserterHelper();
+    }
 
     var z_connected := ConnectModifier(z_par_ands, conn);
-    assert z_connected.Valid();
-
+    assert z_connected.uf.output_width == 2;
 
     var new_outputs := And3NewOutputs();
+    assert forall i: nat :: i < |new_outputs| ==> new_outputs[i] < z_connected.uf.output_width;
     var z_remove_outputs := NewOutputsModifier(z_connected, new_outputs);
 
     var merged_uf := MergeUpdateFunctions(AndUF(), AndUF());
     var connected_uf := ConnectUpdateFunction(merged_uf, conn);
     var final_uf := NewOutputsUpdateFunction(connected_uf, new_outputs);
-    assert connected_uf == z_connected.uf;
+    assert connected_uf == z_connected.uf by {
+      assert z_and1.uf == AndUF();
+      assert merged_uf == z_par_ands.uf;
+    }
     assert final_uf == z_remove_outputs.uf;
 
     assert UpdateFunctionsEquiv(And3UF(), final_uf) by {

@@ -36,13 +36,14 @@ module Modifiers.SwitchUF {
     (new_c, new_s)
   }
 
-  function SwitchUFModifier(z: ScufInserter, uf: UpdateFunction): (r: ScufInserter)
+  opaque function SwitchUFModifier(z: ScufInserter, uf: UpdateFunction): (r: ScufInserter)
     requires z.Valid()
     requires uf.Valid()
     requires
       reveal ScufInserter.Valid();
       UpdateFunctionsEquiv(uf, z.uf)
     ensures r.Valid()
+    ensures r.uf == uf
   {
     reveal ScufInserter.Valid();
     var new_z := ScufInserter(

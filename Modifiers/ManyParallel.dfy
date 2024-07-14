@@ -36,7 +36,7 @@ module Modifiers_ManyParallel {
     assert so == uf.sf(si);
   }
 
-  function {:vcs_split_on_every_assert} ManyParallelSF(uf: UpdateFunction, n: nat, si: SI): (so: SO)
+  function ManyParallelSF(uf: UpdateFunction, n: nat, si: SI): (so: SO)
     requires |si.inputs| == uf.input_width * n
     requires |si.state| == uf.state_width * n
     requires uf.Valid()
@@ -84,10 +84,6 @@ module Modifiers_ManyParallel {
         => ManyParallelSF(uf, n, si)
     );
     assert new_uf.Valid() by {
-      forall si: SI | new_uf.SIVal(si) {
-        assert new_uf.sf.requires(si);
-        assert new_uf.SOVal(new_uf.sf(si));
-      }
       reveal UpdateFunction.Valid();
     }
     new_uf

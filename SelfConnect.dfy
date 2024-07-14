@@ -22,27 +22,58 @@ module SelfConnect {
     i2ni: seq<nat>, // A map that can be used to generate new_inputs from inputs.
     nio2i: seq<(bool, nat)> // A map to generate inputs from new_inputs and outputs.
   ) {
-    ghost opaque predicate Valid() {
+
+    ghost predicate BasicValid()
+    {
       && (ni_width <= i_width)
       && (i_width <= ni_width + o_width)
       && (|i2ni| == ni_width)
       && (|nio2i| == i_width)
       && Seq.HasNoDuplicates(i2ni)
       && Seq.HasNoDuplicates(nio2i)
-      && (forall index: nat :: index in connections.Values ==> index < o_width)
-      && (forall index: nat :: index in connections.Keys ==> index < i_width)
-      && (forall ni_index: nat :: ni_index < ni_width ==> (
+    }
+
+    opaque predicate ToNIMapValid()
+      requires BasicValid()
+    {
+      forall ni_index: nat :: ni_index < ni_width ==> (
+        // For all items in the i2ni.
+        // When we look at where that item in the new inputs came from we get an address in the
+        // new inputs.
+        // When we look up that address in the nio2i we should see that it came from the new inputs.
         var i_index: nat := i2ni[ni_index];
         && (i_index < i_width)
         && var (from_output, index) := nio2i[i_index];
         && (!from_output)
         && (index == ni_index)
-      ))
-      && (forall i_index: nat :: i_index < i_width ==> (
+      )
+    }
+
+    opaque predicate ToIMapValid()
+      requires BasicValid()
+    {
+      forall i_index: nat :: i_index < i_width ==> (
+        // For all items in the old inputs.
+        // When we see where the input came from it could come from the new inputs or from the outputs.
+        // If it comes from the new inputs then we should be able to check that i2ni is consistent.
+        // If it comes from the outputs then we just check that consistent with `connections`.
         var (from_output, index) := nio2i[i_index];
         && ((!from_output) ==> index < ni_width && i2ni[index] == i_index && (i_index !in connections))
         && ((from_output) ==> index < o_width && (i_index in connections) && (index == connections[i_index]))
-      ))
+      )
+    }
+
+    opaque predicate ConnectionsValid()
+    {
+      && (forall index: nat :: index in connections.Values ==> index < o_width)
+      && (forall index: nat :: index in connections.Keys ==> index < i_width)
+    }
+
+    ghost predicate Valid() {
+      && BasicValid()
+      && ConnectionsValid()
+      && ToNIMapValid()
+      && ToIMapValid()
     }
     function NIO2I<T>(bni: seq<T>, bo: seq<T>): (bi: seq<T>)
       requires Valid()
@@ -50,7 +81,7 @@ module SelfConnect {
       requires |bo| == o_width
       ensures |bi| == i_width
     {
-      reveal Valid();
+      reveal ToIMapValid();
       seq(i_width, (i_index: int) requires 0 <= i_index < i_width =>
         var (from_output, index) := nio2i[i_index];
         if !from_output then
@@ -66,14 +97,14 @@ module SelfConnect {
       requires ni_index <= ni_width
       ensures |bni| == ni_index
       ensures forall index: nat :: index < ni_index ==>
-        reveal Valid();
+        reveal ToNIMapValid();
         bni[index] == bi[i2ni[index]]
       decreases ni_index
     {
       if ni_index == 0 then
         []
       else
-        reveal Valid();
+        reveal ToNIMapValid();
         var i_index := i2ni[ni_index-1];
         I2NIInternal(bi, ni_index-1) + [bi[i_index]]
     }
@@ -91,12 +122,11 @@ module SelfConnect {
       requires Valid()
       requires |bi| == i_width
       ensures 
-        reveal Valid();
+        reveal ToNIMapValid();
         var bni := I2NI(bi);
         forall ni_index: nat :: ni_index < ni_width ==>
           bni[ni_index] == bi[i2ni[ni_index]]
     {
-      reveal Valid();
       reveal I2NIInternal();
     }
 
@@ -105,7 +135,7 @@ module SelfConnect {
       requires Valid()
       requires |bi| == i_width
     {
-      reveal Valid();
+      reveal ConnectionsValid();
       (set index | index in connections :: bi[index])
     }
 
@@ -115,11 +145,12 @@ module SelfConnect {
       requires Seq.HasNoDuplicates(bi)
       ensures
         var bni := I2NI(bi);
-        reveal Valid();
         && Seq.HasNoDuplicates(bni)
         && Seq.ToSet(bni) == Seq.ToSet(bi) - MapConnectedInputs(bi)
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
+      reveal ConnectionsValid();
       reveal Seq.ToSet();
       reveal Seq.HasNoDuplicates();
       var bni := I2NI(bi);
@@ -143,7 +174,8 @@ module SelfConnect {
       requires |bo| == o_width
       ensures I2NI(NIO2I(bni, bo)) == bni
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
     }
 
     lemma NI2NIO2I<T>(bi: seq<T>, bo: seq<T>)
@@ -151,13 +183,14 @@ module SelfConnect {
       requires |bi| == i_width
       requires |bo| == o_width
       requires forall i_index: nat :: i_index < i_width ==> (
-        reveal Valid();
+        reveal ToIMapValid();
         var (from_output, index) := nio2i[i_index];
         from_output ==> bi[i_index] == bo[index]
       )
       ensures NIO2I(I2NI(bi), bo) == bi
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
       I2NICorrect(bi);
       var bni := I2NI(bi);
       assert forall ni_index: nat :: ni_index < ni_width ==>
@@ -182,7 +215,9 @@ module SelfConnect {
       requires MPConnectionConsistent(mp, this)
       ensures r <= Seq.ToSet(mp.inputs)
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
+      reveal ConnectionsValid();
       reveal Seq.ToSet();
       (set i_index | i_index in connections :: mp.inputs[i_index])
     }
@@ -192,7 +227,9 @@ module SelfConnect {
       requires MPConnectionConsistent(mp, this)
       ensures r <= Seq.ToSet(mp.outputs)
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
+      reveal ConnectionsValid();
       reveal Seq.ToSet();
       (set o_index | o_index in connections.Values :: mp.outputs[o_index])
     }
@@ -239,7 +276,9 @@ module SelfConnect {
       ensures r.Keys == GetConnectedInputs(mp)
       ensures r.Values == GetConnectedOutputs(mp)
     {
-      reveal Valid();
+      reveal ToNIMapValid();
+      reveal ToIMapValid();
+      reveal ConnectionsValid();
       assert |mp.inputs| == i_width;
       assert (forall index: nat :: index in connections.Keys ==> index < i_width);
       assert Seq.HasNoDuplicates(mp.inputs);
@@ -422,30 +461,37 @@ module SelfConnect {
       }
 
       assert inp_index < |nio2i| by {
-        reveal Valid();
       }
 
       var conn_inputs := GetConnectedInputs(mp);
       assert inp_index in connections by {
         assert inp in conn_inputs;
-        reveal Valid();
+        reveal ToNIMapValid();
+        reveal ToIMapValid();
+        reveal ConnectionsValid();
         reveal Seq.ToSet();
         reveal Seq.HasNoDuplicates();
         assert conn_inputs == (set i | i in connections :: mp.inputs[i]);
       }
       var (from_output, onp_index) := nio2i[inp_index];
       assert from_output by {
-        reveal Valid();
+        reveal ToNIMapValid();
+        reveal ToIMapValid();
+        reveal ConnectionsValid();
         assert ((!from_output) ==> onp_index < ni_width && i2ni[onp_index] == inp_index && (inp_index !in connections));
         assert ((from_output) ==> onp_index < o_width && (inp_index in connections) && (onp_index == connections[inp_index]));
       }
       var npconnections := GetConnection(mp);
       var onp := npconnections[inp];
       assert onp_index < |mp.outputs| by {
-        reveal Valid();
+        reveal ToNIMapValid();
+        reveal ToIMapValid();
+        reveal ConnectionsValid();
       }
       assert mp.outputs[onp_index] == onp by {
-        reveal Valid();
+        reveal ToNIMapValid();
+        reveal ToIMapValid();
+        reveal ConnectionsValid();
         reveal Seq.HasNoDuplicates();
       }
       var fo_first_pass := FOFirstPass(mp, uf, fi);
@@ -538,7 +584,7 @@ module SelfConnect {
         assert mp.inputs[i_index] == x;
         assert new_mp.inputs == I2NI(mp.inputs);
         assert |i2ni| == ni_width && i2ni[ni_index] < i_width by {
-          reveal Valid();
+          reveal ToNIMapValid();
         }
         assert new_mp.inputs[ni_index] == mp.inputs[i2ni[ni_index]] by {
           I2NICorrect(mp.inputs);
@@ -664,7 +710,7 @@ module SelfConnect {
     requires s.Valid(c) || s.ValidRelaxInputs(c)
     requires conn.Valid()
   {
-    reveal InternalConnection.Valid();
+    reveal InternalConnection.ConnectionsValid();
     reveal ONPsValid();
     s.SomewhatValidToRelaxInputs(c);
     ScufFOutputsAreValid(c, s);
@@ -713,11 +759,14 @@ module SelfConnect {
     )
   }
 
-  function ConnectUpdateFunction(uf: UpdateFunction, conn: InternalConnection): (new_uf: UpdateFunction)
+  opaque function ConnectUpdateFunction(uf: UpdateFunction, conn: InternalConnection): (new_uf: UpdateFunction)
     requires uf.Valid()
     requires conn.Valid()
     requires UFConnectionConsistent(uf, conn)
     ensures new_uf.Valid()
+    ensures new_uf.input_width == conn.ni_width
+    ensures new_uf.output_width == uf.output_width
+    ensures new_uf.state_width == uf.state_width
   {
     reveal UpdateFunction.Valid();
     UpdateFunction(
@@ -756,7 +805,9 @@ module SelfConnect {
     assert conn.FOFirstPass(s.mp, s.uf, fi) == fo_first_pass;
     var si_second_pass := conn.SNI2SIFromOutputs(sni, so_first_pass.outputs);
     var so_second_pass := conn.SNI2SOSecondPass(s.uf, sni);//s.uf.sf(si_second_pass);
-    assert new_s.uf.sf(sni) == so_second_pass;
+    assert new_s.uf.sf(sni) == so_second_pass by {
+      reveal ConnectUpdateFunction();
+    }
     var fo := new_s.mp.so2fo(so_second_pass);
     assert conn.FOSecondPass(s.mp, s.uf, fi) == fo;
 

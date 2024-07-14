@@ -38,7 +38,9 @@ module ModifiersSeries {
       if i < input_width_1 then (false, i) else (true, i - input_width_1));
     var conn := InternalConnection(ni_width, i_width, o_width, connections, i2ni, nio2i);
     assert conn.Valid() by {
-      reveal InternalConnection.Valid();
+      reveal InternalConnection.ConnectionsValid();
+      reveal InternalConnection.ToNIMapValid();
+      reveal InternalConnection.ToIMapValid();
       reveal Seq.HasNoDuplicates();
       assert (ni_width <= i_width);
       assert (i_width <= ni_width + o_width);
@@ -114,6 +116,9 @@ module ModifiersSeries {
       assert index in connection_keys;
       assert np in conn.GetConnectedInputs(s.mp);
     }
+    reveal InternalConnection.ToNIMapValid();
+    reveal InternalConnection.ToIMapValid();
+    reveal InternalConnection.ConnectionsValid();
   }
 
   function SeriesSF(uf1: UpdateFunction, uf2: UpdateFunction, si: SI): (so: SO)
@@ -218,7 +223,10 @@ module ModifiersSeries {
         reveal MergeUpdateFunctions();
       }
       assert so_merged == step2m_uf.sf(si);
-      assert conn.SNI2SOSecondPass(uf_merged, si) == step2_uf.sf(si);
+      assert conn.SNI2SOSecondPass(uf_merged, si) == step2_uf.sf(si) by {
+        reveal ConnectUpdateFunction();
+      }
+
       // For the first pass we feed all zeros into uf2.
       var fake_input := seq(uf2.input_width, (index: nat) requires index < uf2.input_width => false);
       var si2_fake := SI(fake_input, si2.state);
@@ -258,7 +266,7 @@ module ModifiersSeries {
     step3_uf
   }
 
-  function SeriesUpdateFunction(uf1: UpdateFunction, uf2: UpdateFunction): (new_uf: UpdateFunction)
+  opaque function SeriesUpdateFunction(uf1: UpdateFunction, uf2: UpdateFunction): (new_uf: UpdateFunction)
     requires uf1.Valid()
     requires uf2.Valid()
     requires uf2.input_width == uf1.output_width
@@ -281,7 +289,9 @@ module ModifiersSeries {
     ensures UpdateFunctionsEquiv(SeriesUpdateFunction(uf1, uf2), SeriesStep3UpdateFunction(uf1, uf2))
   {
     SeriesStep2UpdateFunctionEquiv(uf1, uf2);
+    reveal SeriesUpdateFunction();
     reveal UpdateFunctionsEquiv();
+    reveal NewOutputsUpdateFunction();
   }
 
   function SeriesNewOutputs(output_width_1: nat, output_width_2: nat): (new_outputs: seq<nat>)
@@ -292,11 +302,15 @@ module ModifiersSeries {
     seq(output_width_2, (i: nat) requires i < output_width_2 => output_width_1 + i)
   }
 
-  function SeriesModifier(z1: ScufInserter, z2: ScufInserter): (new_z: ScufInserter)
+  opaque function SeriesModifier(z1: ScufInserter, z2: ScufInserter): (new_z: ScufInserter)
     requires z1.Valid()
     requires z2.Valid()
     requires z1.uf.output_width == z2.uf.input_width
     ensures new_z.Valid()
+    ensures
+      && z1.uf.Valid()
+      && z2.uf.Valid()
+      && (new_z.uf == SeriesUpdateFunction(z1.uf, z2.uf))
   {
 
     reveal UpdateFunctionsEquiv();

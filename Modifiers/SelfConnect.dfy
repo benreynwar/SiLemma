@@ -46,11 +46,16 @@ module Modifiers.Connect {
     (new_c, new_s)
   }
 
-  function ConnectModifier(z: ScufInserter, conn: InternalConnection): (new_z: ScufInserter)
+  opaque function ConnectModifier(z: ScufInserter, conn: InternalConnection): (new_z: ScufInserter)
     requires z.Valid()
     requires conn.Valid()
     requires InserterConnectionConsistent(z, conn)
     ensures new_z.Valid()
+    ensures
+      && z.uf.Valid()
+      && new_z.uf.Valid()
+      && UFConnectionConsistent(z.uf, conn)
+      && new_z.uf == ConnectUpdateFunction(z.uf, conn)
   {
     reveal ScufInserter.Valid();
     reveal InserterConnectionConsistent();

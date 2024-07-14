@@ -73,6 +73,8 @@ module Modifiers.Merge {
   }
 
   opaque function MergeUpdateFunctions(uf1: UpdateFunction, uf2: UpdateFunction): (uf: UpdateFunction)
+    // This function seems to often cause timeout's when revealed.
+    // I'm not sure wehat it's doing that makes dafny unhappy.
     requires uf1.Valid()
     requires uf2.Valid()
     ensures uf.Valid()
@@ -89,10 +91,6 @@ module Modifiers.Merge {
       (si: SI) requires |si.inputs| == input_width && |si.state| == state_width => MergeSF(uf1, uf2, si)
     )
   }
-
-  //lemma MergeUpdateFunctionProperties(uf1: UpdateFunction, uf2: UpdateFunction)
-  //      EvalOk(MFLookup(s1, fi1, np));
-  //      EvalOk(MFLookup(s, fi, np));
 
   lemma MergeF1Properties(c: Circuit, s1: Scuf, s2: Scuf, np: NP, fi: FI)
     requires MergeRequirements(c, s1, s2)
@@ -610,34 +608,40 @@ module Modifiers.Merge {
     requires z1.Valid()
     requires z2.Valid()
     ensures
-      reveal MergeInserter();
-      reveal MergeUpdateFunctions();
       var z := MergeModifier(z1, z2);
-      var (new_c, s) := z.fn(c);
+      && z.fn.requires(c)
+      && var (new_c, s) := z.fn(c);
       && new_c.Valid()
+      && (|s.mp.outputs| == z1.uf.output_width + z2.uf.output_width)
+      && (|s.mp.inputs| == z1.uf.input_width + z2.uf.input_width)
       && !PathExistsBetweenNPSets(new_c, Seq.ToSet(s.mp.outputs[..z1.uf.output_width]),
             Seq.ToSet(s.mp.inputs[z1.uf.input_width..]))
       && !PathExistsBetweenNPSets(new_c, Seq.ToSet(s.mp.outputs[z1.uf.output_width..]),
             Seq.ToSet(s.mp.inputs[..z1.uf.input_width]))
   {
-    reveal MergeUpdateFunctions();
-    reveal ScufInserter.Valid();
-    reveal DualInsertion();
-    reveal Seq.ToSet();
-    reveal MergeInserter();
     var (new_c, s1, s2) := InsertTwo(c, z1, z2);
     assert s1.uf == z1.uf;
     assert s2.uf == z2.uf;
+    assert MergeRequirements(new_c, s1, s2) by {
+      reveal DualInsertion();
+      reveal Seq.ToSet();
+    }
     var s := MergeScufs(new_c, s1, s2);
     var z := MergeModifier(z1, z2);
-    assert (new_c, s) == z.fn(c);
+    z.ValidForCircuit(c);
+    assert (new_c, s) == z.fn(c) by {
+      reveal MergeModifier();
+      reveal MergeInserter();
+    }
+    assert new_c.Valid();
     FOutputsInSc(new_c, s1);
     FOutputsInSc(new_c, s2);
     FInputsInSc(new_c, s1);
     FInputsInSc(new_c, s2);
-    reveal NPsInSc();
-    reveal PathExists();
+    reveal Seq.ToSet();
     reveal PathExistsBetweenNPSets();
+    reveal PathExists();
+    reveal NPsInSc();
     assert !PathExistsBetweenNPSets(new_c, Seq.ToSet(s1.mp.outputs), Seq.ToSet(s2.mp.inputs)) by {
       forall np1: NP, np2: NP | np1 in s1.mp.outputs && np2 in s2.mp.inputs
         ensures !PathExists(new_c, np1, np2)
@@ -654,10 +658,14 @@ module Modifiers.Merge {
     }
   }
 
-  function MergeModifier(z1: ScufInserter, z2: ScufInserter): (z: ScufInserter)
+  opaque function MergeModifier(z1: ScufInserter, z2: ScufInserter): (z: ScufInserter)
     requires z1.Valid()
     requires z2.Valid()
     ensures z.Valid()
+    ensures
+      && z1.uf.Valid()
+      && z2.uf.Valid()
+      && (z.uf == MergeUpdateFunctions(z1.uf, z2.uf))
   {
     reveal ScufInserter.Valid();
     reveal MergeInserter();

@@ -228,13 +228,13 @@ module SelfConnectEval2 {
       EvaluateONPInner(new_c, [Seq.Last(path)], fi_pass);
       Evaluate(new_c, Seq.Last(path), fi_pass);
       {
-        reveal InternalConnection.Valid();
+        reveal InternalConnection.ConnectionsValid();
         EvaluateSelfConnectOldONP(c, s, conn, Seq.Last(path), fi_pass);
       }
       Evaluate(c, Seq.Last(path), fi_pass);
       {
         assert s.Valid(c);
-        reveal InternalConnection.Valid();
+        reveal InternalConnection.ConnectionsValid();
         reveal Scuf.EvaluatesCorrectly();
       }
       EvalOk(MFLookup(s, fi_pass, Seq.Last(path)));

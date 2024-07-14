@@ -33,11 +33,14 @@ module Modifiers.NewOutputs {
     SO(mapped_so_outputs, so.state)
   }
 
-  function NewOutputsUpdateFunction(uf: UpdateFunction, new_outputs: seq<nat>): (r: UpdateFunction)
+  opaque function NewOutputsUpdateFunction(uf: UpdateFunction, new_outputs: seq<nat>): (r: UpdateFunction)
     requires uf.Valid()
     requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < uf.output_width
     requires Seq.HasNoDuplicates(new_outputs)
     ensures r.Valid()
+    ensures r.input_width == uf.input_width
+    ensures r.state_width == uf.state_width
+    ensures r.output_width == |new_outputs|
   {
     var new_sf := (si: SI) requires uf.SIVal(si) => NewOutputsSF(uf, new_outputs, si);
     reveal UpdateFunction.Valid();
@@ -63,6 +66,7 @@ module Modifiers.NewOutputs {
     var si := s.mp.fi2si(fi);
     var new_si := new_s.mp.fi2si(fi);
     reveal UpdateFunction.Valid();
+    reveal NewOutputsUpdateFunction();
     var so := s.uf.sf(si);
     var new_so := new_s.uf.sf(new_si);
     assert so.state == new_so.state;
@@ -95,6 +99,7 @@ module Modifiers.NewOutputs {
       assert new_s.mp.Valid();
       assert new_s.mp.InSc(new_s.sc);
       assert new_s.uf.Valid();
+      reveal NewOutputsUpdateFunction();
       assert ScufMapUpdateFunctionConsistent(new_s.mp, new_s.uf);
     }
     new_s
@@ -149,6 +154,7 @@ module Modifiers.NewOutputs {
             ScufFOutputsAreValid(c, s);
             assert Evaluate(c, np, fi) == EvalOk(MFLookup(s, fi, np));
             if np in StateINPs(new_s.mp.state) {
+              reveal NewOutputsUpdateFunction();
               assert Evaluate(c, np, fi) == EvalOk(MFLookup(new_s, fi, np));
             } else {
               MFLookupCorrect(c, s, new_outputs, np, fi);
@@ -182,11 +188,14 @@ module Modifiers.NewOutputs {
     (new_c, new_s)
   }
 
-  function NewOutputsModifier(z: ScufInserter, new_outputs: seq<nat>): (r: ScufInserter)
+  opaque function NewOutputsModifier(z: ScufInserter, new_outputs: seq<nat>): (r: ScufInserter)
     requires z.Valid()
     requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < z.uf.output_width
     requires Seq.HasNoDuplicates(new_outputs)
     ensures r.Valid()
+    ensures
+      && z.uf.Valid()
+      && (r.uf == NewOutputsUpdateFunction(z.uf, new_outputs))
   {
     reveal ScufInserter.Valid();
     var new_uf := NewOutputsUpdateFunction(z.uf, new_outputs);

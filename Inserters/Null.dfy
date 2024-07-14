@@ -6,13 +6,6 @@ module Inserters.Null {
   import opened ConservedSubcircuit
   import opened Subcircuit
 
-  //function NullUpdateFunction(): (r: UpdateFunction)
-  //  ensures r.Valid()
-  //{
-  //  reveal UpdateFunction.Valid();
-  //  UpdateFunction(0, 0, 0, (si: SI) requires |si.inputs| == 0 && |si.state| == 0 => SO([], []))
-  //}
-
   function NullScufMap(): (mp: ScufMap)
     ensures mp.Valid()
   {

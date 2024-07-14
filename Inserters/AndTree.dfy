@@ -79,7 +79,8 @@ module Inserters.AndTree{
   }
 
   lemma LemmaAndTreeUpdateFunction(n: nat)
-    ensures UpdateFunctionsEquiv(AndTreeInserterImpl(n).uf, AndTreeUpdateFunction(n))
+    ensures
+      UpdateFunctionsEquiv(AndTreeInserterImpl(n).uf, AndTreeUpdateFunction(n))
     decreases n, 1
   {
     reveal UpdateFunctionsEquiv();
@@ -102,12 +103,15 @@ module Inserters.AndTree{
       }
       var z_and := AndInserter();
       var z := SeriesModifier(z_left_and_right, z_and);
+      reveal SeriesModifier();
+      reveal SeriesUpdateFunction();
       assert UpdateFunctionsEquiv(uf1, uf2);
     }
   }
 
   function AndTreeInserterImpl(n: nat): (z: ScufInserter)
     ensures z.Valid()
+    ensures z.uf.Valid()
     decreases n, 0
   {
     if n == 0 then

@@ -1,4 +1,4 @@
-module Inserters.And{
+module Inserters.Or{
 
   import opened Circ
   import opened ConservedSubcircuit
@@ -6,25 +6,24 @@ module Inserters.And{
   import opened Inserters_Binary
   import opened Modifiers.SwitchUF
 
-  const AndUFConst := UpdateFunction(
+  const OrUFConst := UpdateFunction(
     2, 1, 0,
     (si: SI) requires |si.inputs| == 2 && |si.state| == 0 =>
-      SO([si.inputs[0] && si.inputs[1]], []))
+      SO([si.inputs[0] || si.inputs[1]], []))
 
-  function AndUF(): (r: UpdateFunction)
+  function OrUF(): (r: UpdateFunction)
     ensures r.Valid()
   {
     reveal UpdateFunction.Valid();
-    AndUFConst
+    OrUFConst
   }
 
-  opaque function AndInserter(): (z: ScufInserter)
+  function OrInserter(): (z: ScufInserter)
     ensures z.Valid()
-    ensures z.uf == AndUF()
   {
-    var z_binary := BinaryInserter(CAnd);
+    var z_binary := BinaryInserter(COr);
     reveal UpdateFunctionsEquiv();
-    var z := SwitchUFModifier(z_binary, AndUF());
+    var z := SwitchUFModifier(z_binary, OrUF());
     z
   }
 
