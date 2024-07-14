@@ -71,6 +71,7 @@ module Inserters.And3{
     assert uf2.output_width == 2 by {reveal MergeUpdateFunctions();}
     assert uf2.state_width == 0 by {reveal MergeUpdateFunctions();}
 
+    reveal AndUF();
     forall si: SI | uf1.SIVal(si)
       ensures uf2.sf.requires(si)
       ensures uf1.sf(si) == uf2.sf(si)
@@ -175,7 +176,9 @@ module Inserters.And3{
 
   function And3NewOutputs(): (r: seq<nat>)
     ensures Seq.HasNoDuplicates(r)
+    ensures NewOutputsValid(2, r)
   {
+    reveal NewOutputsValid();
     reveal Seq.HasNoDuplicates();
     [1]
   }

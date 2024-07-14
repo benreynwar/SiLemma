@@ -92,6 +92,19 @@ module Modifiers.Merge {
     )
   }
 
+  lemma MergeUpdateFunctionBehav(uf1: UpdateFunction, uf2: UpdateFunction, si: SI)
+    requires uf1.Valid()
+    requires uf2.Valid()
+    requires |si.inputs| == uf1.input_width + uf2.input_width
+    requires |si.state| == uf1.state_width + uf2.state_width
+    ensures
+      var new_uf := MergeUpdateFunctions(uf1, uf2);
+      && new_uf.sf.requires(si)
+      && (new_uf.sf(si) == MergeSF(uf1, uf2, si))
+  {
+    reveal MergeUpdateFunctions();
+  }
+
   lemma MergeF1Properties(c: Circuit, s1: Scuf, s2: Scuf, np: NP, fi: FI)
     requires MergeRequirements(c, s1, s2)
     requires np in s1.mp.outputs || np in StateINPs(s1.mp.state)

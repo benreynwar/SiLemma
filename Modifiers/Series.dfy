@@ -1,4 +1,4 @@
-module ModifiersSeries {
+module Modifiers_Series {
 
   import opened Circ
   import opened Scuf
@@ -262,6 +262,7 @@ module ModifiersSeries {
   {
     var step2_uf := SeriesStep2UpdateFunction(uf1, uf2);
     var new_outputs := SeriesNewOutputs(uf1.output_width, uf2.output_width);
+    reveal NewOutputsValid();
     var step3_uf := NewOutputsUpdateFunction(step2_uf, new_outputs);
     step3_uf
   }
@@ -271,6 +272,9 @@ module ModifiersSeries {
     requires uf2.Valid()
     requires uf2.input_width == uf1.output_width
     ensures new_uf.Valid()
+    ensures new_uf.input_width == uf1.input_width
+    ensures new_uf.state_width == uf1.state_width + uf2.state_width
+    ensures new_uf.output_width == uf2.output_width
   {
     reveal UpdateFunction.Valid();
     UpdateFunction(
@@ -364,6 +368,7 @@ module ModifiersSeries {
     assert z_connected.uf.output_width == z1.uf.output_width + z2.uf.output_width by {
       reveal MergeUpdateFunctions();
     }
+    reveal NewOutputsValid();
     var z_new_outputs := NewOutputsModifier(z_connected, new_outputs);
     var new_uf := SeriesUpdateFunction(z1.uf, z2.uf);
     SeriesUpdateFunctionEquiv(z1.uf, z2.uf);

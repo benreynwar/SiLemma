@@ -149,8 +149,9 @@ module Inserters.Const{
     fn
   }
 
-  function ConstInserter(value: bool): (r: ScufInserter)
+  opaque function ConstInserter(value: bool): (r: ScufInserter)
     ensures r.Valid()
+    ensures r.uf == ConstUF(value)
   {
     reveal UpdateFunction.Valid();
     reveal ScufInserter.Valid();

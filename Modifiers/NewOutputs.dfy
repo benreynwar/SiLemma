@@ -10,10 +10,10 @@ module Modifiers.NewOutputs {
 
   function NewOutputsMap(mp: ScufMap, new_outputs: seq<nat>): (r: ScufMap)
     requires mp.Valid()
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < |mp.outputs|
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(|mp.outputs|, new_outputs)
     ensures r.Valid()
   {
+    reveal NewOutputsValid();
     var mapped_outputs := seq(|new_outputs|, (i: nat) requires i < |new_outputs| =>
       mp.outputs[new_outputs[i]]);
     reveal Seq.HasNoDuplicates();
@@ -23,10 +23,10 @@ module Modifiers.NewOutputs {
 
   function NewOutputsSF(uf: UpdateFunction, new_outputs: seq<nat>, si: SI): (r: SO)
     requires uf.Valid()
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < uf.output_width
+    requires NewOutputsValid(uf.output_width, new_outputs)
     requires uf.SIVal(si)
-    requires Seq.HasNoDuplicates(new_outputs)
   {
+    reveal NewOutputsValid();
     reveal UpdateFunction.Valid();
     var so := uf.sf(si);
     var mapped_so_outputs := seq(|new_outputs|, (i: nat) requires i < |new_outputs| => so.outputs[new_outputs[i]]);
@@ -35,8 +35,7 @@ module Modifiers.NewOutputs {
 
   opaque function NewOutputsUpdateFunction(uf: UpdateFunction, new_outputs: seq<nat>): (r: UpdateFunction)
     requires uf.Valid()
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(uf.output_width, new_outputs)
     ensures r.Valid()
     ensures r.input_width == uf.input_width
     ensures r.state_width == uf.state_width
@@ -51,8 +50,7 @@ module Modifiers.NewOutputs {
     requires c.Valid()
     requires s.Valid(c)
     requires IsIsland(c, s.sc)
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < s.uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(s.uf.output_width, new_outputs)
     requires
       FIValid(fi, s.mp.inputs, s.mp.state)
     requires
@@ -60,8 +58,10 @@ module Modifiers.NewOutputs {
       np in new_mp.outputs
     ensures
       var new_s := NewOutputsScufImpl(c, s, new_outputs);
-      MFLookupOutput(s, fi, np) == MFLookupOutput(new_s, fi, np)
+      reveal NewOutputsValid();
+      && MFLookupOutput(s, fi, np) == MFLookupOutput(new_s, fi, np)
   {
+    reveal NewOutputsValid();
     var new_s := NewOutputsScufImpl(c, s, new_outputs);
     var si := s.mp.fi2si(fi);
     var new_si := new_s.mp.fi2si(fi);
@@ -86,10 +86,10 @@ module Modifiers.NewOutputs {
   function NewOutputsScufImpl(c: Circuit, s: Scuf, new_outputs: seq<nat>): (r: Scuf)
     requires c.Valid()
     requires s.Valid(c)
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < s.uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(s.uf.output_width, new_outputs)
     ensures r.MapValid()
   {
+    reveal NewOutputsValid();
     var new_mp := NewOutputsMap(s.mp, new_outputs);
     var new_uf := NewOutputsUpdateFunction(s.uf, new_outputs);
     var new_s := Scuf(s.sc, new_mp, new_uf);
@@ -109,10 +109,10 @@ module Modifiers.NewOutputs {
     requires c.Valid()
     requires s.Valid(c)
     requires IsIsland(c, s.sc)
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < s.uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(s.uf.output_width, new_outputs)
     ensures r.Valid(c)
   {
+    reveal NewOutputsValid();
     var new_s := NewOutputsScufImpl(c, s, new_outputs);
     assert new_s.Valid(c) by {
       assert ScValid(c, new_s.sc);
@@ -172,8 +172,7 @@ module Modifiers.NewOutputs {
   function NewOutputsInserter(c: Circuit, z: ScufInserter, new_outputs: seq<nat>): (r: (Circuit, Scuf))
     requires c.Valid()
     requires z.Valid()
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < z.uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(z.uf.output_width, new_outputs)
     ensures
       var (new_c, new_s) := r;
       && new_c.Valid()
@@ -188,10 +187,16 @@ module Modifiers.NewOutputs {
     (new_c, new_s)
   }
 
+  ghost opaque predicate NewOutputsValid(output_width: nat, new_outputs: seq<nat>)
+  {
+    && (forall i: nat :: i < |new_outputs| ==> new_outputs[i] < output_width)
+    && Seq.HasNoDuplicates(new_outputs)
+  }
+
+
   opaque function NewOutputsModifier(z: ScufInserter, new_outputs: seq<nat>): (r: ScufInserter)
     requires z.Valid()
-    requires forall i: nat :: i < |new_outputs| ==> new_outputs[i] < z.uf.output_width
-    requires Seq.HasNoDuplicates(new_outputs)
+    requires NewOutputsValid(z.uf.output_width, new_outputs)
     ensures r.Valid()
     ensures
       && z.uf.Valid()

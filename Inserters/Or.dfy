@@ -11,18 +11,23 @@ module Inserters.Or{
     (si: SI) requires |si.inputs| == 2 && |si.state| == 0 =>
       SO([si.inputs[0] || si.inputs[1]], []))
 
-  function OrUF(): (r: UpdateFunction)
+  opaque function OrUF(): (r: UpdateFunction)
     ensures r.Valid()
+    ensures r.input_width == 2
+    ensures r.output_width == 1
+    ensures r.state_width == 0
   {
     reveal UpdateFunction.Valid();
     OrUFConst
   }
 
-  function OrInserter(): (z: ScufInserter)
+  opaque function OrInserter(): (z: ScufInserter)
     ensures z.Valid()
+    ensures z.uf == OrUF()
   {
     var z_binary := BinaryInserter(COr);
     reveal UpdateFunctionsEquiv();
+    reveal OrUF();
     var z := SwitchUFModifier(z_binary, OrUF());
     z
   }

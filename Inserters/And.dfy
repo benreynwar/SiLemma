@@ -11,8 +11,11 @@ module Inserters.And{
     (si: SI) requires |si.inputs| == 2 && |si.state| == 0 =>
       SO([si.inputs[0] && si.inputs[1]], []))
 
-  function AndUF(): (r: UpdateFunction)
+  opaque function AndUF(): (r: UpdateFunction)
     ensures r.Valid()
+    ensures r.input_width == 2
+    ensures r.output_width == 1
+    ensures r.state_width == 0
   {
     reveal UpdateFunction.Valid();
     AndUFConst
@@ -24,6 +27,7 @@ module Inserters.And{
   {
     var z_binary := BinaryInserter(CAnd);
     reveal UpdateFunctionsEquiv();
+    reveal AndUF();
     var z := SwitchUFModifier(z_binary, AndUF());
     z
   }

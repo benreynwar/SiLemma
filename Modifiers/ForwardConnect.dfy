@@ -1,4 +1,4 @@
-module Inserters.ForwardConnect{
+module Modifiers_ForwardConnect{
 
   import opened Std.Wrappers
 
@@ -41,13 +41,16 @@ module Inserters.ForwardConnect{
     so
   }
 
-  function ForwardConnectUF(uf1: UpdateFunction, uf2: UpdateFunction, conn: InternalConnection): (new_uf: UpdateFunction)
+  opaque function ForwardConnectUF(uf1: UpdateFunction, uf2: UpdateFunction, conn: InternalConnection): (new_uf: UpdateFunction)
     requires uf1.Valid()
     requires uf2.Valid()
     requires conn.Valid()
     requires conn.i_width == uf2.input_width
     requires conn.o_width == uf1.output_width
     ensures new_uf.Valid()
+    ensures new_uf.input_width == uf1.input_width + conn.ni_width
+    ensures new_uf.output_width == uf1.output_width + uf2.output_width
+    ensures new_uf.state_width == uf1.state_width + uf2.state_width
   {
     reveal UpdateFunction.Valid();
     UpdateFunction(
@@ -467,6 +470,7 @@ module Inserters.ForwardConnect{
       var uf_base := ForwardConnectBaseUF(uf1, uf2, forward_conn);
       var new_uf := ForwardConnectUF(uf1, uf2, forward_conn);
       && uf_base.sf.requires(si)
+      && new_uf.sf.requires(si)
       && (new_uf.sf(si) == uf_base.sf(si))
     {
       var new_uf := ForwardConnectUF(uf1, uf2, forward_conn);
@@ -478,7 +482,9 @@ module Inserters.ForwardConnect{
       var si2 := SI(si2_inputs, si.state[uf1.state_width..]);
       var so2 := uf2.sf(si2);
       var so := SO(so1.outputs + so2.outputs, so1.state + so2.state);
-      assert so == new_uf.sf(si);
+      assert so == new_uf.sf(si) by {
+        reveal ForwardConnectUF();
+      }
 
       var si_expanded := SI(si1.inputs + si2.inputs, si.state);
 
@@ -562,6 +568,7 @@ module Inserters.ForwardConnect{
       forall si: SI | new_uf.SIVal(si)
         ensures
           && uf_base.sf.requires(si)
+          && new_uf.sf.requires(si)
           && (new_uf.sf(si) == uf_base.sf(si))
       {
         ForwardConnectionUFEquivInternal(uf1, uf2, conn, si);
@@ -571,7 +578,7 @@ module Inserters.ForwardConnect{
     }
   }
 
-  function ForwardConnectionModifier(
+  opaque function ForwardConnectionModifier(
       z1: ScufInserter, z2: ScufInserter, conn: InternalConnection): (z: ScufInserter)
     requires z1.Valid()
     requires z2.Valid()
@@ -579,6 +586,10 @@ module Inserters.ForwardConnect{
     requires conn.i_width == z2.uf.input_width
     requires conn.o_width == z1.uf.output_width
     ensures z.Valid()
+    ensures
+      && z1.uf.Valid()
+      && z2.uf.Valid()
+      && (z.uf == ForwardConnectUF(z1.uf, z2.uf, conn))
   {
     reveal Seq.ToSet();
     reveal ScufInserter.Valid();

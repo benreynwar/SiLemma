@@ -6,7 +6,7 @@ module ModifiersAppendReg {
   import opened ConservedSubcircuit
   import opened InsertersReg
   import opened MapFunction
-  import opened ModifiersSeries
+  import opened Modifiers_Series
   import opened Modifiers.SwitchUF
 
   function AppendRegSF(rf_base: UpdateFunction, si: SI): (so: SO)

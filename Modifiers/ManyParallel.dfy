@@ -69,7 +69,7 @@ module Modifiers_ManyParallel {
       new_uf
   }
 
-  function ManyParallelUpdateFunction(uf: UpdateFunction, n: nat): (new_uf: UpdateFunction)
+  opaque function ManyParallelUpdateFunction(uf: UpdateFunction, n: nat): (new_uf: UpdateFunction)
     requires uf.Valid()
     ensures new_uf.Valid()
     ensures new_uf.input_width == n * uf.input_width
@@ -106,6 +106,7 @@ module Modifiers_ManyParallel {
     assert uf1.output_width == uf2.output_width;
     assert uf1.state_width == uf2.state_width;
     reveal UpdateFunctionsEquiv();
+    reveal ManyParallelUpdateFunction();
     if n == 0 {
       assert UpdateFunctionsEquiv(uf1, uf2);
     } else if n == 1 {
@@ -171,9 +172,12 @@ module Modifiers_ManyParallel {
     new_z
   }
 
-  function ManyParallelInserter(z: ScufInserter, n: nat): (new_z: ScufInserter)
+  opaque function ManyParallelInserter(z: ScufInserter, n: nat): (new_z: ScufInserter)
     requires z.Valid()
     ensures new_z.Valid()
+    ensures
+      && z.uf.Valid()
+      && (new_z.uf == ManyParallelUpdateFunction(z.uf, n))
     decreases n, 2
   {
     var z_almost := ManyParallelInserterImpl(z, n);

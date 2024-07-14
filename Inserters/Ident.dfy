@@ -6,8 +6,11 @@ module Inserters.Ident {
   import opened Inserters_Unary
   import opened Modifiers.SwitchUF
 
-  function IdentUF(): (r: UpdateFunction)
+  opaque function IdentUF(): (r: UpdateFunction)
     ensures r.Valid()
+    ensures r.input_width == 1
+    ensures r.output_width == 1
+    ensures r.state_width == 0
   {
     reveal UpdateFunction.Valid();
     UpdateFunction(
@@ -17,11 +20,13 @@ module Inserters.Ident {
       )
   }
 
-  function IdentInserter(): (z: ScufInserter)
+  opaque function IdentInserter(): (z: ScufInserter)
     ensures z.Valid()
+    ensures z.uf == IdentUF()
   {
     var z_binary := UnaryInserter(CIden);
     reveal UpdateFunctionsEquiv();
+    reveal IdentUF();
     var z := SwitchUFModifier(z_binary, IdentUF());
     z
   }

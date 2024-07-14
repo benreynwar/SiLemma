@@ -41,6 +41,7 @@ module InsertersReg {
     var z_parseq := ManyParallelInserter(z_seq, n);
     var new_uf := RegUpdateFunction(n);
     assert UpdateFunctionsEquiv(new_uf, z_parseq.uf) by {
+      reveal ManyParallelUpdateFunction();
       forall si: SI | |si.inputs| == n && |si.state| == n
         ensures z_parseq.uf.sf(si) == new_uf.sf(si)
       {

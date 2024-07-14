@@ -12,7 +12,7 @@ module Inserters.AndTree{
   import opened Connection
   import opened Subcircuit
   import opened MapConnection
-  import opened ModifiersSeries
+  import opened Modifiers_Series
   import opened Modifiers.Merge
   import opened Modifiers.SwitchUF
 
@@ -68,8 +68,11 @@ module Inserters.AndTree{
     )
   }
 
-  function AndTreeUpdateFunction(n: nat): (uf: UpdateFunction)
+  opaque function AndTreeUpdateFunction(n: nat): (uf: UpdateFunction)
     ensures uf.Valid()
+    ensures uf.input_width == n
+    ensures uf.output_width == 1
+    ensures uf.state_width == 0
   {
     reveal UpdateFunction.Valid();
     UpdateFunction(
@@ -86,9 +89,12 @@ module Inserters.AndTree{
     reveal UpdateFunctionsEquiv();
     var uf1 := AndTreeInserterImpl(n).uf;
     var uf2 := AndTreeUpdateFunction(n);
+    reveal AndUF();
+    reveal AndTreeUpdateFunction();
     if n == 0 {
       assert UpdateFunctionsEquiv(uf1, uf2);
     } else if n == 1 {
+      reveal IdentUF();
       assert UpdateFunctionsEquiv(uf1, uf2);
     } else if n == 2 {
       assert UpdateFunctionsEquiv(uf1, uf2);
@@ -130,8 +136,9 @@ module Inserters.AndTree{
       z
   }
 
-  function AndTreeInserter(n: nat): (z: ScufInserter)
+  opaque function AndTreeInserter(n: nat): (z: ScufInserter)
     ensures z.Valid()
+    ensures z.uf == AndTreeUpdateFunction(n)
     decreases n, 2
   {
     var uf := AndTreeUpdateFunction(n);
