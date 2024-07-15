@@ -94,14 +94,14 @@ module Modifiers_ManyParallel {
     ensures
       reveal ScufInserter.Valid();
       var uf1 := ManyParallelUpdateFunction(z.uf, n);
-      var uf2 := ManyParallelInserterImpl(z, n).uf;
+      var uf2 := ManyParallelModifierImpl(z, n).uf;
       UpdateFunctionsEquiv(uf1, uf2)
     decreases n, 1
   {
     reveal ScufInserter.Valid();
     reveal UpdateFunction.Valid();
     var uf1 := ManyParallelUpdateFunction(z.uf, n);
-    var uf2 := ManyParallelInserterImpl(z, n).uf;
+    var uf2 := ManyParallelModifierImpl(z, n).uf;
     assert uf1.input_width == uf2.input_width;
     assert uf1.output_width == uf2.output_width;
     assert uf1.state_width == uf2.state_width;
@@ -119,7 +119,7 @@ module Modifiers_ManyParallel {
       assert UpdateFunctionsEquiv(uf1, uf2);
     } else {
       assert uf2 == MergeUpdateFunctions(z.uf, ManyParallelUpdateFunction(z.uf, n-1)) by {
-        var z_other := ManyParallelInserter(z, n-1);
+        var z_other := ManyParallelModifier(z, n-1);
         var z_merged := MergeModifier(z, z_other);
         assert z_merged.uf == uf2;
       }
@@ -133,7 +133,7 @@ module Modifiers_ManyParallel {
         var so_this := z.uf.sf(si_this);
         var si_other := SI(si.inputs[z.uf.input_width..], si.state[z.uf.state_width..]);
         var uf1_other := ManyParallelUpdateFunction(z.uf, n-1);
-        var uf2_other := ManyParallelInserterImpl(z, n-1).uf;
+        var uf2_other := ManyParallelModifierImpl(z, n-1).uf;
         var so1_other := uf1_other.sf(si_other);
         var so2_other := uf2_other.sf(si_other);
         ManyParallelUpdateFunctionCorrect(z, n-1);
@@ -151,7 +151,7 @@ module Modifiers_ManyParallel {
     assert UpdateFunctionsEquiv(uf1, uf2);
   }
 
-  function ManyParallelInserterImpl(z: ScufInserter, n: nat): (new_z: ScufInserter)
+  function ManyParallelModifierImpl(z: ScufInserter, n: nat): (new_z: ScufInserter)
     requires z.Valid()
     ensures new_z.Valid()
     ensures new_z.uf.input_width == z.uf.input_width * n
@@ -166,13 +166,13 @@ module Modifiers_ManyParallel {
     else if n == 1 then
       z
     else
-      var z_other := ManyParallelInserter(z, n-1);
+      var z_other := ManyParallelModifier(z, n-1);
       var z_merged := MergeModifier(z, z_other);
       z_merged;
     new_z
   }
 
-  opaque function ManyParallelInserter(z: ScufInserter, n: nat): (new_z: ScufInserter)
+  opaque function ManyParallelModifier(z: ScufInserter, n: nat): (new_z: ScufInserter)
     requires z.Valid()
     ensures new_z.Valid()
     ensures
@@ -180,7 +180,7 @@ module Modifiers_ManyParallel {
       && (new_z.uf == ManyParallelUpdateFunction(z.uf, n))
     decreases n, 2
   {
-    var z_almost := ManyParallelInserterImpl(z, n);
+    var z_almost := ManyParallelModifierImpl(z, n);
     reveal ScufInserter.Valid();
     var new_uf := ManyParallelUpdateFunction(z.uf, n);
     reveal MergeUpdateFunctions();

@@ -26,7 +26,7 @@ module Inserters_ManyIdent {
     ensures z.Valid()
   {
     var z_ident := IdentInserter();
-    var z := ManyParallelInserter(z_ident, n);
+    var z := ManyParallelModifier(z_ident, n);
     z
   }
 
