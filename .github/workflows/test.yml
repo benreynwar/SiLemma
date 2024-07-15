@@ -17,7 +17,7 @@ jobs:
           submodules: recursive
       - uses: dafny-lang/setup-dafny-action@v1.7.0
         with:
-          dafny-version: "4.6.0"
+          dafny-version: "4.7.0"
       - name: Set DAFNY_HOME
         run: echo "DAFNY_HOME=$(dirname $(which dafny))" >> $GITHUB_ENV
       - name: Verify
