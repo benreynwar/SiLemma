@@ -616,6 +616,45 @@ module Modifiers.Merge {
     (new_c, s)
   }
 
+  lemma MergeScufsPathConstraints(c: Circuit, s1: Scuf, s2: Scuf)
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    ensures
+      var s := MergeScufs(c, s1, s2);
+      && (|s.mp.outputs| == s1.uf.output_width + s2.uf.output_width)
+      && (|s.mp.inputs| == s1.uf.input_width + s2.uf.input_width)
+      && !PathExistsBetweenNPSets(c, Seq.ToSet(s.mp.outputs[..s1.uf.output_width]),
+            Seq.ToSet(s.mp.inputs[s1.uf.input_width..]))
+      && !PathExistsBetweenNPSets(c, Seq.ToSet(s.mp.outputs[s1.uf.output_width..]),
+            Seq.ToSet(s.mp.inputs[..s1.uf.input_width]))
+  {
+    var s := MergeScufs(c, s1, s2);
+    FOutputsInSc(c, s1);
+    FOutputsInSc(c, s2);
+    FInputsInSc(c, s1);
+    FInputsInSc(c, s2);
+    reveal Seq.ToSet();
+    reveal PathExistsBetweenNPSets();
+    reveal PathExists();
+    reveal NPsInSc();
+    assert !PathExistsBetweenNPSets(c, Seq.ToSet(s1.mp.outputs), Seq.ToSet(s2.mp.inputs)) by {
+      forall np1: NP, np2: NP | np1 in s1.mp.outputs && np2 in s2.mp.inputs
+        ensures !PathExists(c, np1, np2)
+      {
+        NoPathOutOfIsland(c, s1.sc, np1, np2);
+      }
+    }
+    assert !PathExistsBetweenNPSets(c, Seq.ToSet(s2.mp.outputs), Seq.ToSet(s1.mp.inputs)) by {
+      forall np1: NP, np2: NP | np1 in s2.mp.outputs && np2 in s1.mp.inputs
+        ensures !PathExists(c, np1, np2)
+      {
+        NoPathOutOfIsland(c, s2.sc, np1, np2);
+      }
+    }
+  }
+
   lemma MergeModifierPathConstraints(z1: ScufInserter, z2: ScufInserter, c: Circuit)
     requires c.Valid()
     requires z1.Valid()
@@ -647,28 +686,7 @@ module Modifiers.Merge {
       reveal MergeInserter();
     }
     assert new_c.Valid();
-    FOutputsInSc(new_c, s1);
-    FOutputsInSc(new_c, s2);
-    FInputsInSc(new_c, s1);
-    FInputsInSc(new_c, s2);
-    reveal Seq.ToSet();
-    reveal PathExistsBetweenNPSets();
-    reveal PathExists();
-    reveal NPsInSc();
-    assert !PathExistsBetweenNPSets(new_c, Seq.ToSet(s1.mp.outputs), Seq.ToSet(s2.mp.inputs)) by {
-      forall np1: NP, np2: NP | np1 in s1.mp.outputs && np2 in s2.mp.inputs
-        ensures !PathExists(new_c, np1, np2)
-      {
-        NoPathOutOfIsland(new_c, s1.sc, np1, np2);
-      }
-    }
-    assert !PathExistsBetweenNPSets(new_c, Seq.ToSet(s2.mp.outputs), Seq.ToSet(s1.mp.inputs)) by {
-      forall np1: NP, np2: NP | np1 in s2.mp.outputs && np2 in s1.mp.inputs
-        ensures !PathExists(new_c, np1, np2)
-      {
-        NoPathOutOfIsland(new_c, s2.sc, np1, np2);
-      }
-    }
+    MergeScufsPathConstraints(new_c, s1, s2);
   }
 
   opaque function MergeModifier(z1: ScufInserter, z2: ScufInserter): (z: ScufInserter)

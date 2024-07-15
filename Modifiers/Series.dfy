@@ -5,6 +5,7 @@ module Modifiers_Series {
   import opened MapFunction
   import opened ConservedSubcircuit
   import opened SelfConnect
+  import opened SelfConnectEval
   import opened Modifiers.Merge
   import opened Modifiers.Connect
   import opened Modifiers.NewOutputs
@@ -306,6 +307,101 @@ module Modifiers_Series {
     seq(output_width_2, (i: nat) requires i < output_width_2 => output_width_1 + i)
   }
 
+  lemma SeriesScufConnectionConsistent(c: Circuit, s1: Scuf, s2: Scuf)
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires s1.uf.output_width == s2.uf.input_width
+    ensures
+      var s_merged := MergeScufs(c, s1, s2);
+      var conn := SeriesInternalConnection(s1.uf.input_width, s2.uf.input_width, s2.uf.output_width);
+      ScufConnectionConsistent(c, s_merged, conn)
+  {
+    var s := MergeScufs(c, s1, s2);
+    var conn := SeriesInternalConnection(s1.uf.input_width, s2.uf.input_width, s2.uf.output_width);
+    assert (conn.i_width == s.uf.input_width);
+    assert (conn.o_width == s.uf.output_width);
+    MergeScufsPathConstraints(c, s1, s2);
+    InputsAndOutputsConnected(s, s1.uf.input_width, s2.uf.input_width, s2.uf.output_width);
+    reveal Seq.ToSet();
+    assert conn.GetConnectedOutputs(s.mp) == Seq.ToSet(s.mp.outputs[..s1.uf.output_width]);
+    assert !PathExistsBetweenNPSets(c, conn.GetConnectedOutputs(s.mp), conn.GetConnectedInputs(s.mp));
+    assert forall x :: (x in s.mp.inputs) ==> (x !in c.PortSource) by {
+      FInputsInSc(c, s);
+      reveal NPsInSc();
+      assert IsIsland(c, s.sc) by {
+        reveal IsIsland();
+      }
+      IsIslandNoInputs(c, s.sc);
+      assert forall x: NP :: (x in s.mp.inputs) ==> (x.n in s.sc);
+      reveal ConnInputs();
+      reveal UnconnInputs();
+      reveal Scuf.SomewhatValid();
+      reveal Seq.ToSet();
+      assert forall x: NP :: (x in s.mp.inputs) ==> x in AllInputs(c, s.sc);
+    }
+    assert (forall i_index :: i_index in conn.connections ==> s.mp.inputs[i_index] !in c.PortSource);
+    reveal ScufConnectionConsistent();
+  }
+
+  function SeriesConnectImpl(c: Circuit, s1: Scuf, s2: Scuf): (new_c_s: (Circuit, Scuf))
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires s1.uf.output_width == s2.uf.input_width
+    ensures
+      var (new_c, new_s) := new_c_s;
+      && new_c.Valid()
+      && new_s.Valid(new_c)
+      && s1.uf.Valid()
+      && s2.uf.Valid()
+  {
+    var s_merged := MergeScufs(c, s1, s2);
+    var conn := SeriesInternalConnection(s1.uf.input_width, s2.uf.input_width, s2.uf.output_width);
+    SeriesScufConnectionConsistent(c, s1, s2);
+    assert ScufConnectionConsistent(c, s_merged, conn);
+    var (new_c, s_connected) := ConnectCircuitScuf(c, s_merged, conn);
+
+    var new_outputs := SeriesNewOutputs(s1.uf.output_width, s2.uf.output_width);
+    assert s_connected.uf.output_width == s1.uf.output_width + s2.uf.output_width by {
+      reveal MergeUpdateFunctions();
+    }
+    reveal NewOutputsValid();
+    assert IsIsland(new_c, s_connected.sc) by {
+      reveal IsIsland();
+    }
+    var new_s := NewOutputsScuf(new_c, s_connected, new_outputs);
+    (new_c, new_s)
+  }
+
+  opaque function SeriesConnect(c: Circuit, s1: Scuf, s2: Scuf): (new_c_s: (Circuit, Scuf))
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires s1.uf.output_width == s2.uf.input_width
+    ensures
+      var (new_c, new_s) := new_c_s;
+      && new_c.Valid()
+      && new_s.Valid(new_c)
+      && s1.uf.Valid()
+      && s2.uf.Valid()
+      && (new_s.uf == SeriesUpdateFunction(s1.uf, s2.uf))
+  {
+    var (new_c, s_intermed) := SeriesConnectImpl(c, s1, s2);
+    var conn := SeriesInternalConnection(s1.uf.input_width, s2.uf.input_width, s2.uf.output_width);
+    var new_uf := SeriesUpdateFunction(s1.uf, s2.uf);
+    assert UpdateFunctionsEquiv(s_intermed.uf, new_uf) by {
+      assert s_intermed.uf == SeriesStep3UpdateFunction(s1.uf, s2.uf);
+      SeriesUpdateFunctionEquiv(s1.uf, s2.uf);
+      reveal UpdateFunctionsEquiv();
+    }
+    var new_s := ScufSwapUF(new_c, s_intermed, new_uf);
+    (new_c, new_s)
+  }
+
   opaque function SeriesModifier(z1: ScufInserter, z2: ScufInserter): (new_z: ScufInserter)
     requires z1.Valid()
     requires z2.Valid()
@@ -333,33 +429,15 @@ module Modifiers_Series {
       {
         z_merged.ValidForCircuit(c);
         var (new_c, s) := z_merged.fn(c);
-        //var conn_outputs := conn.GetConnectedOutputs(s.mp);
-        //var conn_inputs := conn.GetConnectedInputs(s.mp);
-        assert new_c.Valid() && s.Valid(new_c) by {
-          reveal SimpleInsertion();
+        var (intermed_c, s1, s2) := InsertTwo(c, z1, z2);
+        assert MergeRequirements(intermed_c, s1, s2) by {
+          reveal DualInsertion();
         }
-        assert ScufConnectionConsistent(new_c, s, conn) by {
-          assert (conn.i_width == s.uf.input_width);
-          assert (conn.o_width == s.uf.output_width);
-          MergeModifierPathConstraints(z1, z2, c);
-          InputsAndOutputsConnected(s, z1.uf.input_width, z2.uf.input_width, z2.uf.output_width);
-          reveal Seq.ToSet();
-          assert conn.GetConnectedOutputs(s.mp) == Seq.ToSet(s.mp.outputs[..z1.uf.output_width]);
-          assert !PathExistsBetweenNPSets(new_c, conn.GetConnectedOutputs(s.mp), conn.GetConnectedInputs(s.mp));
-          assert forall x :: (x in s.mp.inputs) ==> (x !in new_c.PortSource) by {
-            FInputsInSc(new_c, s);
-            reveal NPsInSc();
-            IsIslandNoInputs(new_c, s.sc);
-            assert forall x: NP :: (x in s.mp.inputs) ==> (x.n in s.sc);
-            reveal ConnInputs();
-            reveal UnconnInputs();
-            reveal Scuf.SomewhatValid();
-            reveal Seq.ToSet();
-            assert forall x: NP :: (x in s.mp.inputs) ==> x in AllInputs(new_c, s.sc);
-          }
-          assert (forall i_index :: i_index in conn.connections ==> s.mp.inputs[i_index] !in new_c.PortSource);
-          reveal ScufConnectionConsistent();
+        assert intermed_c == new_c && s == MergeScufs(new_c, s1, s2) by {
+          reveal MergeInserter();
+          reveal MergeModifier();
         }
+        SeriesScufConnectionConsistent(new_c, s1, s2);
       }
       reveal InserterConnectionConsistent();
     }

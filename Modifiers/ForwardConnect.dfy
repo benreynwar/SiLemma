@@ -14,6 +14,7 @@ module Modifiers_ForwardConnect{
   import opened MapConnection
   import opened Modifiers.Merge
   import opened SelfConnect
+  import opened SelfConnectEval
   import opened Modifiers.Connect
   import opened Path
   import opened Modifiers.SwitchUF
@@ -358,6 +359,54 @@ module Modifiers_ForwardConnect{
     internal_conn
   }
 
+  lemma ForwardScufConnectionConsistent(c: Circuit, s1: Scuf, s2: Scuf, forward_conn: InternalConnection)
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires forward_conn.Valid()
+    requires forward_conn.i_width == s2.uf.input_width
+    requires forward_conn.o_width == s1.uf.output_width
+    ensures
+      var internal_conn := ForwardConnectionToInternalConnection(s1.uf, s2.uf, forward_conn);
+      var s_merged := MergeScufs(c, s1, s2);
+      ScufConnectionConsistent(c, s_merged, internal_conn)
+  {
+    reveal Seq.ToSet();
+    var internal_conn := ForwardConnectionToInternalConnection(s1.uf, s2.uf, forward_conn);
+    var s := MergeScufs(c, s1, s2);
+    assert ScufConnectionConsistent(c, s, internal_conn) by {
+      reveal ScufConnectionConsistent();
+      assert (internal_conn.i_width == s.uf.input_width);
+      assert (internal_conn.o_width == s.uf.output_width);
+      MergeScufsPathConstraints(c, s1, s2);
+      var outputs_from_s1 := Seq.ToSet(s.mp.outputs[..s1.uf.output_width]);
+      var inputs_to_s2 := Seq.ToSet(s.mp.inputs[s1.uf.input_width..]);
+      assert !PathExistsBetweenNPSets(c, outputs_from_s1, inputs_to_s2);
+      var conn_outputs := internal_conn.GetConnectedOutputs(s.mp);
+      var conn_inputs := internal_conn.GetConnectedInputs(s.mp);
+      assert forall o_index :: o_index in internal_conn.connections.Values
+                ==> o_index < s1.uf.output_width by {
+        reveal InternalConnection.ConnectionsValid();
+      }
+      assert conn_outputs <= outputs_from_s1;
+      assert forall i_index :: i_index in internal_conn.connections.Keys
+                ==> s1.uf.input_width <= i_index < s1.uf.input_width + s2.uf.input_width by {
+        reveal InternalConnection.ConnectionsValid();
+      }
+      assert conn_inputs <= inputs_to_s2;
+      NoPathExistsBetweenNPSubSets(c, outputs_from_s1, inputs_to_s2, conn_outputs, conn_inputs);
+      assert !PathExistsBetweenNPSets(c, conn_outputs, conn_inputs);
+      forall i_index | i_index in internal_conn.connections
+        ensures s.mp.inputs[i_index] !in c.PortSource
+      {
+        reveal IsIsland();
+        InputsOfIslandNotInPortSource(c, s); 
+        assert s.mp.inputs[i_index] !in c.PortSource;
+      }
+    }
+  }
+
   opaque function ForwardConnectionModifierImpl(
       z1: ScufInserter, z2: ScufInserter, conn: InternalConnection): (z: ScufInserter)
     requires z1.Valid()
@@ -390,36 +439,15 @@ module Modifiers_ForwardConnect{
         z_par.ValidForCircuit(c);
         reveal SimpleInsertion();
         assert new_c.Valid();
-        //ForwardConnectionScufConnectionConsistent(c);
-        assert ScufConnectionConsistent(new_c, s, internal_conn) by {
-          reveal ScufConnectionConsistent();
-          assert (internal_conn.i_width == s.uf.input_width);
-          assert (internal_conn.o_width == s.uf.output_width);
-          MergeModifierPathConstraints(z1, z2, c);
-          var outputs_from_s1 := Seq.ToSet(s.mp.outputs[..z1.uf.output_width]);
-          var inputs_to_s2 := Seq.ToSet(s.mp.inputs[z1.uf.input_width..]);
-          assert !PathExistsBetweenNPSets(new_c, outputs_from_s1, inputs_to_s2);
-          var conn_outputs := internal_conn.GetConnectedOutputs(s.mp);
-          var conn_inputs := internal_conn.GetConnectedInputs(s.mp);
-          assert forall o_index :: o_index in internal_conn.connections.Values
-                   ==> o_index < z1.uf.output_width by {
-            reveal InternalConnection.ConnectionsValid();
-          }
-          assert conn_outputs <= outputs_from_s1;
-          assert forall i_index :: i_index in internal_conn.connections.Keys
-                   ==> z1.uf.input_width <= i_index < z1.uf.input_width + z2.uf.input_width by {
-            reveal InternalConnection.ConnectionsValid();
-          }
-          assert conn_inputs <= inputs_to_s2;
-          NoPathExistsBetweenNPSubSets(new_c, outputs_from_s1, inputs_to_s2, conn_outputs, conn_inputs);
-          assert !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs);
-          forall i_index | i_index in internal_conn.connections
-            ensures s.mp.inputs[i_index] !in new_c.PortSource
-          {
-            InputsOfIslandNotInPortSource(new_c, s); 
-            assert s.mp.inputs[i_index] !in new_c.PortSource;
-          }
+        var (intermed_c, s1, s2) := InsertTwo(c, z1, z2);
+        assert MergeRequirements(intermed_c, s1, s2) by {
+          reveal DualInsertion();
         }
+        assert intermed_c == new_c && s == MergeScufs(new_c, s1, s2) by {
+          reveal MergeInserter();
+          reveal MergeModifier();
+        }
+        ForwardScufConnectionConsistent(new_c, s1, s2, conn);
       }
       reveal InserterConnectionConsistent();
     }
@@ -441,6 +469,19 @@ module Modifiers_ForwardConnect{
   {
     reveal ScufInserter.Valid();
     reveal ForwardConnectionModifierImpl();
+  }
+
+  lemma ForwardConnectBaseUFIsScufUF(c: Circuit, s1: Scuf, s2: Scuf, conn: InternalConnection)
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires conn.Valid()
+    requires conn.i_width == s2.uf.input_width
+    requires conn.o_width == s1.uf.output_width
+    ensures
+      ForwardConnectImpl(c, s1, s2, conn).1.uf == ForwardConnectBaseUF(s1.uf, s2.uf, conn)
+  {
   }
 
   function ForwardConnectBaseUF(uf1: UpdateFunction, uf2: UpdateFunction, conn: InternalConnection): (uf: UpdateFunction)
@@ -576,6 +617,56 @@ module Modifiers_ForwardConnect{
       }
       reveal UpdateFunctionsEquiv();
     }
+  }
+
+  function ForwardConnectImpl(c: Circuit, s1: Scuf, s2: Scuf, conn: InternalConnection): (new_c_s: (Circuit, Scuf))
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires conn.Valid()
+    requires conn.i_width == s2.uf.input_width
+    requires conn.o_width == s1.uf.output_width
+    ensures
+      var (new_c, new_s) := new_c_s;
+      && new_c.Valid()
+      && new_s.Valid(new_c)
+      && s1.uf.Valid()
+      && s2.uf.Valid()
+  {
+    var s_par := MergeScufs(c, s1, s2);
+    var internal_conn := ForwardConnectionToInternalConnection(s1.uf, s2.uf, conn);
+    ForwardScufConnectionConsistent(c, s1, s2, conn);
+    assert ScufConnectionConsistent(c, s_par, internal_conn);
+    var (new_c, new_s) := ConnectCircuitScuf(c, s_par, internal_conn);
+    (new_c, new_s)
+  }
+
+  opaque function ForwardConnect(c: Circuit, s1: Scuf, s2: Scuf, conn: InternalConnection): (new_c_s: (Circuit, Scuf))
+    requires c.Valid()
+    requires s1.Valid(c)
+    requires s2.Valid(c)
+    requires MergeRequirements(c, s1, s2)
+    requires conn.Valid()
+    requires conn.i_width == s2.uf.input_width
+    requires conn.o_width == s1.uf.output_width
+    ensures
+      var (new_c, new_s) := new_c_s;
+      && new_c.Valid()
+      && new_s.Valid(new_c)
+      && s1.uf.Valid()
+      && s2.uf.Valid()
+      && (new_s.uf == ForwardConnectUF(s1.uf, s2.uf, conn))
+  {
+    var (new_c, intermed_s) := ForwardConnectImpl(c, s1, s2, conn);
+    var new_uf := ForwardConnectUF(s1.uf, s2.uf, conn);
+    assert UpdateFunctionsEquiv(intermed_s.uf, new_uf) by {
+      ForwardConnectionUFEquiv(s1.uf, s2.uf, conn);
+      ForwardConnectBaseUFIsScufUF(c, s1, s2, conn);
+      reveal UpdateFunctionsEquiv();
+    }
+    var new_s := ScufSwapUF(new_c, intermed_s, new_uf);
+    (new_c, new_s)
   }
 
   opaque function ForwardConnectionModifier(
