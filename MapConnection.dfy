@@ -108,8 +108,8 @@ module MapConnection {
       reveal Valid();
       reveal Seq.ToSet();
       forall ii: nat :: index <= ii < |out| ==>
-        var key := out[index];
-        var el := conn[index];
+        var key := out[ii];
+        var el := conn[ii];
         var value := if !el.0 then x[in1[el.1]] else y[in2[el.1]];
         key in m && m[key] == value
     }
