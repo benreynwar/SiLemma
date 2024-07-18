@@ -136,13 +136,13 @@ module Modifiers.NewOutputs {
         reveal Seq.ToSet();
         forall fi: FI | FIValid(fi, new_s.mp.inputs, new_s.mp.state)
           ensures
-          && FICircuitValid(c, fi)
+          && FICircuitValid(c, FItoKeys(fi))
           && (forall np :: np in Seq.ToSet(new_s.mp.outputs) || np in StateINPs(new_s.mp.state) ==>
             && NPValid(c, np)
             && (Evaluate(c, np, fi) == EvalOk(MFLookup(new_s, fi, np))))
         {
-          assert FICircuitValid(c, fi) by {
-            ScufValidFiValidToFICircuitValid(c, new_s, fi);
+          assert FICircuitValid(c, FItoKeys(fi)) by {
+            ScufValidFiValidToFICircuitValid(c, new_s, FItoKeys(fi));
             }
           forall np | np in Seq.ToSet(new_s.mp.outputs) || np in StateINPs(new_s.mp.state)
             ensures

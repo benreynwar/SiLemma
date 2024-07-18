@@ -11,6 +11,16 @@ module MapFunction {
     state: map<CNode, bool>
   )
 
+  datatype FIKeys = FIKeys(
+    inputs: set<NP>,
+    state: set<CNode>
+  )
+
+  function FItoKeys(fi: FI): FIKeys
+  {
+    FIKeys(fi.inputs.Keys, fi.state.Keys)
+  }
+
   datatype FO = FO(
     outputs: map<NP, bool>,
     state: map<CNode, bool>
@@ -30,6 +40,12 @@ module MapFunction {
   {
     && fi.inputs.Keys == Seq.ToSet(inputs)
     && fi.state.Keys == Seq.ToSet(state)
+  }
+
+  predicate FIKValid(fik: FIKeys, inputs: seq<NP>, state: seq<CNode>)
+  {
+    && fik.inputs == Seq.ToSet(inputs)
+    && fik.state == Seq.ToSet(state)
   }
 
   predicate FOValid(fo: FO, outputs: seq<NP>, state: seq<CNode>)

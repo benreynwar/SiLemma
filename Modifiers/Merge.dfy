@@ -227,11 +227,11 @@ module Modifiers.Merge {
         ScufFOutputsAreValid(c, s1);
         ScufFOutputsAreValid(c, s2);
       }
-      && FICircuitValid(c, fi)
+      && FICircuitValid(c, FItoKeys(fi))
   {
     reveal Seq.ToSet();
     var s := MergeScufsImpl(c, s1, s2);
-    assert FICircuitValid(c, fi) by {
+    assert FICircuitValid(c, FItoKeys(fi)) by {
       reveal Circuit.Valid();
       ScufFInputsAreValid(c, s1);
       ScufFInputsAreValid(c, s2);
@@ -427,7 +427,7 @@ module Modifiers.Merge {
         ScufFOutputsAreValid(c, s1);
         ScufFOutputsAreValid(c, s2);
       }
-      && FICircuitValid(c, fi)
+      && FICircuitValid(c, FItoKeys(fi))
       && (Evaluate(c, np, fi) == EvalOk(MFLookup(s, fi, np)))
   {
     reveal Seq.ToSet();
@@ -444,10 +444,10 @@ module Modifiers.Merge {
     }
     reveal s.EvaluatesCorrectly();
     if np in s1.mp.outputs || np in StateINPs(s1.mp.state) {
-      ScufValidFiValidToFICircuitValid(c, s1, fi1);
+      ScufValidFiValidToFICircuitValid(c, s1, FItoKeys(fi1));
       assert Evaluate(c, np, fi1) == EvalOk(MFLookup(s1, fi1, np));
     } else {
-      ScufValidFiValidToFICircuitValid(c, s2, fi2);
+      ScufValidFiValidToFICircuitValid(c, s2, FItoKeys(fi2));
       assert Evaluate(c, np, fi2) == EvalOk(MFLookup(s2, fi2, np));
     }
     // No paths from the output of one scuf to the input of the other.
@@ -580,11 +580,11 @@ module Modifiers.Merge {
           ScufFOutputsAreValid(c, s);
         }
         forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
-          ensures FICircuitValid(c, fi)
+          ensures FICircuitValid(c, FItoKeys(fi))
           ensures forall np :: np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state) ==>
             Evaluate(c, np, fi) == EvalOk(MFLookup(s, fi, np))
         {
-          assert FICircuitValid(c, fi) by {ScufValidFiValidToFICircuitValid(c, s, fi);}
+          assert FICircuitValid(c, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(c, s, FItoKeys(fi));}
           forall np | np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state)
             ensures Evaluate(c, np, fi) == EvalOk(MFLookup(s, fi, np))
           {

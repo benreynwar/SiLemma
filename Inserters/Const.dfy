@@ -91,7 +91,7 @@ module Inserters.Const{
     var o := s.mp.outputs[0];
     forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
       ensures
-        && FICircuitValid(new_c, fi)
+        && FICircuitValid(new_c, FItoKeys(fi))
         && (EvaluateONP(new_c, o, fi) == EvalOk(value))
     {
       reveal FICircuitValid();

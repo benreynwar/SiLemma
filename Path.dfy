@@ -296,7 +296,7 @@ module Path {
   lemma EvaluateOkToPathCaught(c: Circuit, np: NP, fi: FI)
     requires c.Valid()
     requires NPValid(c, np)
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires Evaluate(c, np, fi).EvalOk?
     ensures
       var ending_set := fi.inputs.Keys + StateONPsFromSet(fi.state.Keys);
@@ -314,7 +314,7 @@ module Path {
 
   lemma EvaluateONPOkToPathCaught(c: Circuit, np: NP, fi: FI)
     requires c.Valid()
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires ONPValid(c, np)
     requires EvaluateONP(c, np, fi).EvalOk?
     ensures
@@ -334,7 +334,7 @@ module Path {
 
   lemma EvaluateINPOkToPathCaught(c: Circuit, np: NP, fi: FI)
     requires c.Valid()
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires INPValid(c, np)
     requires EvaluateINP(c, np, fi).EvalOk?
     ensures
@@ -353,7 +353,7 @@ module Path {
   lemma EvaluateONPInnerOkToPathCaught(c: Circuit, p: seq<NP>, fi: FI)
     requires c.Valid()
     requires PathValid(c, p)
-    requires EvaluateONPInnerRequirements(c, p, fi)
+    requires EvaluateONPInnerRequirements(c, p, FItoKeys(fi))
     requires EvaluateONPInner(c, p, fi).EvalOk?
     decreases |NodesNotInPath(c, p)|, 4
     ensures
@@ -387,7 +387,7 @@ module Path {
   }
 
   lemma EvaluateONPBinaryOkToPathCaught(c: Circuit, path: seq<NP>, fi: FI)
-    requires EvaluateONPBinaryRequirements(c, path, fi)
+    requires EvaluateONPBinaryRequirements(c, path, FItoKeys(fi))
     requires EvaluateONPBinary(c, path, fi).EvalOk?
     ensures
       var ending_set := fi.inputs.Keys + StateONPsFromSet(fi.state.Keys);
@@ -421,7 +421,7 @@ module Path {
   }
 
   lemma EvaluateONPUnaryOkToPathCaught(c: Circuit, path: seq<NP>, fi: FI)
-    requires EvaluateONPUnaryRequirements(c, path, fi)
+    requires EvaluateONPUnaryRequirements(c, path, FItoKeys(fi))
     requires EvaluateONPUnary(c, path, fi).EvalOk?
     ensures
       var ending_set := fi.inputs.Keys + StateONPsFromSet(fi.state.Keys);
@@ -448,7 +448,7 @@ module Path {
   }
 
   lemma EvaluateINPInnerOkToPathCaught(c: Circuit, path: seq<NP>, fi: FI)
-    requires EvaluateINPInnerRequirements(c, path, fi)
+    requires EvaluateINPInnerRequirements(c, path, FItoKeys(fi))
     requires EvaluateINPInner(c, path, fi).EvalOk?
     ensures
       var ending_set := fi.inputs.Keys + StateONPsFromSet(fi.state.Keys);
@@ -480,8 +480,8 @@ module Path {
   // creating a loop.
 
   lemma EvaluateONPInnerPrepend(c: Circuit, prefix: seq<NP>, p: seq<NP>, fi: FI)
-    requires EvaluateONPInnerRequirements(c, p, fi)
-    requires EvaluateONPInnerRequirements(c, prefix + p, fi)
+    requires EvaluateONPInnerRequirements(c, p, FItoKeys(fi))
+    requires EvaluateONPInnerRequirements(c, prefix + p, FItoKeys(fi))
     requires
       var new_p := prefix + p;
       |prefix| > 0 ==> !PathExists(c, Seq.Last(new_p), Seq.Last(prefix))
@@ -587,8 +587,8 @@ module Path {
   }
 
   lemma EvaluateONPBinaryPrepend(c: Circuit, prefix: seq<NP>, path: seq<NP>, fi: FI)
-    requires EvaluateONPBinaryRequirements(c, path, fi)
-    requires EvaluateONPBinaryRequirements(c, prefix + path, fi)
+    requires EvaluateONPBinaryRequirements(c, path, FItoKeys(fi))
+    requires EvaluateONPBinaryRequirements(c, prefix + path, FItoKeys(fi))
     requires
       var new_p := prefix + path;
       |prefix| > 0 ==> !PathExists(c, Seq.Last(new_p), Seq.Last(prefix))
@@ -638,8 +638,8 @@ module Path {
   }
 
   lemma EvaluateONPUnaryPrepend(c: Circuit, prefix: seq<NP>, path: seq<NP>, fi: FI)
-    requires EvaluateONPUnaryRequirements(c, path, fi)
-    requires EvaluateONPUnaryRequirements(c, prefix + path, fi)
+    requires EvaluateONPUnaryRequirements(c, path, FItoKeys(fi))
+    requires EvaluateONPUnaryRequirements(c, prefix + path, FItoKeys(fi))
     requires
       var new_p := prefix + path;
       |prefix| > 0 ==> !PathExists(c, Seq.Last(new_p), Seq.Last(prefix))
@@ -673,8 +673,8 @@ module Path {
   }
 
   lemma EvaluateINPInnerPrepend(c: Circuit, prefix: seq<NP>, path: seq<NP>, fi: FI)
-    requires EvaluateINPInnerRequirements(c, path, fi)
-    requires EvaluateINPInnerRequirements(c, prefix + path, fi)
+    requires EvaluateINPInnerRequirements(c, path, FItoKeys(fi))
+    requires EvaluateINPInnerRequirements(c, prefix + path, FItoKeys(fi))
     requires
       var new_p := prefix + path;
       |prefix| > 0 ==> !PathExists(c, Seq.Last(new_p), Seq.Last(prefix))

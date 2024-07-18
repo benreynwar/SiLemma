@@ -8,17 +8,6 @@ module Inserters_Unary{
   import opened ConservedSubcircuit
   import opened MapFunction
 
-  function UnaryOp(a: bool, nk: CNodeKind): bool
-    requires CNodeKindIsUnary(nk)
-  {
-    match nk {
-      case CIden =>
-        a
-      case CInv =>
-        !a
-    }
-  }
-
   function UnaryUF(nk: CNodeKind): (uf: UpdateFunction)
     requires CNodeKindIsUnary(nk)
     ensures uf.Valid()
@@ -116,12 +105,12 @@ module Inserters_Unary{
     forall fi: FI | FIValid(fi, e.mp.inputs, e.mp.state)
       ensures
         var iv_0 := fi.inputs[i_0];
-        && FICircuitValid(new_c, fi)
+        && FICircuitValid(new_c, FItoKeys(fi))
         && (EvaluateONP(new_c, o, fi) == EvalOk(UnaryOp(iv_0, nk)))
     {
       var iv_0 := fi.inputs[i_0];
       assert Seq.HasNoDuplicates(path);
-      assert FICircuitValid(new_c, fi) by {
+      assert FICircuitValid(new_c, FItoKeys(fi)) by {
         reveal UpdateFunction.Valid();
         reveal FICircuitValid();
       }

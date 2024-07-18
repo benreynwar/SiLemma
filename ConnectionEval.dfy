@@ -66,9 +66,9 @@ module ConnectionEval {
     && var fi_1 := conn.fi2fia(fi);
     && var fi_2 := conn.fi2fib(fi);
     && var new_c := ConnectEntitiesImpl(c, conn);
-    && FICircuitValid(new_c, fi)
-    && FICircuitValid(new_c, fi_1)
-    && FICircuitValid(new_c, fi_2)
+    && FICircuitValid(new_c, FItoKeys(fi))
+    && FICircuitValid(new_c, FItoKeys(fi_1))
+    && FICircuitValid(new_c, FItoKeys(fi_2))
     && ConnectCircuitRequirements(c, conn.GetConnection())
     && conn.scuf_a.Valid(new_c)
     && conn.scuf_b.Valid(new_c)
@@ -93,9 +93,9 @@ module ConnectionEval {
       //&& ConnectMapFunctionRequirement(e1.mp, e2.mp, connection)
       && var fi_1 := conn.fi2fia(fi);
       && var fi_2 := conn.fi2fib(fi);
-      && FICircuitValid(new_c, fi)
-      && FICircuitValid(new_c, fi_1)
-      && FICircuitValid(new_c, fi_2)
+      && FICircuitValid(new_c, FItoKeys(fi))
+      && FICircuitValid(new_c, FItoKeys(fi_1))
+      && FICircuitValid(new_c, FItoKeys(fi_2))
   {
     var e1 := conn.scuf_a;
     var e2 := conn.scuf_b;
@@ -106,8 +106,8 @@ module ConnectionEval {
     var new_c := ConnectEntitiesImpl(c, conn);
     ConnectEntitiesSomewhatValid(c, conn);
     assert e12.SomewhatValid(new_c);
-    ScufValidFiValidToFICircuitValid(new_c, e12, fi);
-    assert FICircuitValid(new_c, fi);
+    ScufValidFiValidToFICircuitValid(new_c, e12, FItoKeys(fi));
+    assert FICircuitValid(new_c, FItoKeys(fi));
     var fi_1 := conn.fi2fia(fi);
     var fi_2 := conn.fi2fib(fi);
     var connection := conn.GetConnection();
@@ -242,8 +242,8 @@ module ConnectionEval {
     requires inp !in path
     requires inp.n in s.conn.scuf_a.sc
     requires INPValid(s.new_c, inp)
-    requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, s.fi)
-    requires EvaluateONPUnaryBinaryRequirements(s.new_c, prepath + path, s.fi)
+    requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, FItoKeys(s.fi))
+    requires EvaluateONPUnaryBinaryRequirements(s.new_c, prepath + path, FItoKeys(s.fi))
     requires NPsConnected(s.new_c, Seq.Last(path), inp)
 
     ensures forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs
@@ -288,8 +288,8 @@ module ConnectionEval {
     requires CESummaryValid(s)
     requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
     requires PathInSubcircuit(path, s.conn.scuf_a.sc)
-    requires EvaluateONPBinaryRequirements(s.new_c, path, s.fi)
-    requires EvaluateONPBinaryRequirements(s.new_c, prepath + path, s.fi)
+    requires EvaluateONPBinaryRequirements(s.new_c, path, FItoKeys(s.fi))
+    requires EvaluateONPBinaryRequirements(s.new_c, prepath + path, FItoKeys(s.fi))
     ensures forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs
     ensures EvaluateONPBinary(s.new_c, path, s.fi) == EvaluateONPBinary(s.new_c, path, s.fi_1)
     ensures Simpl(EvaluateONPBinary(s.new_c, path, s.fi)) == Simpl(EvaluateONPBinary(s.new_c, prepath+path, s.fi))
@@ -332,7 +332,7 @@ module ConnectionEval {
   lemma EvaluateONPComposed2Helper(s: CESummary, path: seq<NP>, inp: NP)
     requires CESummaryValid(s)
     requires PathInSubcircuit(path, s.conn.scuf_b.sc)
-    requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, s.fi)
+    requires EvaluateONPUnaryBinaryRequirements(s.new_c, path, FItoKeys(s.fi))
     requires INPValid(s.new_c, inp)
     requires inp !in path
     requires inp.n in s.conn.scuf_b.sc
@@ -356,7 +356,7 @@ module ConnectionEval {
   lemma EvaluateONPBinaryComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
     requires PathInSubcircuit(path, s.conn.scuf_b.sc)
-    requires EvaluateONPBinaryRequirements(s.new_c, path, s.fi)
+    requires EvaluateONPBinaryRequirements(s.new_c, path, FItoKeys(s.fi))
     ensures
       (Seq.Last(path).n !in s.fi_2.state) &&
       (EvaluateONPBinary(s.new_c, path, s.fi) == EvaluateONPBinary(s.new_c, path, s.fi_2))
@@ -406,8 +406,8 @@ module ConnectionEval {
     requires CESummaryValid(s)
     requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
     requires PathInSubcircuit(path, s.conn.scuf_a.sc)
-    requires EvaluateONPUnaryRequirements(s.new_c, path, s.fi)
-    requires EvaluateONPUnaryRequirements(s.new_c, prepath+path, s.fi)
+    requires EvaluateONPUnaryRequirements(s.new_c, path, FItoKeys(s.fi))
+    requires EvaluateONPUnaryRequirements(s.new_c, prepath+path, FItoKeys(s.fi))
     ensures
       && (forall np :: np in s.conn.scuf_a.mp.inputs ==> np in s.fi.inputs)
       && (EvaluateONPUnary(s.new_c, path, s.fi) == EvaluateONPUnary(s.new_c, path, s.fi_1))
@@ -442,7 +442,7 @@ module ConnectionEval {
   lemma EvaluateONPUnaryComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
     requires PathInSubcircuit(path, s.conn.scuf_b.sc)
-    requires EvaluateONPUnaryRequirements(s.new_c, path, s.fi)
+    requires EvaluateONPUnaryRequirements(s.new_c, path, FItoKeys(s.fi))
     ensures
       && (Seq.Last(path) !in s.fi_2.inputs)
       && (EvaluateONPUnary(s.new_c, path, s.fi) == EvaluateONPUnary(s.new_c, path, s.fi_2))
@@ -479,8 +479,8 @@ module ConnectionEval {
     requires CESummaryValid(s)
     requires PathInSubcircuit(path, s.conn.scuf_a.sc)
     requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
-    requires EvaluateINPInnerRequirements(s.new_c, path, s.fi)
-    requires EvaluateINPInnerRequirements(s.new_c, prepath + path, s.fi)
+    requires EvaluateINPInnerRequirements(s.new_c, path, FItoKeys(s.fi))
+    requires EvaluateINPInnerRequirements(s.new_c, prepath + path, FItoKeys(s.fi))
     ensures EvaluateINPInner(s.new_c, path, s.fi) == EvaluateINPInner(s.new_c, path, s.fi_1)
     ensures Simpl(EvaluateINPInner(s.new_c, path, s.fi)) == Simpl(EvaluateINPInner(s.new_c, prepath+path, s.fi))
     decreases |NodesNotInPath(s.new_c, prepath + path)|, 2
@@ -544,10 +544,10 @@ module ConnectionEval {
             }
             assert (prepath + path) + [onp] == prepath + (path + [onp]);
             NodesNotInPathDecreases(new_c, prepath+path, onp);
-            assert EvaluateONPInnerRequirements(new_c, prepath + (path +[onp]), fi) by {
+            assert EvaluateONPInnerRequirements(new_c, prepath + (path +[onp]), FItoKeys(fi)) by {
               assert Seq.HasNoDuplicates(prepath + (path + [onp]));
             }
-            assert EvaluateONPInnerRequirements(new_c, path + [onp], fi);
+            assert EvaluateONPInnerRequirements(new_c, path + [onp], FItoKeys(fi));
             EvaluateONPInnerComposed1(s, prepath, path + [onp]);
           }
         }
@@ -561,7 +561,7 @@ module ConnectionEval {
   lemma EvaluateINPInnerComposed2(s: CESummary, path: seq<NP>)
     requires CESummaryValid(s)
     requires PathInSubcircuit(path, s.conn.scuf_b.sc)
-    requires EvaluateINPInnerRequirements(s.new_c, path, s.fi)
+    requires EvaluateINPInnerRequirements(s.new_c, path, FItoKeys(s.fi))
     ensures
       && (EvaluateINPInner(s.new_c, path, s.fi) == EvaluateINPInner(s.new_c, path, s.fi_2))
     decreases |NodesNotInPath(s.new_c, path)|, 2
@@ -693,8 +693,8 @@ module ConnectionEval {
 
   lemma EvaluateONPInnerComposed1(s: CESummary, prepath: seq<NP>, path: seq<NP>)
     requires CESummaryValid(s)
-    requires EvaluateONPInnerRequirements(s.new_c, prepath + path, s.fi)
-    requires EvaluateONPInnerRequirements(s.new_c, path, s.fi)
+    requires EvaluateONPInnerRequirements(s.new_c, prepath + path, FItoKeys(s.fi))
+    requires EvaluateONPInnerRequirements(s.new_c, path, FItoKeys(s.fi))
     requires PathInSubcircuit(path, s.conn.scuf_a.sc)
     requires PathInSubcircuit(prepath, s.conn.scuf_b.sc)
     ensures
@@ -762,7 +762,7 @@ module ConnectionEval {
   lemma EvaluateONPInnerComposed2(s: CESummary, path: seq<NP>)
     requires
       && CESummaryValid(s)
-      && EvaluateONPInnerRequirements(s.new_c, path, s.fi)
+      && EvaluateONPInnerRequirements(s.new_c, path, FItoKeys(s.fi))
       && PathInSubcircuit(path, s.conn.scuf_b.sc)
     ensures
       && var np := Seq.Last(path);
@@ -1046,7 +1046,7 @@ module ConnectionEval {
       ensures forall np :: np in Seq.ToSet(e12.mp.outputs) ==>
           && np in e12.f(fi).outputs
           && NPValid(new_c, np)
-          && FICircuitValid(new_c, fi)
+          && FICircuitValid(new_c, FItoKeys(fi))
           && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).outputs[np]))
       ensures forall np :: np in Seq.ToSet(e12.mp.outputs) ==>
           && np in e12.mp.outputs
@@ -1054,7 +1054,7 @@ module ConnectionEval {
       ensures forall np :: np in StateINPs(e12.mp.state) ==>
           && np.n in e12.f(fi).state
           && NPValid(new_c, np)
-          && FICircuitValid(new_c, fi)
+          && FICircuitValid(new_c, FItoKeys(fi))
           && (Evaluate(new_c, np, fi) == EvalOk(e12.f(fi).state[np.n]))
       ensures forall np :: np in StateINPs(e12.mp.state) ==>
           && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(e12, fi, np)))

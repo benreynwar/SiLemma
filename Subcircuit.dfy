@@ -108,6 +108,11 @@ module Subcircuit {
       c.PortSource[np])
   }
 
+  opaque predicate NodesAllSeq(c: Circuit, nodes: set<CNode>)
+  {
+    forall node :: node in nodes ==> node in c.NodeKind && c.NodeKind[node].CSeq?
+  }
+
   opaque function AllSeq(c: Circuit, sc: set<CNode>): (r: set<CNode>)
     requires ScValid(c, sc)
     ensures r <= sc

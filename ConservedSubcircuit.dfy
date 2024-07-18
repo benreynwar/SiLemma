@@ -7,6 +7,14 @@ module ConservedSubcircuit {
   import opened Subcircuit
   import opened MapFunction
 
+  ghost opaque predicate CircuitWeaklyConserved(ca: Circuit, cb: Circuit)
+  {
+    && (forall n :: n in ca.NodeKind ==> n in cb.NodeKind)
+    && (forall n :: n in ca.NodeKind ==> ca.NodeKind[n] == cb.NodeKind[n])
+    && (forall np: NP :: np in ca.PortSource ==>
+      np in cb.PortSource && ca.PortSource[np] == cb.PortSource[np])
+  }
+
   ghost opaque predicate CircuitConserved(ca: Circuit, cb: Circuit)
   {
     && (forall n :: n in ca.NodeKind ==> n in cb.NodeKind)
@@ -208,20 +216,20 @@ module ConservedSubcircuit {
     assert (forall np: NP :: (np !in ScInputBoundary(ca, sc)) && np.n in sc && np in ca.PortSource ==> ca.PortSource[np] == cb.PortSource[np]);
   }
 
-  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fi: FI)
+  ghost predicate ConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fik: FIKeys)
   {
     && ca.Valid()
     && cb.Valid()
     && e.ValidRelaxInputs(ca)
     && SubcircuitWeaklyConserved(ca, cb, e.sc)
-    && (Seq.ToSet(e.mp.inputs) == fi.inputs.Keys)
-    && (Seq.ToSet(e.mp.state) == fi.state.Keys)
+    && (Seq.ToSet(e.mp.inputs) == fik.inputs)
+    && (Seq.ToSet(e.mp.state) == fik.state)
     && OutputsInFOutputs(cb, e)
   }
 
   lemma EvaluateINPInnerConserved(
     ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
+    requires ConservedValid(ca, cb, e, FItoKeys(fi))
     requires |path| > 0
     requires forall np :: np in path ==> np.n in e.sc
     requires PathValid(ca, path)
@@ -232,17 +240,17 @@ module ConservedSubcircuit {
       && ca.Valid()
       && cb.Valid()
       && INPValid(cb, Seq.Last(path))
-      && FICircuitValid(ca, fi)
-      && FICircuitValid(cb, fi)
-      && EvaluateINPInnerRequirements(ca, path, fi)
-      && EvaluateINPInnerRequirements(cb, path, fi)
+      && FICircuitValid(ca, FItoKeys(fi))
+      && FICircuitValid(cb, FItoKeys(fi))
+      && EvaluateINPInnerRequirements(ca, path, FItoKeys(fi))
+      && EvaluateINPInnerRequirements(cb, path, FItoKeys(fi))
       && (EvaluateINPInner(ca, path, fi) == EvaluateINPInner(cb, path, fi))
     decreases |NodesNotInPath(ca, path)|, 2
   {
     reveal PathValid();
     reveal Circuit.Valid();
     reveal SubcircuitWeaklyConserved();
-    FICircuitValidFromConservedValid(ca, cb, e, fi);
+    FICircuitValidFromConservedValid(ca, cb, e, FItoKeys(fi));
     var head := Seq.Last(path);
     var tail := Seq.DropLast(path);
     if head in fi.inputs {
@@ -269,7 +277,7 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateONPBinaryConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
+    requires ConservedValid(ca, cb, e, FItoKeys(fi))
     requires |path| > 0
     requires ONPValid(ca, Seq.Last(path))
     requires Seq.Last(path).n !in fi.state
@@ -286,15 +294,15 @@ module ConservedSubcircuit {
       && ONPValid(cb, Seq.Last(path))
       && var nk := cb.NodeKind[Seq.Last(path).n];
       && CNodeKindIsBinary(nk)
-      && FICircuitValid(ca, fi)
-      && FICircuitValid(cb, fi)
+      && FICircuitValid(ca, FItoKeys(fi))
+      && FICircuitValid(cb, FItoKeys(fi))
       && (EvaluateONPBinary(ca, path, fi) == EvaluateONPBinary(cb, path, fi))
     decreases |NodesNotInPath(ca, path)|, 3
   {
     reveal PathValid();
     reveal Circuit.Valid();
     reveal SubcircuitWeaklyConserved();
-    FICircuitValidFromConservedValid(ca, cb, e, fi);
+    FICircuitValidFromConservedValid(ca, cb, e, FItoKeys(fi));
     var nk := ca.NodeKind[path[|path|-1].n];
     var head := path[|path|-1];
     assert NodeValid(ca, head.n);
@@ -313,7 +321,7 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateONPUnaryConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
+    requires ConservedValid(ca, cb, e, FItoKeys(fi))
     requires |path| > 0
     requires ONPValid(ca, path[|path|-1])
     requires path[|path|-1].n !in fi.state
@@ -330,15 +338,15 @@ module ConservedSubcircuit {
       && ONPValid(cb, Seq.Last(path))
       && var nk := cb.NodeKind[Seq.Last(path).n];
       && (nk.CInv? || nk.CIden?)
-      && FICircuitValid(ca, fi)
-      && FICircuitValid(cb, fi)
+      && FICircuitValid(ca, FItoKeys(fi))
+      && FICircuitValid(cb, FItoKeys(fi))
       && (EvaluateONPUnary(ca, path, fi) == EvaluateONPUnary(cb, path, fi))
     decreases |NodesNotInPath(ca, path)|, 3
   {
     reveal PathValid();
     reveal Circuit.Valid();
     reveal SubcircuitWeaklyConserved();
-    FICircuitValidFromConservedValid(ca, cb, e, fi);
+    FICircuitValidFromConservedValid(ca, cb, e, FItoKeys(fi));
     var head := path[|path|-1];
     var inp_0 := NP(head.n, INPUT_0);
     if inp_0 in path {
@@ -349,33 +357,33 @@ module ConservedSubcircuit {
     }
   }
 
-  lemma FICircuitValidFromConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
-    ensures FICircuitValid(ca, fi) && FICircuitValid(cb, fi)
+  lemma FICircuitValidFromConservedValid(ca: Circuit, cb: Circuit, e: Scuf, fik: FIKeys)
+    requires ConservedValid(ca, cb, e, fik)
+    ensures FICircuitValid(ca, fik) && FICircuitValid(cb, fik)
   {
-    ScufValidFiValidToFICircuitValid(ca, e, fi);
+    ScufValidFiValidToFICircuitValid(ca, e, fik);
     ScufSomewhatValidRelaxInputsConserved(ca, cb, e);
-    ScufValidFiValidToFICircuitValid(cb, e, fi);
+    ScufValidFiValidToFICircuitValid(cb, e, fik);
   }
 
   lemma EvaluateONPInnerConserved(ca: Circuit, cb: Circuit, e: Scuf, path: seq<NP>, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
-    requires EvaluateONPInnerRequirements(ca, path, fi)
+    requires ConservedValid(ca, cb, e, FItoKeys(fi))
+    requires EvaluateONPInnerRequirements(ca, path, FItoKeys(fi))
     requires forall np :: np in path ==> np.n in e.sc
     ensures PathValid(cb, path)
     ensures
       && ca.Valid()
       && cb.Valid()
       && ONPValid(cb, Seq.Last(path))
-      && FICircuitValid(ca, fi)
-      && FICircuitValid(cb, fi)
+      && FICircuitValid(ca, FItoKeys(fi))
+      && FICircuitValid(cb, FItoKeys(fi))
       && (EvaluateONPInner(ca, path, fi) == EvaluateONPInner(cb, path, fi))
     decreases |NodesNotInPath(ca, path)|, 4
   {
     reveal PathValid();
     reveal Circuit.Valid();
     reveal SubcircuitWeaklyConserved();
-    FICircuitValidFromConservedValid(ca, cb, e, fi);
+    FICircuitValidFromConservedValid(ca, cb, e, FItoKeys(fi));
     var head := path[|path|-1];
     if head.n in fi.state {
     } else {
@@ -392,22 +400,22 @@ module ConservedSubcircuit {
   }
 
   lemma EvaluateConserved(ca: Circuit, cb: Circuit, e: Scuf, o: NP, fi: FI)
-    requires ConservedValid(ca, cb, e, fi)
+    requires ConservedValid(ca, cb, e, FItoKeys(fi))
     requires o.n in e.sc
     requires INPValid(ca, o) || ONPValid(ca, o)
     ensures INPValid(cb, o) || ONPValid(cb, o)
     ensures
       && ca.Valid()
       && cb.Valid()
-      && FICircuitValid(ca, fi)
-      && FICircuitValid(cb, fi)
+      && FICircuitValid(ca, FItoKeys(fi))
+      && FICircuitValid(cb, FItoKeys(fi))
       && (Evaluate(ca, o, fi) == Evaluate(cb, o, fi))
   {
     reveal PathValid();
     reveal Circuit.Valid();
     reveal SubcircuitConserved();
     assert PathValid(ca, [o]);
-    FICircuitValidFromConservedValid(ca, cb, e, fi);
+    FICircuitValidFromConservedValid(ca, cb, e, FItoKeys(fi));
     LengthOneNoDuplicates([o]);
     if INPValid(ca, o) {
       EvaluateINPInnerConserved(ca, cb, e, [o], fi);
@@ -487,13 +495,13 @@ module ConservedSubcircuit {
         ensures forall np :: np in (Seq.ToSet(e.mp.outputs) + StateINPs(e.mp.state)) ==> (
           && NPValid(ca, np)
           && NPValid(cb, np)
-          && FICircuitValid(ca, fi)
-          && FICircuitValid(cb, fi)
+          && FICircuitValid(ca, FItoKeys(fi))
+          && FICircuitValid(cb, FItoKeys(fi))
           && (Evaluate(ca, np, fi) == Evaluate(cb, np, fi))
         )
       {
-        ScufValidFiValidToFICircuitValid(ca, e, fi);
-        ScufValidFiValidToFICircuitValid(cb, e, fi);
+        ScufValidFiValidToFICircuitValid(ca, e, FItoKeys(fi));
+        ScufValidFiValidToFICircuitValid(cb, e, FItoKeys(fi));
         forall np | np in (Seq.ToSet(e.mp.outputs) + StateINPs(e.mp.state))
           ensures
             && NPValid(ca, np) && NPValid(cb, np)
@@ -545,12 +553,12 @@ module ConservedSubcircuit {
       forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
         ensures
         forall np :: np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state) ==>
-          && FICircuitValid(cb, fi)
+          && FICircuitValid(cb, FItoKeys(fi))
           && np.n in s.sc && NPValid(ca, np) && NPValid(cb, np)
           && (Evaluate(cb, np, fi) == EvalOk(MFLookup(s, fi, np)))
       {
-        assert ConservedValid(ca, cb, s, fi);
-        assert FICircuitValid(cb, fi) by {ScufValidFiValidToFICircuitValid(cb, s, fi);}
+        assert ConservedValid(ca, cb, s, FItoKeys(fi));
+        assert FICircuitValid(cb, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(cb, s, FItoKeys(fi));}
         forall np | np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state)
           ensures np.n in s.sc && NPValid(ca, np) && NPValid(cb, np)
           ensures Evaluate(cb, np, fi) == EvalOk(MFLookup(s, fi, np))

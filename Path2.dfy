@@ -12,7 +12,7 @@ module Path2 {
   lemma EvaluateReduceFI(c: Circuit, np: NP, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
     requires c.Valid()
     requires NPValid(c, np)
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires !PathExistsToNPSet(c, np, removed_inputs)
     requires !PathExistsToNPSet(c, np, StateONPsFromSet(removed_state))
     ensures
@@ -31,7 +31,7 @@ module Path2 {
 
   lemma EvaluateONPReduceFI(c: Circuit, np: NP, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
     requires c.Valid()
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires ONPValid(c, np)
     requires !PathExistsToNPSet(c, np, removed_inputs)
     requires !PathExistsToNPSet(c, np, StateONPsFromSet(removed_state))
@@ -51,7 +51,7 @@ module Path2 {
 
   lemma EvaluateINPReduceFI(c: Circuit, np: NP, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
     requires c.Valid()
-    requires FICircuitValid(c, fi)
+    requires FICircuitValid(c, FItoKeys(fi))
     requires INPValid(c, np)
     requires !PathExistsToNPSet(c, np, removed_inputs)
     requires !PathExistsToNPSet(c, np, StateONPsFromSet(removed_state))
@@ -70,7 +70,7 @@ module Path2 {
   lemma EvaluateONPInnerReduceFI(c: Circuit, p: seq<NP>, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
     requires c.Valid()
     requires PathValid(c, p)
-    requires EvaluateONPInnerRequirements(c, p, fi)
+    requires EvaluateONPInnerRequirements(c, p, FItoKeys(fi))
     requires !PathExistsToNPSet(c, Seq.Last(p), removed_inputs)
     requires !PathExistsToNPSet(c, Seq.Last(p), StateONPsFromSet(removed_state))
     ensures
@@ -118,7 +118,7 @@ module Path2 {
   }
 
   lemma EvaluateONPBinaryReduceFI(c: Circuit, path: seq<NP>, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
-    requires EvaluateONPBinaryRequirements(c, path, fi)
+    requires EvaluateONPBinaryRequirements(c, path, FItoKeys(fi))
     requires !PathExistsToNPSet(c, Seq.Last(path), removed_inputs)
     requires !PathExistsToNPSet(c, Seq.Last(path), StateONPsFromSet(removed_state))
     ensures
@@ -156,7 +156,7 @@ module Path2 {
   }
 
   lemma EvaluateONPUnaryReduceFI(c: Circuit, path: seq<NP>, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
-    requires EvaluateONPUnaryRequirements(c, path, fi)
+    requires EvaluateONPUnaryRequirements(c, path, FItoKeys(fi))
     requires !PathExistsToNPSet(c, Seq.Last(path), removed_inputs)
     requires !PathExistsToNPSet(c, Seq.Last(path), StateONPsFromSet(removed_state))
     ensures
@@ -186,7 +186,7 @@ module Path2 {
   }
 
   lemma EvaluateINPInnerReduceFI(c: Circuit, path: seq<NP>, fi: FI, removed_inputs: set<NP>, removed_state: set<CNode>)
-    requires EvaluateINPInnerRequirements(c, path, fi)
+    requires EvaluateINPInnerRequirements(c, path, FItoKeys(fi))
     requires !PathExistsToNPSet(c, Seq.Last(path), removed_inputs)
     requires !PathExistsToNPSet(c, Seq.Last(path), StateONPsFromSet(removed_state))
     ensures

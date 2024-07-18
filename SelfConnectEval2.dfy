@@ -62,12 +62,12 @@ module SelfConnectEval2 {
     requires np in s.mp.outputs || np in StateINPs(s.mp.state)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-      && FICircuitValid(new_c, fi)
-      && FICircuitValid(c, fi)
+      && FICircuitValid(new_c, FItoKeys(fi))
+      && FICircuitValid(c, FItoKeys(fi))
       && (Evaluate(new_c, np, fi) == Evaluate(c, np, fi))
   {
     var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-    assert ConservedValid(c, new_c, s, fi) by {
+    assert ConservedValid(c, new_c, s, FItoKeys(fi)) by {
       assert c.Valid();
       assert new_c.Valid();
       assert s.Valid(c);
@@ -114,7 +114,7 @@ module SelfConnectEval2 {
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
       && NPValid(new_c, np)
-      && FICircuitValid(new_c, fi_second_pass) && FICircuitValid(new_c, fi)
+      && FICircuitValid(new_c, FItoKeys(fi_second_pass)) && FICircuitValid(new_c, FItoKeys(fi))
       && (Evaluate(new_c, np, fi_second_pass) == Evaluate(new_c, np, fi))
   {
     var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
@@ -122,7 +122,7 @@ module SelfConnectEval2 {
       ScufFOutputsAreValid(c, s);
     }
     var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-    assert FICircuitValid(c, fi) && FICircuitValid(new_c, fi_second_pass) && FICircuitValid(new_c, fi) by {
+    assert FICircuitValid(c, FItoKeys(fi)) && FICircuitValid(new_c, FItoKeys(fi_second_pass)) && FICircuitValid(new_c, FItoKeys(fi)) by {
       reveal FICircuitValid();
       ScufFInputsAreValid(c, s);
       reveal Seq.ToSet();
@@ -130,7 +130,7 @@ module SelfConnectEval2 {
       reveal AllSeq();
       StateIsSeq(c, s);
     }
-    assert FICircuitValid(new_c, fi);
+    assert FICircuitValid(new_c, FItoKeys(fi));
     reveal Seq.HasNoDuplicates();
     reveal PathValid();
     if ONPValid(c, np) {
@@ -158,8 +158,8 @@ module SelfConnectEval2 {
       && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
       && (|outputs| == |s.mp.outputs|)
       && var fi_pass := conn.FIFromOutputs(s.mp, fi, outputs);
-      && EvaluateONPInnerRequirements(new_c, path, fi)
-      && EvaluateONPInnerRequirements(new_c, path, fi_pass)
+      && EvaluateONPInnerRequirements(new_c, path, FItoKeys(fi))
+      && EvaluateONPInnerRequirements(new_c, path, FItoKeys(fi_pass))
       && PathValid(new_c, path)
       && NPValid(new_c, Seq.Last(path))
       && (|path| > 1 ==> !PathExists(new_c, Seq.Last(path), path[|path|-2]))
@@ -202,7 +202,7 @@ module SelfConnectEval2 {
       assert ONPsValid(c, onps);
       StillNoPathExistsBetweenNPSets(c, new_c, onps, inps);
     }
-    assert FICircuitValid(new_c, fi_pass) by {
+    assert FICircuitValid(new_c, FItoKeys(fi_pass)) by {
       reveal FICircuitValid();
     }
     NoPathExistsBetweenNPSetsToToNPSet(new_c, onps, inps, Seq.Last(path));
@@ -251,8 +251,8 @@ module SelfConnectEval2 {
     && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
     && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
     && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-    && EvaluateINPInnerRequirements(new_c, path, fi_second_pass)
-    && EvaluateINPInnerRequirements(new_c, path, fi)
+    && EvaluateINPInnerRequirements(new_c, path, FItoKeys(fi_second_pass))
+    && EvaluateINPInnerRequirements(new_c, path, FItoKeys(fi))
     && var conn_outputs := conn.GetConnectedOutputs(s.mp);
     && var conn_inputs := conn.GetConnectedInputs(s.mp);
     && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
@@ -503,8 +503,8 @@ module SelfConnectEval2 {
       && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-      && EvaluateONPUnaryRequirements(new_c, path, fi_second_pass)
-      && EvaluateONPUnaryRequirements(new_c, path, fi)
+      && EvaluateONPUnaryRequirements(new_c, path, FItoKeys(fi_second_pass))
+      && EvaluateONPUnaryRequirements(new_c, path, FItoKeys(fi))
       && var conn_outputs := conn.GetConnectedOutputs(s.mp);
       && var conn_inputs := conn.GetConnectedInputs(s.mp);
       && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
@@ -544,8 +544,8 @@ module SelfConnectEval2 {
       && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-      && EvaluateONPBinaryRequirements(new_c, path, fi_second_pass)
-      && EvaluateONPBinaryRequirements(new_c, path, fi)
+      && EvaluateONPBinaryRequirements(new_c, path, FItoKeys(fi_second_pass))
+      && EvaluateONPBinaryRequirements(new_c, path, FItoKeys(fi))
       && var conn_outputs := conn.GetConnectedOutputs(s.mp);
       && var conn_inputs := conn.GetConnectedInputs(s.mp);
       && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
@@ -593,8 +593,8 @@ module SelfConnectEval2 {
       && var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
       && FIValid(fi, new_s.mp.inputs, new_s.mp.state)
       && var fi_second_pass := conn.FISecondPass(s.mp, s.uf, fi);
-      && EvaluateONPInnerRequirements(new_c, path, fi_second_pass)
-      && EvaluateONPInnerRequirements(new_c, path, fi)
+      && EvaluateONPInnerRequirements(new_c, path, FItoKeys(fi_second_pass))
+      && EvaluateONPInnerRequirements(new_c, path, FItoKeys(fi))
       && var conn_outputs := conn.GetConnectedOutputs(s.mp);
       && var conn_inputs := conn.GetConnectedInputs(s.mp);
       && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)

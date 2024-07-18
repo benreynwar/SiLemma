@@ -68,7 +68,7 @@ module Scuf {
       ScufFOutputsAreValid(c, this);
       reveal Seq.ToSet();
       forall fi: FI :: FIValid(fi, mp.inputs, mp.state) ==>
-        assert FICircuitValid(c, fi) by {ScufValidFiValidToFICircuitValid(c, this, fi);}
+        assert FICircuitValid(c, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(c, this, FItoKeys(fi));}
         forall np :: np in Seq.ToSet(mp.outputs) || np in StateINPs(mp.state) ==>
           Evaluate(c, np, fi) == EvalOk(MFLookup(this, fi, np))
     }
@@ -171,7 +171,7 @@ module Scuf {
     ScufFOutputsAreValid(c, e);
     reveal Seq.ToSet();
     forall fi: FI :: FIValid(fi, e.mp.inputs, e.mp.state) ==>
-      assert FICircuitValid(c, fi) by {ScufValidFiValidToFICircuitValid(c, e, fi);}
+      assert FICircuitValid(c, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(c, e, FItoKeys(fi));}
       forall np :: np in Seq.ToSet(e.mp.outputs) || np in StateINPs(e.mp.state) ==>
         Evaluate(c, np, fi) == EvalOk(MFLookup(e, fi, np))
   }
@@ -302,26 +302,26 @@ module Scuf {
     }
   }
 
-  lemma ScufValidFiValidToFICircuitValid(c: Circuit, e: Scuf, fi: FI)
+  lemma ScufValidFiValidToFICircuitValid(c: Circuit, e: Scuf, fik: FIKeys)
     requires c.Valid()
     requires e.SomewhatValidRelaxInputs(c) || e.SomewhatValid(c)
-    requires FIValid(fi, e.mp.inputs, e.mp.state)
-    ensures FICircuitValid(c, fi)
+    requires FIKValid(fik, e.mp.inputs, e.mp.state)
+    ensures FICircuitValid(c, fik)
   {
     reveal Scuf.SomewhatValid();
     reveal Scuf.SomewhatValidRelaxInputs();
     assert Seq.ToSet(e.mp.inputs) >= AllInputs(c, e.sc);
-    assert Seq.ToSet(e.mp.inputs) == fi.inputs.Keys;
+    assert Seq.ToSet(e.mp.inputs) == fik.inputs;
     reveal ConnInputs();
     reveal UnconnInputs();
     reveal INPsValid();
-    assert fi.state.Keys == Seq.ToSet(e.mp.state);
-    assert fi.state.Keys == AllSeq(c, e.sc);
+    assert fik.state == Seq.ToSet(e.mp.state);
+    assert fik.state == AllSeq(c, e.sc);
     reveal AllSeq();
     reveal ONPsValid();
     reveal ScValid();
-    assert (forall np :: np in fi.inputs.Keys ==> INPValid(c, np));
-    assert (forall n :: n in fi.state.Keys ==> c.NodeKind[n].CSeq?);
+    assert (forall np :: np in fik.inputs ==> INPValid(c, np));
+    assert (forall n :: n in fik.state ==> c.NodeKind[n].CSeq?);
     reveal FICircuitValid();
   }
 

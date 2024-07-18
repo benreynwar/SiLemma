@@ -35,7 +35,7 @@ module SelfConnectEval {
       && !PathExistsBetweenNPSets(new_c, conn_outputs, conn_inputs)
     ensures
       var (new_c, new_s) := ConnectCircuitScufImpl(c, s, conn);
-      && FICircuitValid(new_c, fi)
+      && FICircuitValid(new_c, FItoKeys(fi))
       && NPValid(new_c, np)
       && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(new_s, fi, np)))
   {
@@ -52,18 +52,18 @@ module SelfConnectEval {
       ScufFOutputsAreValid(new_c, s);
     }
 
-    assert FICircuitValid(new_c, fi ) by {
+    assert FICircuitValid(new_c, FItoKeys(fi )) by {
       assert FIValid(fi, new_s.mp.inputs, new_s.mp.state);
-      ScufValidFiValidToFICircuitValid(new_c, new_s, fi);
+      ScufValidFiValidToFICircuitValid(new_c, new_s, FItoKeys(fi));
       reveal FICircuitValid();
     }
-    assert FICircuitValid(new_c, fi_second_pass) by {
+    assert FICircuitValid(new_c, FItoKeys(fi_second_pass)) by {
       assert FIValid(fi_second_pass, s.mp.inputs, s.mp.state);
-      ScufValidFiValidToFICircuitValid(new_c, s, fi_second_pass);
+      ScufValidFiValidToFICircuitValid(new_c, s, FItoKeys(fi_second_pass));
     }
-    assert FICircuitValid(c, fi_second_pass) by {
+    assert FICircuitValid(c, FItoKeys(fi_second_pass)) by {
       assert FIValid(fi_second_pass, s.mp.inputs, s.mp.state);
-      ScufValidFiValidToFICircuitValid(c, s, fi_second_pass);
+      ScufValidFiValidToFICircuitValid(c, s, FItoKeys(fi_second_pass));
     }
 
     calc {
@@ -121,10 +121,10 @@ module SelfConnectEval {
         reveal Seq.ToSet();
         forall fi: FI | FIValid(fi, new_s.mp.inputs, new_s.mp.state)
           ensures forall np :: np in Seq.ToSet(new_s.mp.outputs) || np in StateINPs(new_s.mp.state) ==>
-            && FICircuitValid(new_c, fi)
+            && FICircuitValid(new_c, FItoKeys(fi))
             && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(new_s, fi, np)))
         {
-          assert FICircuitValid(new_c, fi) by {ScufValidFiValidToFICircuitValid(new_c, new_s, fi);}
+          assert FICircuitValid(new_c, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(new_c, new_s, FItoKeys(fi));}
           forall np | np in Seq.ToSet(new_s.mp.outputs) || np in StateINPs(new_s.mp.state)
             ensures Evaluate(new_c, np, fi) == EvalOk(MFLookup(new_s, fi, np))
           {
@@ -154,10 +154,10 @@ module SelfConnectEval {
         reveal Seq.ToSet();
         forall fi: FI | FIValid(fi, s.mp.inputs, s.mp.state)
           ensures forall np :: np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state) ==>
-            && FICircuitValid(new_c, fi)
+            && FICircuitValid(new_c, FItoKeys(fi))
             && (Evaluate(new_c, np, fi) == EvalOk(MFLookup(s, fi, np)))
         {
-          assert FICircuitValid(new_c, fi) by {ScufValidFiValidToFICircuitValid(new_c, s, fi);}
+          assert FICircuitValid(new_c, FItoKeys(fi)) by {ScufValidFiValidToFICircuitValid(new_c, s, FItoKeys(fi));}
           forall np | np in Seq.ToSet(s.mp.outputs) || np in StateINPs(s.mp.state)
             ensures Evaluate(new_c, np, fi) == EvalOk(MFLookup(s, fi, np))
           {

@@ -227,7 +227,7 @@ module Circ {
     // When evaluating the circuit this is the return type.
     // An error is returned if we encounter a loop or if we encounter an input that
     // is missing.
-    | EvalOk(bool)
+    | EvalOk(value: bool)
     | EvalError(missing: set<NP>, loops: set<seq<NP>>)
 
   datatype SimpleEvalResult =

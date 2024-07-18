@@ -105,13 +105,13 @@ module Inserters.Seq{
       ensures
         var iv_0 := fi.inputs[i_0];
         var sv_0 := fi.state[i_0.n];
-        && FICircuitValid(new_c, fi)
+        && FICircuitValid(new_c, FItoKeys(fi))
         && (EvaluateONP(new_c, o, fi) == EvalOk(sv_0))
     {
       var iv_0 := fi.inputs[i_0];
       var sv_0 := fi.state[os_0.n];
       assert Seq.HasNoDuplicates(path);
-      assert FICircuitValid(new_c, fi) by {
+      assert FICircuitValid(new_c, FItoKeys(fi)) by {
         reveal UpdateFunction.Valid();
         reveal FICircuitValid();
       }

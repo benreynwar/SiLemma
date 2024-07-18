@@ -8,19 +8,6 @@ module Inserters_Binary {
   import opened Eval
   import opened ConservedSubcircuit
 
-  function BinaryOp(a: bool, b: bool, nk: CNodeKind): bool
-    requires CNodeKindIsBinary(nk)
-  {
-    match nk {
-      case CAnd =>
-        a && b
-      case COr =>
-        a || b
-      case CXor =>
-        Xor(a, b)
-    }
-  }
-
   function BinaryUF(nk: CNodeKind): (uf: UpdateFunction)
     requires CNodeKindIsBinary(nk)
     ensures uf.Valid()
@@ -120,13 +107,13 @@ module Inserters_Binary {
       ensures
         var iv_0 := fi.inputs[i_0];
         var iv_1 := fi.inputs[i_1];
-        && FICircuitValid(new_c, fi)
+        && FICircuitValid(new_c, FItoKeys(fi))
         && (EvaluateONP(new_c, o, fi) == EvalOk(BinaryOp(iv_0, iv_1, nk)))
     {
       var iv_0 := fi.inputs[i_0];
       var iv_1 := fi.inputs[i_1];
       assert Seq.HasNoDuplicates(path);
-      assert FICircuitValid(new_c, fi) by {
+      assert FICircuitValid(new_c, FItoKeys(fi)) by {
         reveal UpdateFunction.Valid();
         reveal FICircuitValid();
       }
