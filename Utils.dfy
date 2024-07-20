@@ -569,9 +569,12 @@ module Utils {
     requires n < pow2(l)
     ensures |bs| == l
   {
-    var (d, r) := DivMod(n, 2);
-    var low_bit := r == 1;
-    [low_bit] + NatToBools(d, l-1)
+    if l == 0 then
+      []
+    else
+      var (d, r) := DivMod(n, 2);
+      var low_bit := r == 1;
+      [low_bit] + NatToBools(d, l-1)
   }
 
   lemma LemmaUpperBitHigh(bs: seq<bool>)
