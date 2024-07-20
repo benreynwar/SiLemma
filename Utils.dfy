@@ -543,11 +543,75 @@ module Utils {
   }
 
   function pow2(n: nat): nat
+    ensures pow2(n) > 0
   {
   if n == 0 then
     1
   else
     2 * pow2(n-1)
+  }
+
+  function BoolToNat(b: bool): (n: nat)
+  {
+    if b then 1 else 0
+  }
+
+  function BoolsToNat(bs: seq<bool>): (n: nat)
+    ensures n < pow2(|bs|)
+  {
+    if |bs| == 0 then
+      0
+    else
+      BoolToNat(bs[0]) + 2 * BoolsToNat(bs[1..])
+  }
+
+  function NatToBools(n: nat, l: nat): (bs: seq<bool>)
+    requires n < pow2(l)
+    ensures |bs| == l
+  {
+    var (d, r) := DivMod(n, 2);
+    var low_bit := r == 1;
+    [low_bit] + NatToBools(d, l-1)
+  }
+
+  lemma LemmaUpperBitHigh(bs: seq<bool>)
+    requires |bs| > 0
+    requires BoolsToNat(bs) >= pow2(|bs|-1)
+    ensures Seq.Last(bs)
+  {
+  }
+
+  lemma LemmaUpperBitLow(bs: seq<bool>)
+    requires |bs| > 0
+    requires BoolsToNat(bs) < pow2(|bs|-1)
+    ensures !Seq.Last(bs)
+  {
+  }
+
+  lemma LemmaUpperBitValue(bs: seq<bool>)
+    requires |bs| > 0
+    ensures BoolsToNat(bs[..|bs|-1]) + (pow2(|bs|-1) * BoolToNat(Seq.Last(bs))) == BoolsToNat(bs)
+  {
+    if |bs| == 1 {
+      assert BoolsToNat(bs[..|bs|-1]) == 0;
+      assert (pow2(|bs|-1) * BoolToNat(Seq.Last(bs))) == BoolsToNat(bs) == BoolToNat(bs[0]);
+      assert BoolsToNat(bs[..|bs|-1]) + (pow2(|bs|-1) * BoolToNat(Seq.Last(bs))) == BoolsToNat(bs);
+    } else {
+      LemmaUpperBitValue(bs[1..]);
+      var new_bs := bs[1..];
+      assert BoolsToNat(new_bs[..|new_bs|-1]) + (pow2(|new_bs|-1) * BoolToNat(Seq.Last(new_bs))) == BoolsToNat(new_bs);
+      assert new_bs[..|new_bs|-1] == bs[1..|bs|-1];
+      assert |new_bs| == |bs|-1;
+      assert BoolsToNat(bs[1..|bs|-1]) + (pow2(|bs|-2) * BoolToNat(Seq.Last(bs))) == BoolsToNat(bs[1..]);
+      assert BoolsToNat(bs[..|bs|-1]) == BoolToNat(bs[0]) + 2 * BoolsToNat(bs[1..|bs|-1]);
+      calc {
+        BoolsToNat(bs[..|bs|-1]) + pow2(|bs|-1) * BoolToNat(Seq.Last(bs));
+        BoolToNat(bs[0]) + 2 * BoolsToNat(bs[1..|bs|-1]) + pow2(|bs|-1) * BoolToNat(Seq.Last(bs));
+        BoolToNat(bs[0]) + 2 * BoolsToNat(bs[1..|bs|-1]) + 2 * pow2(|bs|-2) * BoolToNat(Seq.Last(bs));
+        BoolToNat(bs[0]) + 2 * BoolsToNat(bs[1..]);
+        BoolsToNat(bs);
+      }
+    }
   }
 
 }
